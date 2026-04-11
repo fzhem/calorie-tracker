@@ -9,20 +9,6 @@ function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
 }
 
-function cleanDirectoryContents(dirPath) {
-  if (!fs.existsSync(dirPath)) return 0;
-
-  let removed = 0;
-  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dirPath, entry.name);
-    fs.rmSync(fullPath, { recursive: true, force: true });
-    removed += 1;
-  }
-
-  return removed;
-}
-
 function copyDirectoryRecursive(srcDir, destDir) {
   ensureDir(destDir);
 
@@ -61,29 +47,35 @@ function main() {
     .filter((entry) => entry.isDirectory() || entry.isFile())
     .map((entry) => entry.name);
 
-  let totalRemoved = 0;
+  let totalCopied = 0;
   for (const entryName of sourceEntries) {
     const sourcePath = path.join(sourceRoot, entryName);
-    const targetPath = path.join(targetRoot, entryName);
 
-    if (fs.existsSync(targetPath)) {
-      fs.rmSync(targetPath, { recursive: true, force: true });
-      totalRemoved += 1;
-      console.log(`[asset-sync] removed existing ${entryName}`);
+    // Never remove Android resource roots; only copy/overwrite icon files.
+    if (entryName === 'res' && fs.statSync(sourcePath).isDirectory()) {
+      const resTargetRoot = path.join(targetRoot, 'res');
+      ensureDir(resTargetRoot);
+      const copied = copyDirectoryRecursive(sourcePath, resTargetRoot);
+      totalCopied += copied;
+      console.log(`[asset-sync] merged res/ into android resources (${copied} file(s))`);
+      continue;
     }
 
+    const targetPath = path.join(targetRoot, entryName);
     const stat = fs.statSync(sourcePath);
     if (stat.isDirectory()) {
       const copied = copyDirectoryRecursive(sourcePath, targetPath);
+      totalCopied += copied;
       console.log(`[asset-sync] copied ${entryName}/ (${copied} file(s))`);
     } else {
       ensureDir(path.dirname(targetPath));
       fs.copyFileSync(sourcePath, targetPath);
+      totalCopied += 1;
       console.log(`[asset-sync] copied ${entryName}`);
     }
   }
 
-  console.log(`[asset-sync] Complete. Synced ${sourceEntries.length} top-level asset item(s), removed ${totalRemoved} existing target item(s).`);
+  console.log(`[asset-sync] Complete. Synced ${sourceEntries.length} top-level asset item(s), copied ${totalCopied} file(s), no destructive deletes.`);
 }
 
 main();
