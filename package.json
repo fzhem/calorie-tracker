@@ -1,0 +1,33 @@
+{
+  "name": "calorie-tracker",
+  "version": "1.0.0",
+  "main": "index.tsx",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "prebuild": "expo prebuild --platform android",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.1.0",
+    "@react-navigation/bottom-tabs": "~7.15.9",
+    "@react-navigation/native": "~7.2.2",
+    "expo": "~55.0.14",
+    "expo-dev-client": "~55.0.26",
+    "expo-status-bar": "~55.0.5",
+    "react": "~19.2.5",
+    "react-native": "^0.83.4",
+    "react-native-chart-kit": "~6.12.0",
+    "react-native-health-connect": "~3.5.0",
+    "react-native-paper": "^5.15.0",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.24.0",
+    "react-native-svg": "~15.15.4"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.14",
+    "expo-build-properties": "^55.0.13",
+    "typescript": "~6.0.2"
+  },
+  "private": true
+}
