@@ -1,14 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useMemo, useState } from 'react';
-import { Dimensions, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Dimensions, GestureResponderEvent, ScrollView, StyleSheet, View } from 'react-native';
 import { BarChart, LineChart } from 'react-native-chart-kit';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Card, Text, useTheme } from 'react-native-paper';
+import { Card, SegmentedButtons, Text, useTheme } from 'react-native-paper';
+import { G, Line, Rect, Text as SvgText } from 'react-native-svg';
 
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
 import type { StoredData } from '../storage';
 
 const DAY_WINDOW = 7;
+const WEIGHT_CHART_HEIGHT = 220;
 
 function getLocalDateKey(date: Date) {
   const year = date.getFullYear();
@@ -28,11 +30,59 @@ function formatDayLabel(dateKey: string) {
   return new Date(year, month - 1, day).toLocaleDateString(undefined, { weekday: 'short' });
 }
 
+function formatWeightLabel(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
+  if (days <= 7) return d.toLocaleDateString(undefined, { weekday: 'short' });
+  if (days <= 31) return d.toLocaleDateString(undefined, { day: 'numeric' });
+  if (days <= 90) return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(undefined, { month: 'short' });
+}
+
+function thinWeightPoints(weightPoints: StoredData['weightHistory'], maxPoints: number) {
+  if (weightPoints.length <= maxPoints) return weightPoints;
+
+  const lastIndex = weightPoints.length - 1;
+  const selectedIndexes = new Set<number>();
+
+  for (let i = 0; i < maxPoints; i++) {
+    const index = Math.round((i * lastIndex) / Math.max(maxPoints - 1, 1));
+    selectedIndexes.add(index);
+  }
+
+  return weightPoints.filter((_, index) => selectedIndexes.has(index));
+}
+
+function getWeightMaxPoints(days: number) {
+  if (days <= 7) return 7;
+  if (days <= 31) return 5;
+  if (days <= 90) return 6;
+  return 6;
+}
+
+function formatWeightValue(weightKg: number) {
+  return `${weightKg.toFixed(1)} kg`;
+}
+
+const WEIGHT_FILTER_OPTIONS = [
+  { value: '7', label: '1W' },
+  { value: '30', label: '1M' },
+  { value: '90', label: '3M' },
+  { value: '365', label: '1Y' },
+];
+
 function formatPointDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     weekday: 'short',
+  });
+}
+
+function formatBubbleDate(value: string) {
+  return new Date(value).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
   });
 }
 
@@ -74,6 +124,8 @@ export default function GraphsScreen() {
   const theme = useTheme();
   const [data, setData] = useState<StoredData>(DEFAULT_DATA);
   const [selectedWeightIndex, setSelectedWeightIndex] = useState<number | null>(null);
+  const [weightDays, setWeightDays] = useState(30);
+  const weightPointPositionsRef = useRef<Array<{ x: number; y: number }>>([]);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
@@ -107,15 +159,70 @@ export default function GraphsScreen() {
       strokeDasharray: '',
       stroke: theme.dark ? '#2a322d' : '#d7e1d8',
     },
+    propsForLabels: {
+      fontSize: 11,
+    },
     barPercentage: 0.7,
   }), [theme.colors.elevation.level1, theme.dark]);
 
   const calorieSeries = useMemo(() => buildCalorieSeries(data.entries, DAY_WINDOW), [data.entries]);
-  const weightSeries = useMemo(() => latestDailyWeightPoints(data.weightHistory, DAY_WINDOW), [data.weightHistory]);
+  const weightSeries = useMemo(() => latestDailyWeightPoints(data.weightHistory, weightDays), [data.weightHistory, weightDays]);
+  const weightChartSeries = useMemo(() => {
+    const points = thinWeightPoints(weightSeries, getWeightMaxPoints(weightDays));
+    return {
+      points,
+      labels: points.map((point) => formatWeightLabel(getLocalDateKey(new Date(point.recordedAt)), weightDays)),
+      values: points.map((point) => point.weightKg),
+    };
+  }, [weightDays, weightSeries]);
+
   const selectedWeightPoint =
-    selectedWeightIndex !== null && selectedWeightIndex >= 0 && selectedWeightIndex < weightSeries.length
-      ? weightSeries[selectedWeightIndex]
+    selectedWeightIndex !== null && selectedWeightIndex >= 0 && selectedWeightIndex < weightChartSeries.points.length
+      ? weightChartSeries.points[selectedWeightIndex]
       : null;
+  const selectedWeightMetrics =
+    selectedWeightIndex !== null && selectedWeightIndex >= 0 && selectedWeightIndex < weightPointPositionsRef.current.length
+      ? weightPointPositionsRef.current[selectedWeightIndex] ?? null
+      : null;
+
+  useEffect(() => {
+    setSelectedWeightIndex(null);
+  }, [weightDays, weightChartSeries.points.length]);
+
+  const selectedWeightBubble = selectedWeightPoint
+    ? {
+        weight: formatWeightValue(selectedWeightPoint.weightKg),
+        date: formatBubbleDate(selectedWeightPoint.recordedAt),
+      }
+    : null;
+  const bubbleWidth = selectedWeightBubble
+    ? Math.max(92, Math.max(selectedWeightBubble.weight.length, selectedWeightBubble.date.length) * 8 + 24)
+    : 0;
+  const bubbleHeight = selectedWeightBubble ? 46 : 0;
+  const bubbleHalfWidth = bubbleWidth / 2;
+  const bubbleX = selectedWeightMetrics
+    ? Math.min(Math.max(8, selectedWeightMetrics.x - bubbleHalfWidth), chartWidth - bubbleWidth - 8)
+    : 0;
+  const bubbleY = selectedWeightMetrics ? Math.max(10, selectedWeightMetrics.y - 54) : 0;
+
+  const handleWeightChartPress = (event: GestureResponderEvent) => {
+    const positions = weightPointPositionsRef.current.slice(0, weightChartSeries.points.length);
+    if (positions.length === 0) return;
+
+    const tapX = event.nativeEvent.locationX;
+    let nearestIndex = 0;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    positions.forEach((position, index) => {
+      const distance = Math.abs(position.x - tapX);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    });
+
+    setSelectedWeightIndex(nearestIndex);
+  };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
@@ -142,29 +249,82 @@ export default function GraphsScreen() {
           <Card.Title title="Weight Trend" titleVariant="titleLarge" />
           <Card.Content>
           <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>Daily weight points from manual input or Health Connect.</Text>
+          <SegmentedButtons
+            value={String(weightDays)}
+            onValueChange={(v) => { setWeightDays(Number(v)); setSelectedWeightIndex(null); }}
+            buttons={WEIGHT_FILTER_OPTIONS}
+            style={styles.filterButtons}
+          />
           {weightSeries.length > 1 ? (
             <>
-              <LineChart
-                width={chartWidth}
-                height={220}
-                bezier
-                fromZero={false}
-                onDataPointClick={({ index }) => setSelectedWeightIndex(index)}
-                data={{
-                  labels: weightSeries.map((p) => formatDayLabel(getLocalDateKey(new Date(p.recordedAt)))),
-                  datasets: [{ data: weightSeries.map((p) => p.weightKg) }],
-                }}
-                chartConfig={chartConfig}
-                style={styles.chart}
-              />
-              <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}> 
-                {selectedWeightPoint
-                  ? `Selected: ${selectedWeightPoint.weightKg} kg on ${formatPointDate(selectedWeightPoint.recordedAt)}`
-                  : 'Tap a point to see exact weight details.'}
-              </Text>
+              <View
+                onStartShouldSetResponder={() => true}
+                onResponderRelease={handleWeightChartPress}
+              >
+                <LineChart
+                  width={chartWidth}
+                  height={WEIGHT_CHART_HEIGHT}
+                  bezier
+                  fromZero={false}
+                  onDataPointClick={({ index }) => setSelectedWeightIndex(index)}
+                  data={{
+                    labels: weightChartSeries.labels,
+                    datasets: [{ data: weightChartSeries.values }],
+                  }}
+                  renderDotContent={({ x, y, index }) => {
+                    weightPointPositionsRef.current[index] = { x, y };
+                    return null;
+                  }}
+                  decorator={() => (
+                    selectedWeightMetrics && selectedWeightBubble ? (
+                      <G>
+                        <Line
+                          x1={String(selectedWeightMetrics.x)}
+                          y1="0"
+                          x2={String(selectedWeightMetrics.x)}
+                          y2={String(WEIGHT_CHART_HEIGHT)}
+                          stroke={theme.dark ? '#7fd8a5' : '#146c43'}
+                          strokeWidth="1"
+                          strokeDasharray="4 4"
+                        />
+                        <Rect
+                          x={bubbleX}
+                          y={bubbleY}
+                          width={bubbleWidth}
+                          height={bubbleHeight}
+                          rx={12}
+                          fill={theme.dark ? '#173326' : '#146c43'}
+                        />
+                        <SvgText
+                          x={bubbleX + bubbleWidth / 2}
+                          y={bubbleY + 18}
+                          fill="#ffffff"
+                          fontSize="11"
+                          fontWeight="500"
+                          textAnchor="middle"
+                        >
+                          {selectedWeightBubble.date}
+                        </SvgText>
+                        <SvgText
+                          x={bubbleX + bubbleWidth / 2}
+                          y={bubbleY + 34}
+                          fill="#ffffff"
+                          fontSize="12"
+                          fontWeight="600"
+                          textAnchor="middle"
+                        >
+                          {selectedWeightBubble.weight}
+                        </SvgText>
+                      </G>
+                    ) : null
+                  )}
+                  chartConfig={chartConfig}
+                  style={styles.chart}
+                />
+              </View>
             </>
           ) : (
-            <Text variant="bodyMedium" style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>Add a weight in Settings to see the trend.</Text>
+            <Text variant="bodyMedium" style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No weight recorded in this period.</Text>
           )}
           </Card.Content>
         </Card>
@@ -180,4 +340,5 @@ const styles = StyleSheet.create({
   supportingText: { marginBottom: 10 },
   chart: { borderRadius: 18, marginLeft: -10, marginBottom: 6 },
   emptyText: {},
+  filterButtons: { marginBottom: 14 },
 });
