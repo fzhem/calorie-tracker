@@ -5,7 +5,8 @@
   "scripts": {
     "start": "expo start --dev-client",
     "android": "expo run:android",
-    "prebuild": "expo prebuild --platform android",
+    "android:icons": "node scripts/sync-android-icons.js",
+    "prebuild": "expo prebuild --platform android && npm run android:icons",
     "web": "expo start --web"
   },
   "dependencies": {
