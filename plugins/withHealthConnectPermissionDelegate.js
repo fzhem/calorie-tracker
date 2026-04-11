@@ -128,7 +128,7 @@ function withHealthConnectPermissionsResource(config) {
       fs.mkdirSync(valuesPath, { recursive: true });
 
       const resourceFile = path.join(valuesPath, 'health_permissions.xml');
-      const content = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <string-array name="health_permissions">\n    <item>android.permission.health.READ_WEIGHT</item>\n    <item>android.permission.health.WRITE_NUTRITION</item>\n  </string-array>\n</resources>\n`;
+      const content = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <string-array name="health_permissions">\n    <item>android.permission.health.READ_WEIGHT</item>\n    <item>android.permission.health.READ_HEALTH_DATA_HISTORY</item>\n    <item>android.permission.health.WRITE_NUTRITION</item>\n  </string-array>\n</resources>\n`;
 
       fs.writeFileSync(resourceFile, content, 'utf8');
       return mod;
