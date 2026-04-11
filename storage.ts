@@ -11,10 +11,16 @@ export type FavoriteQuickAdd = {
   calories: number;
 };
 
+export type MetabolismSex = 'unspecified' | 'male' | 'female';
+export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'heavy' | 'athlete' | 'very-active' | 'extra-active' | 'active';
+
 export type WeightPoint = {
   recordedAt: string;
   weightKg: number;
   source: 'manual' | 'health-connect';
+  originAppId?: string;
+  originAppName?: string;
+  originDevice?: string;
 };
 
 export type StoredData = {
@@ -22,6 +28,10 @@ export type StoredData = {
   favoriteQuickAdds: FavoriteQuickAdd[];
   baseTarget: number;
   caloriesPerKg: number;
+  metabolismSex: MetabolismSex;
+  metabolismAgeYears: number | null;
+  metabolismHeightCm: number | null;
+  activityLevel: ActivityLevel;
   manualWeightKg: number | null;
   weightHistory: WeightPoint[];
   lastWeightSyncAt: string | null;
@@ -35,6 +45,10 @@ export const DEFAULT_DATA: StoredData = {
   favoriteQuickAdds: [],
   baseTarget: 2100,
   caloriesPerKg: 30,
+  metabolismSex: 'male',
+  metabolismAgeYears: null,
+  metabolismHeightCm: null,
+  activityLevel: 'moderate',
   manualWeightKg: null,
   weightHistory: [],
   lastWeightSyncAt: null,

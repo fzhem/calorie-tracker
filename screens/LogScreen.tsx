@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Card, Chip, IconButton, ProgressBar, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { estimateMetabolism } from '../metabolism';
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
 import type { StoredData } from '../storage';
 
@@ -66,6 +68,19 @@ export default function LogScreen() {
       .finally(() => setIsReady(true));
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      AsyncStorage.getItem(STORAGE_KEY)
+        .then((stored) => {
+          if (stored) {
+            const parsed = JSON.parse(stored) as StoredData;
+            setData({ ...DEFAULT_DATA, ...parsed, entries: parsed.entries ?? [], weightHistory: parsed.weightHistory ?? [] });
+          }
+        })
+        .catch(() => Alert.alert('Storage error', 'Saved data could not be loaded.'));
+    }, []),
+  );
+
   useEffect(() => {
     if (!isReady) return;
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data)).catch(() =>
@@ -104,7 +119,15 @@ export default function LogScreen() {
   const visibleEntries = useMemo(() => sortedTodayEntries.slice(0, 40), [sortedTodayEntries]);
   const todayCalories = todayEntries.reduce((sum, e) => sum + e.calories, 0);
   const latestWeight = data.weightHistory[0]?.weightKg ?? data.manualWeightKg;
-  const adjustedTarget = latestWeight ? Math.round(latestWeight * data.caloriesPerKg) : data.baseTarget;
+  const metabolism = estimateMetabolism({
+    weightKg: latestWeight,
+    heightCm: data.metabolismHeightCm,
+    ageYears: data.metabolismAgeYears,
+    sex: data.metabolismSex,
+    activityLevel: data.activityLevel,
+  });
+  const adjustedTarget = metabolism.maintenanceCalories
+    ?? (latestWeight ? Math.round(latestWeight * data.caloriesPerKg) : data.baseTarget);
   const remaining = adjustedTarget - todayCalories;
   const progress = Math.min(todayCalories / Math.max(adjustedTarget, 1), 1);
 
@@ -163,6 +186,9 @@ export default function LogScreen() {
                 {remaining >= 0 ? `${remaining} kcal left` : `${Math.abs(remaining)} kcal over`}
               </Text>
             </View>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              BMR: {metabolism.bmr ? `${metabolism.bmr}` : 'N/A'} | TDEE: {metabolism.tdee ? `${metabolism.tdee}` : 'N/A'} | Maintenance: {metabolism.maintenanceCalories ? `${metabolism.maintenanceCalories}` : 'N/A'} kcal/day
+            </Text>
             <ProgressBar
               progress={progress}
               color={remaining < 0 ? theme.colors.error : theme.colors.primary}
