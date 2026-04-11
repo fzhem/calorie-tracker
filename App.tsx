@@ -7,6 +7,7 @@ import { useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider, type MD3Theme } from 'react-native-paper';
 
+import GoalsScreen from './screens/GoalsScreen';
 import GraphsScreen from './screens/GraphsScreen';
 import LogScreen from './screens/LogScreen';
 import SettingsScreen from './screens/SettingsScreen';
@@ -65,6 +66,7 @@ type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 const TAB_ICONS: Record<string, IconName> = {
   Log: 'food-apple-outline',
   Graphs: 'chart-bar',
+  Goals: 'bullseye',
   Settings: 'cog-outline',
 };
 
@@ -146,6 +148,7 @@ function AppTabs({
       >
         <Tab.Screen name="Log" component={LogScreen} />
         <Tab.Screen name="Graphs" component={GraphsScreen} />
+        <Tab.Screen name="Goals" component={GoalsScreen} />
         <Tab.Screen name="Settings" component={SettingsScreen} />
       </Tab.Navigator>
     </NavigationContainer>
