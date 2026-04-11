@@ -1,33 +1,33 @@
 {
   "expo": {
     "name": "Calorie Tracker",
-    "slug": "calorie-tracker",
     "version": "0.3.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/ic_launcher-playstore.png",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/ic_launcher-playstore.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#f2433b"
     },
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "package": "com.pc.calorietracker",
+      "package": "com.f.calorietracker",
       "displayName": "Calorie Tracker",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/ic_launcher-playstore.png",
+        "backgroundColor": "#f2433b"
       },
       "permissions": [
-        "android.permission.health.READ_WEIGHT"
+        "android.permission.health.READ_WEIGHT",
+        "android.permission.health.WRITE_NUTRITION"
       ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/ic_launcher-playstore.png"
     },
     "plugins": [
       [

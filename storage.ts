@@ -3,6 +3,7 @@ export type MealEntry = {
   title: string;
   calories: number;
   loggedAt: string;
+  healthConnectSyncAt?: string | null;
 };
 
 export type WeightPoint = {
@@ -18,6 +19,7 @@ export type StoredData = {
   manualWeightKg: number | null;
   weightHistory: WeightPoint[];
   lastWeightSyncAt: string | null;
+  lastCalorieSyncAt: string | null;
 };
 
 export const STORAGE_KEY = 'calorie-tracker-storage-v1';
@@ -29,4 +31,5 @@ export const DEFAULT_DATA: StoredData = {
   manualWeightKg: null,
   weightHistory: [],
   lastWeightSyncAt: null,
+  lastCalorieSyncAt: null,
 };
