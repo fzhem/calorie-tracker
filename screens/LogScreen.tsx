@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, Chip, ProgressBar, Surface, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Card, Chip, IconButton, ProgressBar, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
@@ -13,6 +13,7 @@ type QuickAddItem = {
 };
 
 type SortMode = 'newest' | 'oldest';
+type QuickAddTab = 'recent' | 'favorites';
 
 function getLocalDateKey(date: Date) {
   const year = date.getFullYear();
@@ -39,6 +40,10 @@ function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function quickAddKey(item: QuickAddItem) {
+  return `${item.title.toLowerCase()}-${item.calories}`;
+}
+
 export default function LogScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
@@ -47,6 +52,7 @@ export default function LogScreen() {
   const [mealTitle, setMealTitle] = useState('');
   const [mealCalories, setMealCalories] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
+  const [quickAddTab, setQuickAddTab] = useState<QuickAddTab>('recent');
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
@@ -84,7 +90,7 @@ export default function LogScreen() {
   const recentQuickAdds = useMemo(() => {
     const unique = new Map<string, QuickAddItem>();
     for (const entry of data.entries) {
-      const key = `${entry.title.toLowerCase()}-${entry.calories}`;
+      const key = quickAddKey({ title: entry.title, calories: entry.calories });
       if (!unique.has(key)) {
         unique.set(key, { title: entry.title, calories: entry.calories });
       }
@@ -92,6 +98,9 @@ export default function LogScreen() {
     }
     return Array.from(unique.values());
   }, [data.entries]);
+  const favoriteQuickAdds = useMemo(() => data.favoriteQuickAdds ?? [], [data.favoriteQuickAdds]);
+  const favoriteQuickAddKeys = useMemo(() => new Set(favoriteQuickAdds.map(quickAddKey)), [favoriteQuickAdds]);
+  const activeQuickAdds = quickAddTab === 'favorites' ? favoriteQuickAdds : recentQuickAdds;
   const visibleEntries = useMemo(() => sortedTodayEntries.slice(0, 40), [sortedTodayEntries]);
   const todayCalories = todayEntries.reduce((sum, e) => sum + e.calories, 0);
   const latestWeight = data.weightHistory[0]?.weightKg ?? data.manualWeightKg;
@@ -122,6 +131,18 @@ export default function LogScreen() {
         ...prev.entries,
       ],
     }));
+  }, []);
+
+  const toggleFavoriteQuickAdd = useCallback((item: QuickAddItem) => {
+    const key = quickAddKey(item);
+    setData((prev) => {
+      const current = prev.favoriteQuickAdds ?? [];
+      const exists = current.some((fav) => quickAddKey(fav) === key);
+      const nextFavorites = exists
+        ? current.filter((fav) => quickAddKey(fav) !== key)
+        : [item, ...current].slice(0, 24);
+      return { ...prev, favoriteQuickAdds: nextFavorites };
+    });
   }, []);
 
   const deleteEntry = useCallback((id: string) => {
@@ -171,17 +192,38 @@ export default function LogScreen() {
             <Button mode="contained" icon="plus" onPress={addMeal}>
               Add entry
             </Button>
-            {recentQuickAdds.length ? (
+            {(recentQuickAdds.length || favoriteQuickAdds.length) ? (
               <View style={styles.quickAddSection}>
-                <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                  Recent items
-                </Text>
+                <SegmentedButtons
+                  value={quickAddTab}
+                  onValueChange={(value) => setQuickAddTab(value as QuickAddTab)}
+                  buttons={[
+                    { value: 'recent', label: 'Recents', icon: 'history' },
+                    { value: 'favorites', label: 'Favourites', icon: 'star' },
+                  ]}
+                />
                 <View style={styles.quickAddRow}>
-                  {recentQuickAdds.map((item) => (
-                    <Chip key={`${item.title}-${item.calories}`} icon="plus" compact onPress={() => quickAddMeal(item)}>
-                      {item.title} ({item.calories})
-                    </Chip>
-                  ))}
+                  {activeQuickAdds.length ? activeQuickAdds.map((item) => {
+                    const key = quickAddKey(item);
+                    const isFavorite = favoriteQuickAddKeys.has(key);
+                    return (
+                      <View key={key} style={styles.quickAddItem}>
+                        <Chip icon="plus" compact onPress={() => quickAddMeal(item)}>
+                          {item.title} ({item.calories})
+                        </Chip>
+                        <IconButton
+                          icon={isFavorite ? 'star' : 'star-outline'}
+                          size={18}
+                          onPress={() => toggleFavoriteQuickAdd(item)}
+                          accessibilityLabel={isFavorite ? 'Remove favourite' : 'Add favourite'}
+                        />
+                      </View>
+                    );
+                  }) : (
+                    <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                      No favourites yet. Star an item from Recents.
+                    </Text>
+                  )}
                 </View>
               </View>
             ) : null}
@@ -251,6 +293,7 @@ const styles = StyleSheet.create({
   formArea: { gap: 12 },
   quickAddSection: { gap: 8 },
   quickAddRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  quickAddItem: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   entriesList: { gap: 10 },
   entryRow: {
     flexDirection: 'row',

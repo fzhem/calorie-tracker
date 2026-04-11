@@ -6,6 +6,11 @@ export type MealEntry = {
   healthConnectSyncAt?: string | null;
 };
 
+export type FavoriteQuickAdd = {
+  title: string;
+  calories: number;
+};
+
 export type WeightPoint = {
   recordedAt: string;
   weightKg: number;
@@ -14,6 +19,7 @@ export type WeightPoint = {
 
 export type StoredData = {
   entries: MealEntry[];
+  favoriteQuickAdds: FavoriteQuickAdd[];
   baseTarget: number;
   caloriesPerKg: number;
   manualWeightKg: number | null;
@@ -26,6 +32,7 @@ export const STORAGE_KEY = 'calorie-tracker-storage-v1';
 
 export const DEFAULT_DATA: StoredData = {
   entries: [],
+  favoriteQuickAdds: [],
   baseTarget: 2100,
   caloriesPerKg: 30,
   manualWeightKg: null,
