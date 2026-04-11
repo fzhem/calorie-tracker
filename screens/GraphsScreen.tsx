@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Dimensions, GestureResponderEvent, ScrollView, StyleSheet, View } from 'react-native';
 import { BarChart, LineChart } from 'react-native-chart-kit';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,9 +8,9 @@ import { Card, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 import { G, Line, Rect, Text as SvgText } from 'react-native-svg';
 
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
-import type { StoredData } from '../storage';
+import type { MealEntry, StoredData } from '../storage';
 
-const DAY_WINDOW = 7;
+const DEFAULT_CALORIE_DAYS = 7;
 const WEIGHT_CHART_HEIGHT = 220;
 
 function getLocalDateKey(date: Date) {
@@ -28,6 +29,18 @@ function addDays(date: Date, days: number) {
 function formatDayLabel(dateKey: string) {
   const [year, month, day] = dateKey.split('-').map(Number);
   return new Date(year, month - 1, day).toLocaleDateString(undefined, { weekday: 'short' });
+}
+
+function formatShortDay(date: Date) {
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function formatCalorieLabel(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
+  if (days <= 7) return d.toLocaleDateString(undefined, { weekday: 'short' });
+  if (days <= 31) return d.toLocaleDateString(undefined, { day: 'numeric' });
+  return formatShortDay(d);
 }
 
 function formatWeightLabel(dateKey: string, days: number) {
@@ -86,21 +99,74 @@ function formatBubbleDate(value: string) {
   });
 }
 
-function buildCalorieSeries(entries: StoredData['entries'], days: number) {
+function buildCalorieSeries(entries: MealEntry[], days: number) {
   const totals = new Map<string, number>();
   for (const entry of entries) {
     const key = getLocalDateKey(new Date(entry.loggedAt));
     totals.set(key, (totals.get(key) ?? 0) + entry.calories);
   }
+
   const end = new Date();
-  const labels: string[] = [];
-  const values: number[] = [];
+  const dailyRows: Array<{ date: Date; value: number }> = [];
   for (let offset = days - 1; offset >= 0; offset--) {
-    const key = getLocalDateKey(addDays(end, -offset));
-    labels.push(formatDayLabel(key));
-    values.push(Math.round(totals.get(key) ?? 0));
+    const date = addDays(end, -offset);
+    const key = getLocalDateKey(date);
+    dailyRows.push({ date, value: Math.round(totals.get(key) ?? 0) });
   }
-  return { labels, values };
+
+  if (days <= 31) {
+    return {
+      labels: dailyRows.map((row) => formatCalorieLabel(getLocalDateKey(row.date), days)),
+      values: dailyRows.map((row) => row.value),
+    };
+  }
+
+  if (days <= 90) {
+    const labels: string[] = [];
+    const values: number[] = [];
+    const binCount = 12;
+    const binSize = Math.ceil(dailyRows.length / binCount);
+
+    for (let i = 0; i < dailyRows.length; i += binSize) {
+      const chunk = dailyRows.slice(i, i + binSize);
+      if (!chunk.length) continue;
+      const sum = chunk.reduce((acc, row) => acc + row.value, 0);
+      const start = chunk[0].date;
+      const endDate = chunk[chunk.length - 1].date;
+      labels.push(`${formatShortDay(start)}-${endDate.getDate()}`);
+      values.push(sum);
+    }
+
+    return { labels, values };
+  }
+
+  const monthLabels: string[] = [];
+  const monthValues: number[] = [];
+  const monthTotals = new Map<string, number>();
+
+  for (const row of dailyRows) {
+    const monthKey = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}`;
+    monthTotals.set(monthKey, (monthTotals.get(monthKey) ?? 0) + row.value);
+  }
+
+  for (const [monthKey, total] of monthTotals.entries()) {
+    const [year, month] = monthKey.split('-').map(Number);
+    const monthDate = new Date(year, month - 1, 1);
+    monthLabels.push(monthDate.toLocaleDateString(undefined, { month: 'short' }));
+    monthValues.push(Math.round(total));
+  }
+
+  return { labels: monthLabels, values: monthValues };
+}
+
+function sparsifyLabels(labels: string[], maxVisible: number) {
+  if (labels.length <= maxVisible || maxVisible < 2) return labels;
+
+  const step = Math.ceil((labels.length - 1) / (maxVisible - 1));
+  return labels.map((label, index) => {
+    if (index === 0 || index === labels.length - 1 || index % step === 0) return label;
+    return '';
+  });
 }
 
 function latestDailyWeightPoints(weightHistory: StoredData['weightHistory'], days: number) {
@@ -124,10 +190,12 @@ export default function GraphsScreen() {
   const theme = useTheme();
   const [data, setData] = useState<StoredData>(DEFAULT_DATA);
   const [selectedWeightIndex, setSelectedWeightIndex] = useState<number | null>(null);
+  const [calorieDays, setCalorieDays] = useState(DEFAULT_CALORIE_DAYS);
   const [weightDays, setWeightDays] = useState(30);
+  const calorieChartScrollRef = useRef<ScrollView | null>(null);
   const weightPointPositionsRef = useRef<Array<{ x: number; y: number }>>([]);
 
-  useEffect(() => {
+  const loadStoredData = useCallback(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
       if (stored) {
         const parsed = JSON.parse(stored) as StoredData;
@@ -135,6 +203,17 @@ export default function GraphsScreen() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    loadStoredData();
+  }, [loadStoredData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadStoredData();
+      return undefined;
+    }, [loadStoredData]),
+  );
 
   const screenWidth = Dimensions.get('window').width;
   const chartWidth = Math.max(screenWidth - 56, 280);
@@ -165,7 +244,24 @@ export default function GraphsScreen() {
     barPercentage: 0.7,
   }), [theme.colors.elevation.level1, theme.dark]);
 
-  const calorieSeries = useMemo(() => buildCalorieSeries(data.entries, DAY_WINDOW), [data.entries]);
+  const calorieSeries = useMemo(() => buildCalorieSeries(data.entries, calorieDays), [calorieDays, data.entries]);
+  const calorieChartLabels = useMemo(() => {
+    if (calorieDays <= 7) return calorieSeries.labels;
+    if (calorieDays <= 31) return sparsifyLabels(calorieSeries.labels, 8);
+    if (calorieDays <= 90) return sparsifyLabels(calorieSeries.labels, 6);
+    return sparsifyLabels(calorieSeries.labels, 8);
+  }, [calorieDays, calorieSeries.labels]);
+  const calorieChartWidth = useMemo(() => {
+    const columnWidth = calorieDays <= 31 ? 36 : calorieDays <= 90 ? 72 : 64;
+    return Math.max(chartWidth, calorieSeries.values.length * columnWidth);
+  }, [calorieDays, calorieSeries.values.length, chartWidth]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      calorieChartScrollRef.current?.scrollTo({ x: 0, animated: false });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [calorieDays, calorieChartWidth]);
   const weightSeries = useMemo(() => latestDailyWeightPoints(data.weightHistory, weightDays), [data.weightHistory, weightDays]);
   const weightChartSeries = useMemo(() => {
     const points = thinWeightPoints(weightSeries, getWeightMaxPoints(weightDays));
@@ -228,20 +324,33 @@ export default function GraphsScreen() {
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Card style={styles.card} mode="elevated">
-          <Card.Title title="Weekly Intake" titleVariant="titleLarge" />
+          <Card.Title title="Intake Trend" titleVariant="titleLarge" />
           <Card.Content>
-          <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>Seven-day view of logged calories.</Text>
-          <BarChart
-            width={chartWidth}
-            height={240}
-            data={{ labels: calorieSeries.labels, datasets: [{ data: calorieSeries.values }] }}
-            fromZero
-            yAxisLabel=""
-            yAxisSuffix=""
-            showValuesOnTopOfBars
-            chartConfig={chartConfig}
-            style={styles.chart}
+          <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>Logged calorie totals in the selected timeframe.</Text>
+          <SegmentedButtons
+            value={String(calorieDays)}
+            onValueChange={(v) => setCalorieDays(Number(v))}
+            buttons={WEIGHT_FILTER_OPTIONS}
+            style={styles.filterButtons}
           />
+          <ScrollView
+            ref={calorieChartScrollRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chartScrollContent}
+          >
+            <BarChart
+              width={calorieChartWidth}
+              height={240}
+              data={{ labels: calorieChartLabels, datasets: [{ data: calorieSeries.values }] }}
+              fromZero
+              yAxisLabel=""
+              yAxisSuffix=""
+              showValuesOnTopOfBars={calorieSeries.values.length <= 12}
+              chartConfig={chartConfig}
+              style={styles.chart}
+            />
+          </ScrollView>
           </Card.Content>
         </Card>
 
@@ -338,6 +447,7 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, gap: 16 },
   card: { borderRadius: 24 },
   supportingText: { marginBottom: 10 },
+  chartScrollContent: { paddingRight: 12 },
   chart: { borderRadius: 18, marginLeft: -10, marginBottom: 6 },
   emptyText: {},
   filterButtons: { marginBottom: 14 },
