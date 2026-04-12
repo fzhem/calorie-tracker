@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, View, Vibration } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, Menu, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 
@@ -545,19 +546,25 @@ export default function GoalsScreen() {
               />
             </Menu>
 
-            <Text variant="bodySmall" style={{ marginTop: 6, color: theme.colors.onSurfaceVariant }}>Goal Mode</Text>
+            <View style={styles.goalModeLabelRow}>
+              <Text variant="bodySmall" style={{ marginTop: 6, color: theme.colors.onSurfaceVariant }}>Goal Mode</Text>
+              <MaterialCommunityIcons name="hand-okay" size={14} color={theme.colors.onSurfaceVariant} style={{ marginTop: 6 }} />
+            </View>
 
             <View style={styles.goalModeRow}>
-              <Button
-                mode={data.goalPhase === 'cut' ? 'contained' : 'outlined'}
-                icon="trending-down"
-                onPress={() => onGoalPhasePress('cut')}
-                onLongPress={() => onGoalPhaseLongPress('cut')}
-                compact
-                style={styles.goalModeButton}
-              >
-                Cut
-              </Button>
+              <View style={styles.goalModeButtonWrap}>
+                <Button
+                  mode={data.goalPhase === 'cut' ? 'contained' : 'outlined'}
+                  icon="trending-down"
+                  onPress={() => onGoalPhasePress('cut')}
+                  onLongPress={() => onGoalPhaseLongPress('cut')}
+                  compact
+                  style={styles.goalModeButton}
+                >
+                  Cut
+                </Button>
+                <MaterialCommunityIcons name="tune" size={18} color={data.goalPhase === 'cut' ? theme.colors.onPrimary : theme.colors.primary} style={styles.goalModeConfigIcon} />
+              </View>
               <Button
                 mode={data.goalPhase === 'maintain' ? 'contained' : 'outlined'}
                 icon="target"
@@ -567,16 +574,19 @@ export default function GoalsScreen() {
               >
                 Maintain
               </Button>
-              <Button
-                mode={data.goalPhase === 'bulk' ? 'contained' : 'outlined'}
-                icon="trending-up"
-                onPress={() => onGoalPhasePress('bulk')}
-                onLongPress={() => onGoalPhaseLongPress('bulk')}
-                compact
-                style={styles.goalModeButton}
-              >
-                Bulk
-              </Button>
+              <View style={styles.goalModeButtonWrap}>
+                <Button
+                  mode={data.goalPhase === 'bulk' ? 'contained' : 'outlined'}
+                  icon="trending-up"
+                  onPress={() => onGoalPhasePress('bulk')}
+                  onLongPress={() => onGoalPhaseLongPress('bulk')}
+                  compact
+                  style={styles.goalModeButton}
+                >
+                  Bulk
+                </Button>
+                <MaterialCommunityIcons name="tune" size={18} color={data.goalPhase === 'bulk' ? theme.colors.onPrimary : theme.colors.primary} style={styles.goalModeConfigIcon} />
+              </View>
             </View>
 
             <Text variant="labelMedium" style={{ marginTop: 6 }}>Weight Tracking</Text>
@@ -875,12 +885,26 @@ const styles = StyleSheet.create({
   card: { borderRadius: 24 },
   formArea: { gap: 4 },
   supportingText: {},
+  goalModeLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   goalModeRow: {
     flexDirection: 'row',
     gap: 8,
   },
+  goalModeButtonWrap: {
+    flex: 1,
+    position: 'relative',
+  },
   goalModeButton: {
     flex: 1,
+  },
+  goalModeConfigIcon: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
   },
   goalAdjustChipRow: {
     flexDirection: 'row',

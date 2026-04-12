@@ -10,7 +10,6 @@ import Svg, { G, Line, Rect, Text as SvgText, Circle } from 'react-native-svg';
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
 import type { BodyFatPoint, MealEntry, StoredData, WeightPoint } from '../storage';
 
-const DEFAULT_CALORIE_DAYS = 7;
 const WEIGHT_CHART_HEIGHT = 220;
 const WEIGHT_GUIDE_BOTTOM = WEIGHT_CHART_HEIGHT - 40;
 
@@ -242,6 +241,34 @@ function getWeeklyCalorieData(entries: MealEntry[]): { values: Array<number | nu
   return { values: weekData, dayLabels, todayIndex: todayWeekIndex };
 }
 
+function buildTwoWeekCalorieSeries(entries: MealEntry[]) {
+  const totals = new Map<string, number>();
+
+  for (const entry of entries) {
+    const key = getLocalDateKey(new Date(entry.loggedAt));
+    totals.set(key, (totals.get(key) ?? 0) + entry.calories);
+  }
+
+  const today = toStartOfDay(new Date());
+  const dayOfWeek = today.getDay();
+  const currentWeekStart = toStartOfDay(addDays(today, -((dayOfWeek + 6) % 7)));
+  const previousWeekStart = toStartOfDay(addDays(currentWeekStart, -7));
+
+  const rows: Array<{ date: Date; value: number }> = [];
+  for (let cursor = new Date(previousWeekStart); cursor <= today; cursor = addDays(cursor, 1)) {
+    const key = getLocalDateKey(cursor);
+    rows.push({
+      date: new Date(cursor),
+      value: Math.round(totals.get(key) ?? 0),
+    });
+  }
+
+  return {
+    labels: rows.map((row) => formatCalorieLabel(getLocalDateKey(row.date), 7)),
+    values: rows.map((row) => row.value),
+  };
+}
+
 function getCalorieStatus(todayCalories: number, targetCalories: number) {
   const tolerance = 100;
   if (Math.abs(todayCalories - targetCalories) <= tolerance) return 'On target';
@@ -456,7 +483,6 @@ export default function GraphsScreen() {
   const [data, setData] = useState<StoredData>(DEFAULT_DATA);
   const [selectedWeightIndex, setSelectedWeightIndex] = useState<number | null>(null);
   const [selectedBodyFatIndex, setSelectedBodyFatIndex] = useState<number | null>(null);
-  const [calorieDays, setCalorieDays] = useState(DEFAULT_CALORIE_DAYS);
   const [weightDays, setWeightDays] = useState(7);
   const [bodyFatDays, setBodyFatDays] = useState(7);
   const [showCalorieChart, setShowCalorieChart] = useState(false);
@@ -531,22 +557,15 @@ export default function GraphsScreen() {
     fillShadowGradientToOpacity: 0,
   }), [chartConfig, theme.colors.elevation.level1, theme.dark]);
 
-  const allCalorieSeries = useMemo(() => ({
-    7: buildCalorieSeries(data.entries, 7),
-    90: buildCalorieSeries(data.entries, 90),
-    365: buildCalorieSeries(data.entries, 365),
-  }), [data.entries]);
-
-  const calorieSeries = allCalorieSeries[calorieDays as 7 | 90 | 365] ?? allCalorieSeries[7];
-  const calorieChartLabels = useMemo(() => {
-    if (calorieDays <= 7) return sparsifyLabels(calorieSeries.labels, 14);
-    if (calorieDays <= 90) return sparsifyLabels(calorieSeries.labels, 10);
-    return sparsifyLabels(calorieSeries.labels, 12);
-  }, [calorieDays, calorieSeries.labels]);
+  const calorieSeries = useMemo(() => buildTwoWeekCalorieSeries(data.entries), [data.entries]);
+  const calorieChartLabels = useMemo(
+    () => sparsifyLabels(calorieSeries.labels, 14),
+    [calorieSeries.labels],
+  );
   const calorieChartWidth = useMemo(() => {
-    const columnWidth = calorieDays <= 7 ? 32 : calorieDays <= 90 ? 42 : 56;
+    const columnWidth = 32;
     return Math.max(chartWidth, calorieSeries.values.length * columnWidth);
-  }, [calorieDays, calorieSeries.values.length, chartWidth]);
+  }, [calorieSeries.values.length, chartWidth]);
 
   const allWeightSeries = useMemo(() => ({
     7: buildWeightSeries(data.weightHistory, 7),
@@ -627,11 +646,12 @@ export default function GraphsScreen() {
   }, [bodyFatDays, bodyFatChartSeries.points.length]);
 
   useEffect(() => {
+    if (!showCalorieChart) return;
     const frame = requestAnimationFrame(() => {
       calorieTimelineRef.current?.scrollToEnd({ animated: false });
     });
     return () => cancelAnimationFrame(frame);
-  }, [calorieChartWidth, calorieDays]);
+  }, [calorieChartWidth, showCalorieChart]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -1120,13 +1140,7 @@ export default function GraphsScreen() {
               )}
             />
             <Card.Content>
-              <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>Logged calorie totals in the selected timeframe.</Text>
-              <SegmentedButtons
-                value={String(calorieDays)}
-                onValueChange={(v) => setCalorieDays(Number(v))}
-                buttons={WEIGHT_FILTER_OPTIONS}
-                style={styles.filterButtons}
-              />
+              <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>Logged calorie totals for previous week and this week.</Text>
               {calorieChartEl}
             </Card.Content>
           </Card>
