@@ -1,14 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { Dimensions, ScrollView, StyleSheet, View } from 'react-native';
+import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { BarChart, LineChart } from 'react-native-chart-kit';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Card, SegmentedButtons, Text, useTheme } from 'react-native-paper';
-import { G, Line, Rect, Text as SvgText } from 'react-native-svg';
+import { Card, SegmentedButtons, Text, Button, useTheme } from 'react-native-paper';
+import Svg, { G, Line, Rect, Text as SvgText, Circle } from 'react-native-svg';
 
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
-import type { MealEntry, StoredData } from '../storage';
+import type { MealEntry, StoredData, WeightPoint } from '../storage';
 
 const DEFAULT_CALORIE_DAYS = 7;
 const WEIGHT_CHART_HEIGHT = 220;
@@ -110,6 +110,140 @@ const WEIGHT_FILTER_OPTIONS = [
   { value: '90', label: '3M' },
   { value: '365', label: '1Y' },
 ];
+
+function formatRelativeTime(dateStr: string) {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+  return date.toLocaleDateString();
+}
+
+type WeightTrend = 'gaining' | 'losing' | 'maintaining';
+
+function calculateWeightTrend(history: WeightPoint[]): WeightTrend | null {
+  if (history.length < 2) return null;
+
+  const sorted = [...history].sort(
+    (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+  );
+
+  // Prefer recent data to reflect current trajectory while smoothing noise.
+  const lookbackDays = 21;
+  const lookbackStart = addDays(toStartOfDay(new Date()), -(lookbackDays - 1));
+  const recent = sorted.filter((p) => new Date(p.recordedAt) >= lookbackStart);
+  const points = recent.length >= 3 ? recent : sorted;
+
+  if (points.length < 2) return null;
+
+  const baseTime = new Date(points[0].recordedAt).getTime();
+  const xs = points.map((p) => (new Date(p.recordedAt).getTime() - baseTime) / 86_400_000);
+  const ys = points.map((p) => p.weightKg);
+
+  const meanX = xs.reduce((sum, x) => sum + x, 0) / xs.length;
+  const meanY = ys.reduce((sum, y) => sum + y, 0) / ys.length;
+
+  let numerator = 0;
+  let denominator = 0;
+  for (let i = 0; i < xs.length; i += 1) {
+    const dx = xs[i] - meanX;
+    numerator += dx * (ys[i] - meanY);
+    denominator += dx * dx;
+  }
+
+  if (denominator === 0) return 'maintaining';
+
+  const slopeKgPerDay = numerator / denominator;
+  const weeklyChangeKg = slopeKgPerDay * 7;
+  const maintainBandKgPerWeek = 0.2;
+
+  if (weeklyChangeKg > maintainBandKgPerWeek) return 'gaining';
+  if (weeklyChangeKg < -maintainBandKgPerWeek) return 'losing';
+  return 'maintaining';
+}
+
+function getWeeklyData(history: WeightPoint[]): { values: Array<number | null>; dayLabels: string[]; todayIndex: number } {
+  if (history.length === 0) return { values: [], dayLabels: [], todayIndex: -1 };
+
+  const now = new Date();
+  const today = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  
+  // Calculate start of week (Monday)
+  const startOfWeek = new Date(now);
+  const day = startOfWeek.getDay();
+  const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
+  startOfWeek.setDate(diff);
+  startOfWeek.setHours(0, 0, 0, 0);
+
+  // Day abbreviations starting from Monday
+  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  
+  // Map data to days of week; keep latest value for each day.
+  const weekData = Array(7).fill(null) as Array<number | null>;
+  const sorted = [...history].sort(
+    (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+  );
+
+  for (const point of sorted) {
+    const pointDate = new Date(point.recordedAt);
+    pointDate.setHours(0, 0, 0, 0);
+    
+    if (pointDate >= startOfWeek && pointDate < new Date(startOfWeek.getTime() + 7 * 24 * 60 * 60 * 1000)) {
+      const dayIndex = Math.floor((pointDate.getTime() - startOfWeek.getTime()) / (24 * 60 * 60 * 1000));
+      if (dayIndex >= 0 && dayIndex < 7) {
+        weekData[dayIndex] = point.weightKg;
+      }
+    }
+  }
+  
+  // Today's index (0 = Monday, 6 = Sunday)
+  const todayWeekIndex = today === 0 ? 6 : today - 1;
+
+  return { values: weekData, dayLabels, todayIndex: todayWeekIndex };
+}
+
+function getWeeklyCalorieData(entries: MealEntry[]): { values: Array<number | null>; dayLabels: string[]; todayIndex: number } {
+  const now = new Date();
+  const today = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+
+  const startOfWeek = new Date(now);
+  const day = startOfWeek.getDay();
+  const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
+  startOfWeek.setDate(diff);
+  startOfWeek.setHours(0, 0, 0, 0);
+
+  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const weekData = Array(7).fill(null) as Array<number | null>;
+
+  for (const entry of entries) {
+    const when = new Date(entry.loggedAt);
+    const pointDate = new Date(when.getFullYear(), when.getMonth(), when.getDate());
+    if (pointDate < startOfWeek || pointDate >= new Date(startOfWeek.getTime() + 7 * 86_400_000)) continue;
+
+    const dayIndex = Math.floor((pointDate.getTime() - startOfWeek.getTime()) / 86_400_000);
+    if (dayIndex < 0 || dayIndex > 6) continue;
+    weekData[dayIndex] = (weekData[dayIndex] ?? 0) + entry.calories;
+  }
+
+  const todayWeekIndex = today === 0 ? 6 : today - 1;
+  return { values: weekData, dayLabels, todayIndex: todayWeekIndex };
+}
+
+function getCalorieStatus(todayCalories: number, targetCalories: number) {
+  const tolerance = 100;
+  if (Math.abs(todayCalories - targetCalories) <= tolerance) return 'On target';
+  if (todayCalories > targetCalories) return 'Above target';
+  return 'Under target';
+}
 
 function formatPointDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, {
@@ -319,6 +453,8 @@ export default function GraphsScreen() {
   const [selectedWeightIndex, setSelectedWeightIndex] = useState<number | null>(null);
   const [calorieDays, setCalorieDays] = useState(DEFAULT_CALORIE_DAYS);
   const [weightDays, setWeightDays] = useState(7);
+  const [showCalorieChart, setShowCalorieChart] = useState(false);
+  const [showWeightChart, setShowWeightChart] = useState(false);
   const calorieTimelineRef = useRef<ScrollView | null>(null);
   const weightTimelineRef = useRef<ScrollView | null>(null);
   const weightPointPositionsRef = useRef<Array<{ x: number; y: number }>>([]);
@@ -442,7 +578,7 @@ export default function GraphsScreen() {
       weightTimelineRef.current?.scrollToEnd({ animated: false });
     });
     return () => cancelAnimationFrame(frame);
-  }, [weightChartWidth, weightDays]);
+  }, [weightChartWidth, weightDays, showWeightChart]);
 
   const handleWeightTap = useCallback((tapX: number) => {
     const positions = weightPointPositionsRef.current.slice(0, weightChartSeries.points.length);
@@ -471,6 +607,50 @@ export default function GraphsScreen() {
     ? Math.min(Math.max(8, selectedWeightMetrics.x - bubbleHalfWidth), weightChartWidth - bubbleWidth - 8)
     : 0;
   const bubbleY = selectedWeightMetrics ? Math.max(10, selectedWeightMetrics.y - 54) : 0;
+
+  const latestWeightPoint = data.weightHistory[0] ?? null;
+  const latestWeight = latestWeightPoint?.weightKg ?? null;
+  const latestCalorieEntry = useMemo(
+    () => data.entries.reduce<MealEntry | null>((latest, entry) => {
+      if (!latest) return entry;
+      return new Date(entry.loggedAt).getTime() > new Date(latest.loggedAt).getTime() ? entry : latest;
+    }, null),
+    [data.entries],
+  );
+  const todayCalorieTotal = useMemo(() => {
+    const todayKey = getLocalDateKey(new Date());
+    return data.entries
+      .filter((entry) => getLocalDateKey(new Date(entry.loggedAt)) === todayKey)
+      .reduce((sum, entry) => sum + entry.calories, 0);
+  }, [data.entries]);
+  const calorieStatus = useMemo(
+    () => getCalorieStatus(todayCalorieTotal, data.baseTarget),
+    [todayCalorieTotal, data.baseTarget],
+  );
+  const calorieWeeklyData = useMemo(() => getWeeklyCalorieData(data.entries), [data.entries]);
+  const hasWeeklyCalorieData = useMemo(
+    () => calorieWeeklyData.values.some((value) => typeof value === 'number'),
+    [calorieWeeklyData.values],
+  );
+  const calorieWeeklyMax = useMemo(() => {
+    const values = calorieWeeklyData.values.filter((value): value is number => typeof value === 'number');
+    if (!values.length) return null;
+    const max = Math.max(...values);
+    return Math.max(300, max);
+  }, [calorieWeeklyData.values]);
+  const weeklyData = useMemo(() => getWeeklyData(data.weightHistory), [data.weightHistory]);
+  const hasWeeklyData = useMemo(
+    () => weeklyData.values.some((value) => typeof value === 'number'),
+    [weeklyData.values],
+  );
+  const weeklyValueRange = useMemo(() => {
+    const values = weeklyData.values.filter((value): value is number => typeof value === 'number');
+    if (!values.length) return null;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const pad = Math.max(0.2, (max - min) * 0.2);
+    return { min: min - pad, max: max + pad };
+  }, [weeklyData.values]);
 
   const calorieChartEl = useMemo(() => {
     return (
@@ -615,38 +795,250 @@ export default function GraphsScreen() {
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Card style={styles.card} mode="elevated">
-          <Card.Title title="Intake Trend" titleVariant="titleLarge" />
-          <Card.Content>
-          <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>Logged calorie totals in the selected timeframe.</Text>
-          <SegmentedButtons
-            value={String(calorieDays)}
-            onValueChange={(v) => setCalorieDays(Number(v))}
-            buttons={WEIGHT_FILTER_OPTIONS}
-            style={styles.filterButtons}
-          />
-          {calorieChartEl}
-          </Card.Content>
-        </Card>
+        {!showCalorieChart ? (
+          <Pressable onPress={() => setShowCalorieChart(true)}>
+            <Card style={[styles.weightTile, { backgroundColor: theme.colors.surfaceVariant }]} mode="elevated">
+              <Card.Content>
+                <View style={styles.weightTileContent}>
+                  <View style={styles.weightTileLeft}>
+                    <Text variant="labelMedium" style={{ fontWeight: '700', color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
+                      Calorie Intake
+                    </Text>
+                    <Text variant="displaySmall" style={{ fontWeight: '700', color: theme.colors.primary, marginBottom: 8 }}>
+                      {Math.round(todayCalorieTotal)} kcal
+                    </Text>
+                    <Text
+                      variant="labelSmall"
+                      style={{
+                        color: calorieStatus === 'Above target'
+                          ? theme.colors.error
+                          : calorieStatus === 'Under target'
+                            ? theme.colors.primary
+                            : theme.colors.onSurfaceVariant,
+                        fontWeight: '600',
+                      }}
+                    >
+                      {calorieStatus}
+                    </Text>
+                  </View>
+                  <View style={styles.weightTileRight}>
+                    <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      {latestCalorieEntry ? formatRelativeTime(latestCalorieEntry.loggedAt) : 'No data'}
+                    </Text>
+                    {hasWeeklyCalorieData && calorieWeeklyMax ? (
+                      <View style={styles.weekMiniWrap}>
+                        <Svg width={126} height={56}>
+                          {calorieWeeklyData.values.map((value, index) => {
+                            if (typeof value !== 'number') return null;
+                            const barWidth = 10;
+                            const x = 1 + index * 18;
+                            const usableHeight = 34;
+                            const barHeight = Math.max(2, (value / calorieWeeklyMax) * usableHeight);
+                            const y = 38 - barHeight;
+                            const isToday = index === calorieWeeklyData.todayIndex;
+                            const barColor = theme.dark ? '#7fd8a5' : '#146c43';
+                            return (
+                              <Rect
+                                key={`mini-cal-bar-${index}`}
+                                x={x}
+                                y={y}
+                                width={barWidth}
+                                height={barHeight}
+                                rx={2}
+                                fill={isToday ? barColor : 'transparent'}
+                                stroke={barColor}
+                                strokeWidth="1.5"
+                              />
+                            );
+                          })}
+                        </Svg>
+                        <View style={styles.weekMiniAxis}>
+                          {calorieWeeklyData.dayLabels.map((label, index) => (
+                            <Text
+                              key={`mini-cal-axis-${index}`}
+                              variant="labelSmall"
+                              style={[styles.weekMiniAxisLabel, { color: theme.colors.onSurfaceVariant }]}
+                            >
+                              {label}
+                            </Text>
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              </Card.Content>
+            </Card>
+          </Pressable>
+        ) : (
+          <Card style={styles.card} mode="elevated">
+            <Card.Title
+              title="Intake Trend"
+              titleVariant="titleLarge"
+              right={() => (
+                <Button
+                  icon="close"
+                  onPress={() => setShowCalorieChart(false)}
+                  mode="text"
+                  style={{ marginRight: 16 }}
+                >
+                  Close
+                </Button>
+              )}
+            />
+            <Card.Content>
+              <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>Logged calorie totals in the selected timeframe.</Text>
+              <SegmentedButtons
+                value={String(calorieDays)}
+                onValueChange={(v) => setCalorieDays(Number(v))}
+                buttons={WEIGHT_FILTER_OPTIONS}
+                style={styles.filterButtons}
+              />
+              {calorieChartEl}
+            </Card.Content>
+          </Card>
+        )}
 
-        <Card style={styles.card} mode="elevated">
-          <Card.Title title="Weight Trend" titleVariant="titleLarge" />
-          <Card.Content>
-          <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>Daily weight points from manual input or Health Connect.</Text>
-          <SegmentedButtons
-            value={String(weightDays)}
-            onValueChange={(v) => {
-              startTransition(() => {
-                setWeightDays(Number(v));
-                setSelectedWeightIndex(null);
-              });
-            }}
-            buttons={WEIGHT_FILTER_OPTIONS}
-            style={styles.filterButtons}
-          />
-          {weightChartEl}
-          </Card.Content>
-        </Card>
+        {!showWeightChart ? (
+          <Pressable onPress={() => setShowWeightChart(true)}>
+            <Card style={[styles.weightTile, { backgroundColor: theme.colors.surfaceVariant }]} mode="elevated">
+              <Card.Content>
+                <View style={styles.weightTileContent}>
+                  <View style={styles.weightTileLeft}>
+                    <Text variant="labelMedium" style={{ fontWeight: '700', color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
+                      Weight
+                    </Text>
+                    <Text variant="displaySmall" style={{ fontWeight: '700', color: theme.colors.primary, marginBottom: 8 }}>
+                      {latestWeight ? `${latestWeight} kg` : '— kg'}
+                    </Text>
+                    {data.weightHistory.length > 0 ? (
+                      <Text
+                        variant="labelSmall"
+                        style={{
+                          color: calculateWeightTrend(data.weightHistory) === 'gaining'
+                            ? theme.colors.error
+                            : calculateWeightTrend(data.weightHistory) === 'losing'
+                              ? theme.colors.primary
+                              : theme.colors.onSurfaceVariant,
+                          fontWeight: '600',
+                        }}
+                      >
+                        {calculateWeightTrend(data.weightHistory) === 'gaining'
+                          ? '↑ Gaining'
+                          : calculateWeightTrend(data.weightHistory) === 'losing'
+                            ? '↓ Losing'
+                            : '→ Maintaining'}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.weightTileRight}>
+                    <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      {latestWeightPoint ? formatRelativeTime(latestWeightPoint.recordedAt) : 'No data'}
+                    </Text>
+                    {hasWeeklyData && weeklyValueRange ? (
+                      <View style={styles.weekMiniWrap}>
+                        <Svg width={126} height={56}>
+                          {(() => {
+                            const lines = [];
+                            for (let index = 0; index < weeklyData.values.length; index += 1) {
+                              const value = weeklyData.values[index];
+                              if (typeof value !== 'number') continue;
+
+                              let nextIndex = index + 1;
+                              while (nextIndex < weeklyData.values.length && typeof weeklyData.values[nextIndex] !== 'number') {
+                                nextIndex += 1;
+                              }
+                              if (nextIndex >= weeklyData.values.length) continue;
+
+                              const nextValue = weeklyData.values[nextIndex] as number;
+                              const x1 = 6 + index * 19;
+                              const x2 = 6 + nextIndex * 19;
+                              const y1 = 4 + ((weeklyValueRange.max - value) / (weeklyValueRange.max - weeklyValueRange.min || 1)) * 32;
+                              const y2 = 4 + ((weeklyValueRange.max - nextValue) / (weeklyValueRange.max - weeklyValueRange.min || 1)) * 32;
+                              lines.push(
+                                <Line
+                                  key={`mini-line-${index}-${nextIndex}`}
+                                  x1={String(x1)}
+                                  y1={String(y1)}
+                                  x2={String(x2)}
+                                  y2={String(y2)}
+                                  stroke={theme.dark ? '#7fd8a5' : '#146c43'}
+                                  strokeWidth="1.5"
+                                />,
+                              );
+                            }
+                            return lines;
+                          })()}
+                          {weeklyData.values.map((value, index) => {
+                            if (typeof value !== 'number') return null;
+                            const x = 6 + index * 19;
+                            const y = 4 + ((weeklyValueRange.max - value) / (weeklyValueRange.max - weeklyValueRange.min || 1)) * 32;
+                            const isToday = index === weeklyData.todayIndex;
+                            const dotColor = theme.dark ? '#7fd8a5' : '#146c43';
+                            return (
+                              <Circle
+                                key={`mini-dot-${index}`}
+                                cx={String(x)}
+                                cy={String(y)}
+                                r={isToday ? '3.5' : '2.5'}
+                                fill={isToday ? dotColor : 'transparent'}
+                                stroke={dotColor}
+                                strokeWidth="1.5"
+                              />
+                            );
+                          })}
+                        </Svg>
+                        <View style={styles.weekMiniAxis}>
+                          {weeklyData.dayLabels.map((label, index) => (
+                            <Text
+                              key={`mini-axis-${index}`}
+                              variant="labelSmall"
+                              style={[styles.weekMiniAxisLabel, { color: theme.colors.onSurfaceVariant }]}
+                            >
+                              {label}
+                            </Text>
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              </Card.Content>
+            </Card>
+          </Pressable>
+        ) : (
+          <Card style={styles.card} mode="elevated">
+            <Card.Title 
+              title="Weight Trend" 
+              titleVariant="titleLarge"
+              right={() => (
+                <Button 
+                  icon="close" 
+                  onPress={() => setShowWeightChart(false)}
+                  mode="text"
+                  style={{ marginRight: 16 }}
+                >
+                  Close
+                </Button>
+              )}
+            />
+            <Card.Content>
+              <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>Daily weight points from manual input or Health Connect.</Text>
+              <SegmentedButtons
+                value={String(weightDays)}
+                onValueChange={(v) => {
+                  startTransition(() => {
+                    setWeightDays(Number(v));
+                    setSelectedWeightIndex(null);
+                  });
+                }}
+                buttons={WEIGHT_FILTER_OPTIONS}
+                style={styles.filterButtons}
+              />
+              {weightChartEl}
+            </Card.Content>
+          </Card>
+        )}
       </ScrollView>
     </View>
   );
@@ -661,4 +1053,37 @@ const styles = StyleSheet.create({
   chart: { borderRadius: 18, marginLeft: -10, marginBottom: 6 },
   emptyText: {},
   filterButtons: { marginBottom: 14 },
+  weightTile: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  weightTileContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 16,
+  },
+  weightTileLeft: {
+    flex: 1,
+  },
+  weightTileRight: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  weekMiniWrap: {
+    width: 126,
+    alignItems: 'stretch',
+  },
+  weekMiniAxis: {
+    marginTop: -2,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2,
+  },
+  weekMiniAxisLabel: {
+    width: 14,
+    textAlign: 'center',
+    fontSize: 10,
+    lineHeight: 12,
+  },
 });
