@@ -1,4 +1,6 @@
-import type { ActivityLevel, MetabolismSex } from './storage';
+import type { ActivityLevel, GoalAdjustmentType, GoalPhase, MetabolismSex } from './storage';
+
+const KCAL_PER_KG_BODY_WEIGHT = 7700;
 
 const ACTIVITY_FACTOR_BY_LEVEL: Record<ActivityLevel, number> = {
   sedentary: 1.2,
@@ -31,6 +33,31 @@ function isPositiveNumber(value: number | null): value is number {
 
 export function getActivityFactor(activityLevel: ActivityLevel) {
   return ACTIVITY_FACTOR_BY_LEVEL[activityLevel];
+}
+
+export function getGoalCalorieDelta(
+  goalPhase: GoalPhase,
+  options?: {
+    adjustmentType?: GoalAdjustmentType;
+    adjustmentKcal?: number;
+    percentPerWeek?: number;
+    weightKg?: number | null;
+  },
+) {
+  const safeAdjustmentKcal = Math.max(0, Math.round(options?.adjustmentKcal ?? 500));
+  const safePercentPerWeek = Math.max(0, options?.percentPerWeek ?? 1);
+  const weightKg = options?.weightKg;
+
+  let dailyDelta = safeAdjustmentKcal;
+  if (options?.adjustmentType === 'percent' && typeof weightKg === 'number' && Number.isFinite(weightKg) && weightKg > 0) {
+    // Convert target weekly body-weight change into a daily kcal adjustment.
+    const weeklyKgDelta = weightKg * (safePercentPerWeek / 100);
+    dailyDelta = Math.round((weeklyKgDelta * KCAL_PER_KG_BODY_WEIGHT) / 7);
+  }
+
+  if (goalPhase === 'cut') return -dailyDelta;
+  if (goalPhase === 'bulk') return dailyDelta;
+  return 0;
 }
 
 export function estimateMetabolism(input: MetabolismInput): MetabolismMetrics {

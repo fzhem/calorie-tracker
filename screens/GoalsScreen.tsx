@@ -1,13 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, View, Vibration } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, Menu, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Card, Chip, Menu, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
-import type { StoredData, WeightPoint } from '../storage';
-import { estimateMetabolism, getActivityFactor } from '../metabolism';
+import type { GoalAdjustmentType, GoalPhase, StoredData, WeightPoint } from '../storage';
+import { estimateMetabolism, getActivityFactor, getGoalCalorieDelta } from '../metabolism';
 
 const KG_PER_LB = 0.45359237;
 const CM_PER_IN = 2.54;
@@ -21,6 +21,7 @@ const HEIGHT_ROW_HEIGHT = 44;
 type WeightUnit = 'kg' | 'lb';
 type HeightUnit = 'cm' | 'ft-in';
 type HeightPickerItem = { key: string; cm: number; label: string };
+type EditableGoalPhase = Exclude<GoalPhase, 'maintain'>;
 
 type HeightPickerOptionProps = {
   label: string;
@@ -119,6 +120,10 @@ export default function GoalsScreen() {
   const [isReady, setIsReady] = useState(false);
   const [baseTargetInput, setBaseTargetInput] = useState(`${DEFAULT_DATA.baseTarget}`);
   const [caloriesPerKgInput, setCaloriesPerKgInput] = useState(`${DEFAULT_DATA.caloriesPerKg}`);
+  const [goalAdjustmentEditorPhase, setGoalAdjustmentEditorPhase] = useState<EditableGoalPhase>('cut');
+  const [goalAdjustmentTypeInput, setGoalAdjustmentTypeInput] = useState<GoalAdjustmentType>('kcal');
+  const [goalAdjustmentInput, setGoalAdjustmentInput] = useState('500');
+  const [goalPercentInput, setGoalPercentInput] = useState('1');
   const [metabolismAgeInput, setMetabolismAgeInput] = useState('');
   const [metabolismHeightInput, setMetabolismHeightInput] = useState('');
   const [selectedHeightCm, setSelectedHeightCm] = useState<number | null>(null);
@@ -126,6 +131,7 @@ export default function GoalsScreen() {
   const [heightUnit, setHeightUnit] = useState<HeightUnit>('cm');
   const [weightUnit, setWeightUnit] = useState<WeightUnit>('kg');
   const [heightPickerVisible, setHeightPickerVisible] = useState(false);
+  const [goalAdjustmentPickerVisible, setGoalAdjustmentPickerVisible] = useState(false);
   const [sexMenuVisible, setSexMenuVisible] = useState(false);
   const [activityMenuVisible, setActivityMenuVisible] = useState(false);
   const [fallbackUnlocked, setFallbackUnlocked] = useState(false);
@@ -142,6 +148,9 @@ export default function GoalsScreen() {
           setData(next);
           setBaseTargetInput(`${next.baseTarget}`);
           setCaloriesPerKgInput(`${next.caloriesPerKg}`);
+          setGoalAdjustmentTypeInput(next.cutAdjustmentType ?? 'kcal');
+          setGoalAdjustmentInput(`${next.cutCalorieAdjustment ?? 500}`);
+          setGoalPercentInput(`${next.cutPercentPerWeek ?? 1}`);
           setMetabolismAgeInput(next.metabolismAgeYears ? `${next.metabolismAgeYears}` : '');
           setSelectedHeightCm(next.metabolismHeightCm ?? null);
           setMetabolismHeightInput(next.metabolismHeightCm ? formatHeightForUnit(next.metabolismHeightCm, heightUnit) : '');
@@ -185,6 +194,37 @@ export default function GoalsScreen() {
       setMetabolismHeightInput(formatHeightForUnit(selectedHeightCm, nextUnit));
     }
     setHeightUnit(nextUnit);
+  };
+
+  const onGoalPhasePress = (phase: GoalPhase) => {
+    setData((prev) => ({ ...prev, goalPhase: phase }));
+  };
+
+  const onGoalPhaseLongPress = (phase: EditableGoalPhase) => {
+    Vibration.vibrate(12);
+    setData((prev) => ({ ...prev, goalPhase: phase }));
+    setGoalAdjustmentEditorPhase(phase);
+
+    const phaseType = phase === 'cut' ? (data.cutAdjustmentType ?? 'kcal') : (data.bulkAdjustmentType ?? 'kcal');
+    const phaseKcal = phase === 'cut' ? (data.cutCalorieAdjustment ?? 500) : (data.bulkCalorieAdjustment ?? 500);
+    const phasePercent = phase === 'cut' ? (data.cutPercentPerWeek ?? 1) : (data.bulkPercentPerWeek ?? 1);
+
+    setGoalAdjustmentTypeInput(phaseType);
+    setGoalAdjustmentInput(`${Math.round(phaseKcal)}`);
+    setGoalPercentInput(`${roundTo(phasePercent, 2)}`);
+
+    if (phaseType === 'percent') {
+      const currentPercent = parseNumberInput(`${phasePercent}`);
+      if (!currentPercent || currentPercent < 0.1 || currentPercent > 3) {
+        setGoalPercentInput('1');
+      }
+    } else {
+      const current = parseNumberInput(`${phaseKcal}`);
+      if (!current || current < 50 || current > 1500) {
+        setGoalAdjustmentInput('500');
+      }
+    }
+    setGoalAdjustmentPickerVisible(true);
   };
 
   const openHeightPicker = () => {
@@ -322,6 +362,25 @@ export default function GoalsScreen() {
     sex: data.metabolismSex,
     activityLevel: data.activityLevel,
   });
+  const goalDelta = getGoalCalorieDelta(data.goalPhase, {
+    adjustmentType:
+      data.goalPhase === 'cut'
+        ? (data.cutAdjustmentType ?? 'kcal')
+        : (data.goalPhase === 'bulk' ? (data.bulkAdjustmentType ?? 'kcal') : 'kcal'),
+    adjustmentKcal:
+      data.goalPhase === 'cut'
+        ? (data.cutCalorieAdjustment ?? 500)
+        : (data.goalPhase === 'bulk' ? (data.bulkCalorieAdjustment ?? 500) : 500),
+    percentPerWeek:
+      data.goalPhase === 'cut'
+        ? (data.cutPercentPerWeek ?? 1)
+        : (data.goalPhase === 'bulk' ? (data.bulkPercentPerWeek ?? 1) : 1),
+    weightKg: latestWeight,
+  });
+  const goalModeLabel = data.goalPhase === 'cut' ? 'Cut' : data.goalPhase === 'bulk' ? 'Bulk' : 'Maintain';
+  const goalModeCalories = metabolism.maintenanceCalories !== null
+    ? Math.round(metabolism.maintenanceCalories + goalDelta)
+    : null;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
@@ -336,7 +395,7 @@ export default function GoalsScreen() {
                 { value: 'profile', label: 'Profile', icon: 'account' },
                 { value: 'fallback', label: 'Fallback', icon: 'shield-alert' },
               ]}
-              style={{ marginBottom: 12 }}
+              style={{ marginBottom: 8 }}
             />
 
             {goalsTab === 'profile' ? (
@@ -345,7 +404,7 @@ export default function GoalsScreen() {
                   Complete your profile to calculate accurate metabolism metrics.
                 </Text>
 
-                <Text variant="labelMedium" style={{ marginTop: 8 }}>Your Profile</Text>
+                <Text variant="labelMedium" style={{ marginTop: 4 }}>Your Profile</Text>
             <TextInput
               label="Age (years)"
               value={metabolismAgeInput}
@@ -366,7 +425,7 @@ export default function GoalsScreen() {
               </View>
             </Pressable>
 
-            <Text variant="bodySmall" style={{ marginTop: 10, color: theme.colors.onSurfaceVariant }}>Sex</Text>
+            <Text variant="bodySmall" style={{ marginTop: 6, color: theme.colors.onSurfaceVariant }}>Sex</Text>
             <Menu
               visible={sexMenuVisible}
               onDismiss={() => setSexMenuVisible(false)}
@@ -374,7 +433,7 @@ export default function GoalsScreen() {
                 <Button
                   mode="outlined"
                   onPress={() => setSexMenuVisible(true)}
-                  style={{ marginBottom: 10 }}
+                  style={{ marginBottom: 6 }}
                   icon={data.metabolismSex === 'male' ? 'gender-male' : 'gender-female'}
                 >
                   {data.metabolismSex === 'male' ? 'Male' : 'Female'}
@@ -399,7 +458,7 @@ export default function GoalsScreen() {
               />
             </Menu>
 
-            <Text variant="bodySmall" style={{ marginTop: 10, color: theme.colors.onSurfaceVariant }}>Activity Level</Text>
+            <Text variant="bodySmall" style={{ marginTop: 6, color: theme.colors.onSurfaceVariant }}>Activity Level</Text>
             <Menu
               visible={activityMenuVisible}
               onDismiss={() => setActivityMenuVisible(false)}
@@ -407,7 +466,7 @@ export default function GoalsScreen() {
                 <Button
                   mode="outlined"
                   onPress={() => setActivityMenuVisible(true)}
-                  style={{ marginBottom: 10 }}
+                  style={{ marginBottom: 6 }}
                   icon={getActivityIcon(data.activityLevel)}
                 >
                   {getActivityLabel(data.activityLevel)}
@@ -456,7 +515,41 @@ export default function GoalsScreen() {
               />
             </Menu>
 
-            <Text variant="labelMedium" style={{ marginTop: 8 }}>Weight Tracking</Text>
+            <Text variant="bodySmall" style={{ marginTop: 6, color: theme.colors.onSurfaceVariant }}>Goal Mode</Text>
+
+            <View style={styles.goalModeRow}>
+              <Button
+                mode={data.goalPhase === 'cut' ? 'contained' : 'outlined'}
+                icon="trending-down"
+                onPress={() => onGoalPhasePress('cut')}
+                onLongPress={() => onGoalPhaseLongPress('cut')}
+                compact
+                style={styles.goalModeButton}
+              >
+                Cut
+              </Button>
+              <Button
+                mode={data.goalPhase === 'maintain' ? 'contained' : 'outlined'}
+                icon="target"
+                onPress={() => onGoalPhasePress('maintain')}
+                compact
+                style={styles.goalModeButton}
+              >
+                Maintain
+              </Button>
+              <Button
+                mode={data.goalPhase === 'bulk' ? 'contained' : 'outlined'}
+                icon="trending-up"
+                onPress={() => onGoalPhasePress('bulk')}
+                onLongPress={() => onGoalPhaseLongPress('bulk')}
+                compact
+                style={styles.goalModeButton}
+              >
+                Bulk
+              </Button>
+            </View>
+
+            <Text variant="labelMedium" style={{ marginTop: 6 }}>Weight Tracking</Text>
             <TextInput
               label={`Manual weight (${weightUnit})`}
               value={manualWeightInput}
@@ -482,17 +575,17 @@ export default function GoalsScreen() {
               textColor={theme.colors.error}
               rippleColor={theme.colors.errorContainer}
               disabled={!hasSavedManualWeight}
-              style={{ alignSelf: 'flex-start', marginTop: 2 }}
+              style={{ alignSelf: 'flex-start' }}
             >
               Clear manual weight
             </Button>
 
-            <Button mode="contained" icon="content-save-outline" onPress={saveTargets} style={{ marginTop: 12 }}>
+            <Button mode="contained" icon="content-save-outline" onPress={saveTargets} style={{ marginTop: 8 }}>
               Save all settings
             </Button>
 
-            <Text variant="labelMedium" style={{ marginTop: 8 }}>Estimated Metabolism</Text>
-            <Card style={{ backgroundColor: theme.colors.surfaceVariant, marginHorizontal: 0, marginVertical: 8 }}>
+            <Text variant="labelMedium" style={{ marginTop: 6 }}>Estimated Metabolism</Text>
+            <Card style={{ backgroundColor: theme.colors.surfaceVariant, marginHorizontal: 0, marginVertical: 6 }}>
               <Card.Content style={{ gap: 6 }}>
                 <Text variant="bodyMedium">
                   <Text style={{ fontWeight: '700' }}>BMR:</Text> {metabolism.bmr ? `${metabolism.bmr} kcal/day` : 'Need weight, height, age, and sex'}
@@ -503,6 +596,11 @@ export default function GoalsScreen() {
                 <Text variant="bodyMedium">
                   <Text style={{ fontWeight: '700' }}>Maintenance:</Text> {metabolism.maintenanceCalories ? `${metabolism.maintenanceCalories} kcal/day` : 'Not available yet'}
                 </Text>
+                {data.goalPhase !== 'maintain' ? (
+                  <Text variant="bodyMedium">
+                    <Text style={{ fontWeight: '700' }}>{goalModeLabel} Target:</Text> {goalModeCalories !== null ? `${goalModeCalories} kcal/day` : 'Not available yet'}
+                  </Text>
+                ) : null}
               </Card.Content>
             </Card>
               </>
@@ -534,6 +632,119 @@ export default function GoalsScreen() {
           </Card.Content>
         </Card>
       </ScrollView>
+
+      <Modal
+        visible={goalAdjustmentPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGoalAdjustmentPickerVisible(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setGoalAdjustmentPickerVisible(false)}>
+          <Pressable style={[styles.modalCard, { backgroundColor: theme.colors.surface }]} onPress={() => {}}>
+            <Text variant="titleMedium" style={{ fontWeight: '700' }}>
+              {goalAdjustmentEditorPhase === 'cut' ? 'Cut adjustment' : 'Bulk adjustment'}
+            </Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              Set how aggressive your cut/bulk should be.
+            </Text>
+
+            <SegmentedButtons
+              value={goalAdjustmentTypeInput}
+              onValueChange={(value) => {
+                setGoalAdjustmentTypeInput(value as GoalAdjustmentType);
+              }}
+              buttons={[
+                { value: 'kcal', label: 'kcal/day' },
+                { value: 'percent', label: '%/week' },
+              ]}
+            />
+
+            <View style={styles.goalAdjustChipRow}>
+              {(goalAdjustmentTypeInput === 'percent' ? [0.25, 0.5, 0.75, 1] : [250, 500, 750, 1000]).map((value) => {
+                const normalizedText = goalAdjustmentTypeInput === 'percent' ? String(value) : String(Math.round(value));
+                const isSelected = goalAdjustmentTypeInput === 'percent'
+                  ? Math.abs((parseNumberInput(goalPercentInput) ?? NaN) - value) < 0.001
+                  : String(value) === goalAdjustmentInput.trim();
+                return (
+                  <Chip
+                    key={`goal-adj-${normalizedText}`}
+                    selected={isSelected}
+                    showSelectedCheck={false}
+                    onPress={() => {
+                      if (goalAdjustmentTypeInput === 'percent') {
+                        setGoalPercentInput(String(value));
+                      } else {
+                        setGoalAdjustmentInput(String(value));
+                      }
+                    }}
+                    mode={isSelected ? 'flat' : 'outlined'}
+                    style={isSelected
+                      ? { backgroundColor: theme.colors.primary }
+                      : { borderColor: theme.colors.outlineVariant }}
+                    textStyle={isSelected
+                      ? { color: theme.colors.onPrimary, fontWeight: '800' }
+                      : { color: theme.colors.onSurfaceVariant, fontWeight: '600' }}
+                  >
+                    {goalAdjustmentTypeInput === 'percent' ? `${value}%` : value}
+                  </Chip>
+                );
+              })}
+            </View>
+
+            <TextInput
+              label={goalAdjustmentTypeInput === 'percent' ? 'Adjustment (% body weight/week)' : 'Adjustment (kcal/day)'}
+              value={goalAdjustmentTypeInput === 'percent' ? goalPercentInput : goalAdjustmentInput}
+              onChangeText={(value) => {
+                if (goalAdjustmentTypeInput === 'percent') {
+                  setGoalPercentInput(value);
+                } else {
+                  setGoalAdjustmentInput(value);
+                }
+              }}
+              keyboardType="numeric"
+              mode="outlined"
+              placeholder={goalAdjustmentTypeInput === 'percent' ? '1.0' : '500'}
+            />
+
+            <Button
+              mode="outlined"
+              onPress={() => {
+                const adjustmentType = goalAdjustmentTypeInput;
+                const parsedKcal = parseNumberInput(goalAdjustmentInput);
+                const parsedPercent = parseNumberInput(goalPercentInput);
+                if (adjustmentType === 'kcal') {
+                  if (!parsedKcal || parsedKcal < 50 || parsedKcal > 1500) {
+                    Alert.alert('Invalid adjustment', 'Enter goal adjustment between 50 and 1500 kcal.');
+                    return;
+                  }
+                  const normalizedKcal = Math.round(parsedKcal);
+                  setGoalAdjustmentInput(String(normalizedKcal));
+                  setData((prev) => (
+                    goalAdjustmentEditorPhase === 'cut'
+                      ? { ...prev, cutAdjustmentType: 'kcal', cutCalorieAdjustment: normalizedKcal }
+                      : { ...prev, bulkAdjustmentType: 'kcal', bulkCalorieAdjustment: normalizedKcal }
+                  ));
+                } else {
+                  if (!parsedPercent || parsedPercent < 0.1 || parsedPercent > 3) {
+                    Alert.alert('Invalid percentage', 'Enter weekly change between 0.1% and 3.0%.');
+                    return;
+                  }
+                  const normalizedPercent = roundTo(parsedPercent, 2);
+                  setGoalPercentInput(String(normalizedPercent));
+                  setData((prev) => (
+                    goalAdjustmentEditorPhase === 'cut'
+                      ? { ...prev, cutAdjustmentType: 'percent', cutPercentPerWeek: normalizedPercent }
+                      : { ...prev, bulkAdjustmentType: 'percent', bulkPercentPerWeek: normalizedPercent }
+                  ));
+                }
+                setGoalAdjustmentPickerVisible(false);
+              }}
+            >
+              Done
+            </Button>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={heightPickerVisible}
@@ -589,8 +800,20 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { padding: 16, gap: 16 },
   card: { borderRadius: 24 },
-  formArea: { gap: 6 },
+  formArea: { gap: 4 },
   supportingText: {},
+  goalModeRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  goalModeButton: {
+    flex: 1,
+  },
+  goalAdjustChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.35)',

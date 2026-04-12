@@ -5,7 +5,7 @@ import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Card, Chip, IconButton, ProgressBar, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { estimateMetabolism } from '../metabolism';
+import { estimateMetabolism, getGoalCalorieDelta } from '../metabolism';
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
 import type { StoredData } from '../storage';
 
@@ -127,10 +127,52 @@ export default function LogScreen() {
     sex: data.metabolismSex,
     activityLevel: data.activityLevel,
   });
-  const adjustedTarget = metabolism.maintenanceCalories
+  const goalDelta = getGoalCalorieDelta(data.goalPhase ?? 'maintain', {
+    adjustmentType:
+      data.goalPhase === 'cut'
+        ? (data.cutAdjustmentType ?? 'kcal')
+        : (data.goalPhase === 'bulk' ? (data.bulkAdjustmentType ?? 'kcal') : 'kcal'),
+    adjustmentKcal:
+      data.goalPhase === 'cut'
+        ? (data.cutCalorieAdjustment ?? 500)
+        : (data.goalPhase === 'bulk' ? (data.bulkCalorieAdjustment ?? 500) : 500),
+    percentPerWeek:
+      data.goalPhase === 'cut'
+        ? (data.cutPercentPerWeek ?? 1)
+        : (data.goalPhase === 'bulk' ? (data.bulkPercentPerWeek ?? 1) : 1),
+    weightKg: latestWeight,
+  });
+  const baseCalculatedTarget = metabolism.maintenanceCalories
     ?? (latestWeight ? Math.round(latestWeight * data.caloriesPerKg) : data.baseTarget);
+  const adjustedTarget = Math.round(baseCalculatedTarget + goalDelta);
   const remaining = adjustedTarget - todayCalories;
   const progress = Math.min(todayCalories / Math.max(adjustedTarget, 1), 1);
+  const activeGoalAdjustmentType =
+    data.goalPhase === 'cut'
+      ? (data.cutAdjustmentType ?? 'kcal')
+      : (data.goalPhase === 'bulk' ? (data.bulkAdjustmentType ?? 'kcal') : 'kcal');
+  const goalModeLabel = data.goalPhase === 'cut' ? 'Cut' : data.goalPhase === 'bulk' ? 'Bulk' : 'Maintain';
+  const goalModeIcon = data.goalPhase === 'cut' ? 'trending-down' : data.goalPhase === 'bulk' ? 'trending-up' : 'target';
+  const goalModeTint = data.goalPhase === 'cut'
+    ? (theme.dark ? '#ff8f70' : '#b93815')
+    : data.goalPhase === 'bulk'
+      ? (theme.dark ? '#88d9b2' : '#116b4e')
+      : (theme.dark ? '#9fc9ff' : '#1d5fa8');
+  const goalModeBg = data.goalPhase === 'cut'
+    ? (theme.dark ? '#4a2217' : '#ffe2d8')
+    : data.goalPhase === 'bulk'
+      ? (theme.dark ? '#17392e' : '#daf5e8')
+      : (theme.dark ? '#1c314d' : '#dcecff');
+  const goalModeOnBg = data.goalPhase === 'cut'
+    ? (theme.dark ? '#ffd8cd' : '#7f240d')
+    : data.goalPhase === 'bulk'
+      ? (theme.dark ? '#d7f8e7' : '#0a513b')
+      : (theme.dark ? '#d8e8ff' : '#174a84');
+  const goalModeDetail = data.goalPhase === 'maintain'
+    ? 'Maintenance calories'
+    : activeGoalAdjustmentType === 'percent'
+      ? `${data.goalPhase === 'cut' ? '-' : '+'}${data.goalPhase === 'cut' ? (data.cutPercentPerWeek ?? 1) : (data.bulkPercentPerWeek ?? 1)}% / week`
+      : `${goalDelta > 0 ? '+' : ''}${goalDelta} kcal / day`;
 
   const addMeal = useCallback(() => {
     const calories = parseNumberInput(mealCalories);
@@ -178,6 +220,19 @@ export default function LogScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <Surface style={[styles.heroCard, { backgroundColor: theme.colors.elevation.level2 }]} elevation={3}>
           <Text variant="labelLarge" style={[styles.eyebrow, { color: theme.colors.primary }]}>Calorie Logger</Text>
+          <View style={styles.goalBadgeRow}>
+            <Chip
+              icon={goalModeIcon}
+              compact
+              style={[styles.goalBadge, { backgroundColor: goalModeBg }]}
+              textStyle={{ color: goalModeOnBg, fontWeight: '700' }}
+            >
+              {goalModeLabel}
+            </Chip>
+            <Text variant="bodySmall" style={{ color: goalModeTint, fontWeight: '700' }}>
+              {goalModeDetail}
+            </Text>
+          </View>
           <View style={styles.progressSection}>
             <View style={styles.progressRow}>
               <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
@@ -317,6 +372,8 @@ const styles = StyleSheet.create({
   progressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   progressBar: { height: 10, borderRadius: 999 },
   card: { borderRadius: 24 },
+  goalBadge: { borderRadius: 999 },
+  goalBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, marginBottom: 4, flexWrap: 'wrap' },
   formArea: { gap: 12 },
   quickAddSection: { gap: 8 },
   quickAddRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

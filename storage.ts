@@ -13,6 +13,8 @@ export type FavoriteQuickAdd = {
 
 export type MetabolismSex = 'unspecified' | 'male' | 'female';
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'heavy' | 'athlete' | 'very-active' | 'extra-active' | 'active';
+export type GoalPhase = 'maintain' | 'cut' | 'bulk';
+export type GoalAdjustmentType = 'kcal' | 'percent';
 
 export type WeightPoint = {
   recordedAt: string;
@@ -37,6 +39,13 @@ export type StoredData = {
   favoriteQuickAdds: FavoriteQuickAdd[];
   baseTarget: number;
   caloriesPerKg: number;
+  goalPhase: GoalPhase;
+  cutAdjustmentType: GoalAdjustmentType;
+  cutCalorieAdjustment: number;
+  cutPercentPerWeek: number;
+  bulkAdjustmentType: GoalAdjustmentType;
+  bulkCalorieAdjustment: number;
+  bulkPercentPerWeek: number;
   metabolismSex: MetabolismSex;
   metabolismAgeYears: number | null;
   metabolismHeightCm: number | null;
@@ -56,6 +65,13 @@ export const DEFAULT_DATA: StoredData = {
   favoriteQuickAdds: [],
   baseTarget: 2100,
   caloriesPerKg: 30,
+  goalPhase: 'maintain',
+  cutAdjustmentType: 'kcal',
+  cutCalorieAdjustment: 500,
+  cutPercentPerWeek: 1,
+  bulkAdjustmentType: 'kcal',
+  bulkCalorieAdjustment: 500,
+  bulkPercentPerWeek: 1,
   metabolismSex: 'male',
   metabolismAgeYears: null,
   metabolismHeightCm: null,
