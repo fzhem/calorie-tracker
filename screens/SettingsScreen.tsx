@@ -312,7 +312,6 @@ export default function SettingsScreen() {
       const granted = await healthConnect.requestPermission(permissions);
       const hasWeightPermission = hasPermission(granted, 'read', 'Weight');
       const hasBodyFatPermission = hasPermission(granted, 'read', 'BodyFat');
-      const hasHistoryPermission = hasPermission(granted, 'read', 'ReadHealthDataHistory');
       if (!hasWeightPermission && !hasBodyFatPermission) {
         setHealthStatus('error');
         setHealthMessage(
@@ -393,7 +392,7 @@ export default function SettingsScreen() {
       setHealthStatus('available');
       setHealthMessage(
         synced.length || syncedBodyFat.length
-          ? `Synced ${synced.length} weight and ${syncedBodyFat.length} body fat record${(synced.length + syncedBodyFat.length) === 1 ? '' : 's'}.${hasHistoryPermission ? '' : ' History access is turned off, so sync may only include recent records.'}`
+          ? `Synced ${synced.length} weight and ${syncedBodyFat.length} body fat record${(synced.length + syncedBodyFat.length) === 1 ? '' : 's'}.`
           : 'No recent body metric records found in Health Connect.',
       );
     } catch (error) {
