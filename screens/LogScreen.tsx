@@ -822,12 +822,6 @@ export default function LogScreen() {
             <Text variant="titleMedium" style={{ fontWeight: '700', marginBottom: 4 }}>
               Today's Macros
             </Text>
-            <Text
-              variant="bodySmall"
-              style={{ color: theme.colors.onSurfaceVariant, marginBottom: 16 }}
-            >
-              {macroGoalModeLabel}. Click outside to close.
-            </Text>
 
             {proteinGoal !== null ? (
               <View style={styles.macroRow}>
