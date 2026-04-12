@@ -629,6 +629,15 @@ export default function LogScreen() {
           {visibleEntries.length ? (
             visibleEntries.map((entry) => {
               const mismatch = getMacroCalorieMismatch(entry.calories, entry);
+              const entryAsQuickAdd: QuickAddItem = {
+                title: entry.title,
+                calories: entry.calories,
+                proteinGrams: entry.proteinGrams ?? null,
+                fatGrams: entry.fatGrams ?? null,
+                carbsGrams: entry.carbsGrams ?? null,
+                fiberGrams: entry.fiberGrams ?? null,
+              };
+              const isEntryFavorite = favoriteQuickAddKeys.has(quickAddKey(entryAsQuickAdd));
               return (
                 <Surface
                   key={entry.id}
@@ -673,6 +682,13 @@ export default function LogScreen() {
                     ) : null}
                   </View>
                   <View style={styles.entryActions}>
+                    <IconButton
+                      icon={isEntryFavorite ? 'star' : 'star-outline'}
+                      size={18}
+                      style={styles.entryActionIcon}
+                      onPress={() => toggleFavoriteQuickAdd(entryAsQuickAdd)}
+                      accessibilityLabel={isEntryFavorite ? 'Remove favourite' : 'Add favourite'}
+                    />
                     <IconButton
                       icon="pencil-outline"
                       size={18}
