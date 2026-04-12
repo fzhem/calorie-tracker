@@ -128,15 +128,17 @@ export default function GoalsScreen() {
   const [metabolismHeightInput, setMetabolismHeightInput] = useState('');
   const [selectedHeightCm, setSelectedHeightCm] = useState<number | null>(null);
   const [manualWeightInput, setManualWeightInput] = useState('');
+  const [proteinGoalInput, setProteinGoalInput] = useState('');
+  const [fatGoalInput, setFatGoalInput] = useState('');
+  const [carbsGoalInput, setCarbsGoalInput] = useState('');
   const [heightUnit, setHeightUnit] = useState<HeightUnit>('cm');
   const [weightUnit, setWeightUnit] = useState<WeightUnit>('kg');
   const [heightPickerVisible, setHeightPickerVisible] = useState(false);
   const [goalAdjustmentPickerVisible, setGoalAdjustmentPickerVisible] = useState(false);
   const [sexMenuVisible, setSexMenuVisible] = useState(false);
   const [activityMenuVisible, setActivityMenuVisible] = useState(false);
-  const [fallbackUnlocked, setFallbackUnlocked] = useState(false);
   const [weightUnlocked, setWeightUnlocked] = useState(false);
-  const [goalsTab, setGoalsTab] = useState<'profile' | 'fallback'>('profile');
+  const [goalsTab, setGoalsTab] = useState<'profile' | 'overrides'>('profile');
   const heightListRef = useRef<FlatList<HeightPickerItem> | null>(null);
 
   useEffect(() => {
@@ -155,6 +157,9 @@ export default function GoalsScreen() {
           setSelectedHeightCm(next.metabolismHeightCm ?? null);
           setMetabolismHeightInput(next.metabolismHeightCm ? formatHeightForUnit(next.metabolismHeightCm, heightUnit) : '');
           setManualWeightInput(next.manualWeightKg ? formatWeightForUnit(next.manualWeightKg, weightUnit) : '');
+          setProteinGoalInput(next.proteinGoalGrams ? `${next.proteinGoalGrams}` : '');
+          setFatGoalInput(next.fatGoalGrams ? `${next.fatGoalGrams}` : '');
+          setCarbsGoalInput(next.carbsGoalGrams ? `${next.carbsGoalGrams}` : '');
         }
       })
       .catch(() => Alert.alert('Storage error', 'Saved data could not be loaded.'))
@@ -309,14 +314,20 @@ export default function GoalsScreen() {
       : null;
     const nextAge = metabolismAgeInput.trim() ? parseNumberInput(metabolismAgeInput) : null;
     const nextHeightCm = selectedHeightCm;
+    const nextProtein = proteinGoalInput.trim() ? parseNumberInput(proteinGoalInput) : null;
+    const nextFat = fatGoalInput.trim() ? parseNumberInput(fatGoalInput) : null;
+    const nextCarbs = carbsGoalInput.trim() ? parseNumberInput(carbsGoalInput) : null;
 
-    if (!nextBase || nextBase <= 0) { Alert.alert('Invalid goal', 'Enter a valid fallback calorie target.'); return; }
+    if (!nextBase || nextBase <= 0) { Alert.alert('Invalid goal', 'Enter a valid override calorie target.'); return; }
     if (!nextPerKg || nextPerKg <= 0) { Alert.alert('Invalid multiplier', 'Enter calories per kg as a positive number.'); return; }
     if (nextAge !== null && (nextAge < 13 || nextAge > 120)) { Alert.alert('Invalid age', 'Enter an age between 13 and 120.'); return; }
     if (nextHeightCm !== null && (nextHeightCm < 100 || nextHeightCm > 250)) {
       Alert.alert('Invalid height', 'Enter a valid height for your selected unit.');
       return;
     }
+    if (nextProtein !== null && nextProtein < 0) { Alert.alert('Invalid protein goal', 'Protein must be 0 or more.'); return; }
+    if (nextFat !== null && nextFat < 0) { Alert.alert('Invalid fat goal', 'Fat must be 0 or more.'); return; }
+    if (nextCarbs !== null && nextCarbs < 0) { Alert.alert('Invalid carbs goal', 'Carbs must be 0 or more.'); return; }
 
     let nextWeightHistory = data.weightHistory;
     if (nextWeightKg && nextWeightKg > 0) {
@@ -335,10 +346,29 @@ export default function GoalsScreen() {
       metabolismHeightCm: nextHeightCm !== null ? roundTo(nextHeightCm, 1) : null,
       manualWeightKg: nextWeightKg && nextWeightKg > 0 ? roundTo(nextWeightKg, 2) : null,
       weightHistory: nextWeightHistory,
+      proteinGoalGrams: nextProtein !== null ? roundTo(nextProtein, 1) : null,
+      fatGoalGrams: nextFat !== null ? roundTo(nextFat, 1) : null,
+      carbsGoalGrams: nextCarbs !== null ? roundTo(nextCarbs, 1) : null,
     }));
 
     setManualWeightInput(nextWeightKg && nextWeightKg > 0 ? formatWeightForUnit(roundTo(nextWeightKg, 2), weightUnit) : '');
     setMetabolismHeightInput(nextHeightCm !== null ? formatHeightForUnit(roundTo(nextHeightCm, 1), heightUnit) : '');
+  };
+
+  const resetOverrides = () => {
+    setBaseTargetInput(`${DEFAULT_DATA.baseTarget}`);
+    setCaloriesPerKgInput(`${DEFAULT_DATA.caloriesPerKg}`);
+    setProteinGoalInput('');
+    setFatGoalInput('');
+    setCarbsGoalInput('');
+    setData((prev) => ({
+      ...prev,
+      baseTarget: DEFAULT_DATA.baseTarget,
+      caloriesPerKg: DEFAULT_DATA.caloriesPerKg,
+      proteinGoalGrams: null,
+      fatGoalGrams: null,
+      carbsGoalGrams: null,
+    }));
   };
 
   const clearManualWeight = () => {
@@ -390,10 +420,10 @@ export default function GoalsScreen() {
           <Card.Content style={styles.formArea}>
             <SegmentedButtons
               value={goalsTab}
-              onValueChange={(value) => setGoalsTab(value as 'profile' | 'fallback')}
+              onValueChange={(value) => setGoalsTab(value as 'profile' | 'overrides')}
               buttons={[
                 { value: 'profile', label: 'Profile', icon: 'account' },
-                { value: 'fallback', label: 'Fallback', icon: 'shield-alert' },
+                { value: 'overrides', label: 'Overrides', icon: 'tune' },
               ]}
               style={{ marginBottom: 8 }}
             />
@@ -581,7 +611,7 @@ export default function GoalsScreen() {
             </Button>
 
             <Button mode="contained" icon="content-save-outline" onPress={saveTargets} style={{ marginTop: 8 }}>
-              Save all settings
+              Save
             </Button>
 
             <Text variant="labelMedium" style={{ marginTop: 6 }}>Estimated Metabolism</Text>
@@ -607,16 +637,14 @@ export default function GoalsScreen() {
             ) : (
               <>
                 <Text variant="bodySmall" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>
-                  Only used if metabolism profile is incomplete.
+                  Use overrides if profile-based metabolism is incomplete or if you want custom macro targets.
                 </Text>
             <TextInput
-              label="Fallback calorie target"
+              label="Override calorie target"
               value={baseTargetInput}
               onChangeText={setBaseTargetInput}
               keyboardType="numeric"
               mode="outlined"
-              editable={fallbackUnlocked}
-              right={<TextInput.Icon icon={fallbackUnlocked ? 'lock-open-variant' : 'lock'} onPress={() => setFallbackUnlocked(!fallbackUnlocked)} />}
             />
             <TextInput
               label="Calories per kg"
@@ -624,9 +652,54 @@ export default function GoalsScreen() {
               onChangeText={setCaloriesPerKgInput}
               keyboardType="numeric"
               mode="outlined"
-              editable={fallbackUnlocked}
-              right={<TextInput.Icon icon={fallbackUnlocked ? 'lock-open-variant' : 'lock'} onPress={() => setFallbackUnlocked(!fallbackUnlocked)} />}
             />
+
+            <Text variant="labelMedium" style={{ marginTop: 6 }}>Macro Overrides</Text>
+            <Text variant="bodySmall" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>
+              Leave blank to use automatic macro targets from calories.
+            </Text>
+            <View style={styles.macroGrid}>
+              <TextInput
+                label="Protein (g)"
+                value={proteinGoalInput}
+                onChangeText={setProteinGoalInput}
+                placeholder="e.g. 150"
+                keyboardType="numeric"
+                mode="outlined"
+                style={styles.macroInput}
+              />
+              <TextInput
+                label="Carbs (g)"
+                value={carbsGoalInput}
+                onChangeText={setCarbsGoalInput}
+                placeholder="e.g. 200"
+                keyboardType="numeric"
+                mode="outlined"
+                style={styles.macroInput}
+              />
+              <TextInput
+                label="Fat (g)"
+                value={fatGoalInput}
+                onChangeText={setFatGoalInput}
+                placeholder="e.g. 65"
+                keyboardType="numeric"
+                mode="outlined"
+                style={styles.macroInput}
+              />
+            </View>
+
+            <Button mode="contained" icon="content-save-outline" onPress={saveTargets} style={{ marginTop: 8 }}>
+              Save
+            </Button>
+            <Button
+              mode="outlined"
+              icon="restore"
+              onPress={resetOverrides}
+              textColor={theme.colors.error}
+              style={{ marginTop: 8, borderColor: theme.colors.error }}
+            >
+              Reset
+            </Button>
               </>
             )}
           </Card.Content>
@@ -814,6 +887,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+  macroGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  macroInput: { minWidth: '47%', flexGrow: 1 },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.35)',

@@ -2,6 +2,10 @@ export type MealEntry = {
   id: string;
   title: string;
   calories: number;
+  proteinGrams?: number | null;
+  fatGrams?: number | null;
+  carbsGrams?: number | null;
+  fiberGrams?: number | null;
   loggedAt: string;
   healthConnectSyncAt?: string | null;
 };
@@ -9,6 +13,10 @@ export type MealEntry = {
 export type FavoriteQuickAdd = {
   title: string;
   calories: number;
+  proteinGrams?: number | null;
+  fatGrams?: number | null;
+  carbsGrams?: number | null;
+  fiberGrams?: number | null;
 };
 
 export type MetabolismSex = 'unspecified' | 'male' | 'female';
@@ -56,6 +64,9 @@ export type StoredData = {
   lastWeightSyncAt: string | null;
   lastBodyFatSyncAt: string | null;
   lastCalorieSyncAt: string | null;
+  proteinGoalGrams: number | null;
+  fatGoalGrams: number | null;
+  carbsGoalGrams: number | null;
 };
 
 export const STORAGE_KEY = 'calorie-tracker-storage-v1';
@@ -82,4 +93,7 @@ export const DEFAULT_DATA: StoredData = {
   lastWeightSyncAt: null,
   lastBodyFatSyncAt: null,
   lastCalorieSyncAt: null,
+  proteinGoalGrams: null,
+  fatGoalGrams: null,
+  carbsGoalGrams: null,
 };

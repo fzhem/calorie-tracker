@@ -27,6 +27,12 @@ export type MetabolismMetrics = {
   maintenanceCalories: number | null;
 };
 
+export type MacroTargets = {
+  proteinGrams: number;
+  carbsGrams: number;
+  fatGrams: number;
+};
+
 function isPositiveNumber(value: number | null): value is number {
   return value !== null && Number.isFinite(value) && value > 0;
 }
@@ -75,5 +81,31 @@ export function estimateMetabolism(input: MetabolismInput): MetabolismMetrics {
     bmr: Math.round(bmr),
     tdee: Math.round(tdee),
     maintenanceCalories: Math.round(tdee),
+  };
+}
+
+export function getAutoMacroTargets(calories: number, goalPhase: GoalPhase): MacroTargets {
+  const safeCalories = Math.max(0, Math.round(calories));
+
+  // Use a simple phase-aware split with slightly higher protein for cuts
+  // and higher carbs for bulks.
+  let proteinRatio = 0.3;
+  let carbsRatio = 0.4;
+  let fatRatio = 0.3;
+
+  if (goalPhase === 'cut') {
+    proteinRatio = 0.35;
+    carbsRatio = 0.35;
+    fatRatio = 0.3;
+  } else if (goalPhase === 'bulk') {
+    proteinRatio = 0.3;
+    carbsRatio = 0.45;
+    fatRatio = 0.25;
+  }
+
+  return {
+    proteinGrams: Math.round((safeCalories * proteinRatio) / 4),
+    carbsGrams: Math.round((safeCalories * carbsRatio) / 4),
+    fatGrams: Math.round((safeCalories * fatRatio) / 9),
   };
 }

@@ -185,6 +185,10 @@ function buildNutritionRecord(entry: MealEntry, healthModule: HealthConnectModul
     name: entry.title,
     mealType: healthModule.MealType.UNKNOWN,
     energy: { value: entry.calories, unit: 'kilocalories' as const },
+    ...(typeof entry.proteinGrams === 'number' ? { protein: { value: entry.proteinGrams, unit: 'grams' as const } } : {}),
+    ...(typeof entry.fatGrams === 'number' ? { totalFat: { value: entry.fatGrams, unit: 'grams' as const } } : {}),
+    ...(typeof entry.carbsGrams === 'number' ? { totalCarbohydrate: { value: entry.carbsGrams, unit: 'grams' as const } } : {}),
+    ...(typeof entry.fiberGrams === 'number' ? { dietaryFiber: { value: entry.fiberGrams, unit: 'grams' as const } } : {}),
     metadata: {
       clientRecordId: `meal-entry-${entry.id}`,
       clientRecordVersion: 1,
