@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { Dimensions, ScrollView, StyleSheet, View } from 'react-native';
 import { BarChart, LineChart } from 'react-native-chart-kit';
@@ -232,7 +232,7 @@ function buildWeightSeries(weightHistory: StoredData['weightHistory'], days: num
   if (!sorted.length) return [];
 
   if (days <= 31) {
-    // Cap daily view to avoid rendering too many points
+    // Keep the short-range mode readable by capping to recent daily points.
     const cap = days <= 7 ? 90 : 365;
     const cutoff = toStartOfDay(addDays(new Date(), -(cap - 1)));
     const byDay = new Map<string, WeightTrendPoint>();
@@ -256,22 +256,25 @@ function buildWeightSeries(weightHistory: StoredData['weightHistory'], days: num
 
   if (days <= 90) {
     const earliest = toStartOfDay(new Date(sorted[0].recordedAt));
-    const latest = toStartOfDay(new Date(sorted[sorted.length - 1].recordedAt));
-    const buckets: Array<{ rangeStart: Date; rangeEnd: Date; values: number[] }> = [];
+    const bucketsByIndex = new Map<number, { rangeStart: Date; rangeEnd: Date; values: number[] }>();
 
-    for (let rangeStart = earliest; rangeStart <= latest; rangeStart = addDays(rangeStart, 7)) {
-      const rangeEnd = toStartOfDay(addDays(rangeStart, 6));
-      const values = sorted
-        .filter((point) => {
-          const when = toStartOfDay(new Date(point.recordedAt));
-          return when >= rangeStart && when <= rangeEnd;
-        })
-        .map((point) => point.weightKg);
+    for (const point of sorted) {
+      const when = toStartOfDay(new Date(point.recordedAt));
+      const diffDays = Math.floor((when.getTime() - earliest.getTime()) / 86_400_000);
+      const bucketIndex = Math.floor(diffDays / 7);
+      const bucket = bucketsByIndex.get(bucketIndex) ?? {
+        rangeStart: addDays(earliest, bucketIndex * 7),
+        rangeEnd: addDays(earliest, bucketIndex * 7 + 6),
+        values: [],
+      };
 
-      if (values.length) {
-        buckets.push({ rangeStart, rangeEnd, values });
-      }
+      bucket.values.push(point.weightKg);
+      bucketsByIndex.set(bucketIndex, bucket);
     }
+
+    const buckets = Array.from(bucketsByIndex.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([, bucket]) => bucket);
 
     return buckets.map((bucket, index) => {
       const previous = index > 0 ? buckets[index - 1] : null;
@@ -526,7 +529,7 @@ export default function GraphsScreen() {
             datasets: [{
               data: weightChartSeries.values,
               // Keep the line visually strong regardless of internal opacity handling.
-              color: () => theme.dark ? 'rgba(154, 239, 196, 0.98)' : 'rgba(12, 68, 42, 0.98)',
+              color: () => theme.dark ? 'rgba(125, 205, 168, 0.9)' : 'rgba(22, 88, 56, 0.9)',
               strokeWidth: 3,
             }],
           }}
@@ -632,7 +635,12 @@ export default function GraphsScreen() {
           <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>Daily weight points from manual input or Health Connect.</Text>
           <SegmentedButtons
             value={String(weightDays)}
-            onValueChange={(v) => { setWeightDays(Number(v)); setSelectedWeightIndex(null); }}
+            onValueChange={(v) => {
+              startTransition(() => {
+                setWeightDays(Number(v));
+                setSelectedWeightIndex(null);
+              });
+            }}
             buttons={WEIGHT_FILTER_OPTIONS}
             style={styles.filterButtons}
           />
