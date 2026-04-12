@@ -1034,7 +1034,7 @@ export default function GraphsScreen() {
               <Card.Content>
                 <View style={styles.weightTileContent}>
                   <View style={styles.weightTileLeft}>
-                    <Text variant="labelMedium" style={{ fontWeight: '700', color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
+                    <Text variant="labelMedium" style={{ fontWeight: '700', color: theme.colors.onSurface, marginBottom: 4 }}>
                       Calorie Intake
                     </Text>
                     <Text variant="displaySmall" style={{ fontWeight: '700', color: theme.colors.primary, marginBottom: 8 }}>
@@ -1138,7 +1138,7 @@ export default function GraphsScreen() {
               <Card.Content>
                 <View style={styles.weightTileContent}>
                   <View style={styles.weightTileLeft}>
-                    <Text variant="labelMedium" style={{ fontWeight: '700', color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
+                    <Text variant="labelMedium" style={{ fontWeight: '700', color: theme.colors.onSurface, marginBottom: 4 }}>
                       Weight
                     </Text>
                     <Text variant="displaySmall" style={{ fontWeight: '700', color: theme.colors.primary, marginBottom: 8 }}>
@@ -1279,7 +1279,7 @@ export default function GraphsScreen() {
               <Card.Content>
                 <View style={styles.weightTileContent}>
                   <View style={styles.weightTileLeft}>
-                    <Text variant="labelMedium" style={{ fontWeight: '700', color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
+                    <Text variant="labelMedium" style={{ fontWeight: '700', color: theme.colors.onSurface, marginBottom: 4 }}>
                       Body Fat
                     </Text>
                     <Text variant="displaySmall" style={{ fontWeight: '700', color: theme.colors.primary, marginBottom: 8 }}>
