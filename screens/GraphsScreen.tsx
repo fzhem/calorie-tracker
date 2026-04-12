@@ -128,6 +128,7 @@ function formatBubbleDate(value: string) {
 }
 
 function buildCalorieSeries(entries: MealEntry[], days: number) {
+
   const totals = new Map<string, number>();
   let earliestLoggedAt: Date | null = null;
 
@@ -140,9 +141,27 @@ function buildCalorieSeries(entries: MealEntry[], days: number) {
 
   const end = toStartOfDay(new Date());
 
+  if (days <= 7) {
+    // Show only the current week (up to today), with empty bars for previous days
+    // Get the start of the week (Monday)
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 (Sun) - 6 (Sat)
+    // Start from Monday (1) or Sunday (0) depending on locale; here, Monday
+    const weekStart = toStartOfDay(addDays(today, -((dayOfWeek + 6) % 7)));
+    const dailyRows: Array<{ date: Date; value: number }> = [];
+    for (let cursor = new Date(weekStart); cursor <= end; cursor = addDays(cursor, 1)) {
+      const key = getLocalDateKey(cursor);
+      dailyRows.push({ date: new Date(cursor), value: Math.round(totals.get(key) ?? 0) });
+    }
+    return {
+      labels: dailyRows.map((row) => formatCalorieLabel(getLocalDateKey(row.date), days)),
+      values: dailyRows.map((row) => row.value),
+    };
+  }
+
   if (days <= 31) {
     // Cap daily view to avoid rendering thousands of bars (90d for W, 365d for M)
-    const cap = days <= 7 ? 90 : 365;
+    const cap = 365;
     const start = toStartOfDay(addDays(end, -(cap - 1)));
     const dailyRows: Array<{ date: Date; value: number }> = [];
     for (let cursor = new Date(start); cursor <= end; cursor = addDays(cursor, 1)) {
@@ -354,7 +373,7 @@ export default function GraphsScreen() {
     ...chartConfig,
     fillShadowGradientFrom: theme.dark ? '#7fd8a5' : '#4caf50',
     fillShadowGradientTo: theme.colors.elevation.level1,
-    fillShadowGradientFromOpacity: 0.35,
+    fillShadowGradientFromOpacity: 0.16,
     fillShadowGradientToOpacity: 0,
   }), [chartConfig, theme.colors.elevation.level1, theme.dark]);
 
@@ -450,32 +469,35 @@ export default function GraphsScreen() {
     : 0;
   const bubbleY = selectedWeightMetrics ? Math.max(10, selectedWeightMetrics.y - 54) : 0;
 
-  const calorieChartEl = useMemo(() => (
-    <ScrollView
-      ref={calorieTimelineRef}
-      horizontal
-      decelerationRate="fast"
-      bounces={false}
-      directionalLockEnabled
-      nestedScrollEnabled
-      showsHorizontalScrollIndicator={false}
-      scrollEventThrottle={16}
-    >
-      <BarChart
-        width={calorieChartWidth}
-        height={240}
-        data={{ labels: calorieChartLabels, datasets: [{ data: calorieSeries.values }] }}
-        fromZero
-        yAxisLabel=""
-        yAxisSuffix=""
-        withVerticalLabels
-        withHorizontalLabels={false}
-        showValuesOnTopOfBars={calorieSeries.values.length <= 12}
-        chartConfig={chartConfig}
-        style={styles.chart}
-      />
-    </ScrollView>
-  ), [calorieChartLabels, calorieChartWidth, calorieSeries.values, chartConfig]);
+  const calorieChartEl = useMemo(() => {
+    return (
+      <ScrollView
+        ref={calorieTimelineRef}
+        horizontal
+        decelerationRate="fast"
+        bounces={false}
+        directionalLockEnabled
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+      >
+        <BarChart
+          width={calorieChartWidth}
+          height={240}
+          data={{ labels: calorieChartLabels, datasets: [{ data: calorieSeries.values }] }}
+          fromZero
+          yAxisLabel=""
+          yAxisSuffix=""
+          withVerticalLabels
+          withHorizontalLabels={false}
+          showBarTops={false}
+          showValuesOnTopOfBars={calorieSeries.values.length <= 12}
+          chartConfig={chartConfig}
+          style={{ ...styles.chart, paddingBottom: 12 }}
+        />
+      </ScrollView>
+    );
+  }, [calorieChartLabels, calorieChartWidth, calorieSeries.values, chartConfig]);
 
   const weightChartEl = useMemo(() => weightChartSeries.values.length > 1 ? (
     <ScrollView
@@ -496,11 +518,17 @@ export default function GraphsScreen() {
           width={weightChartWidth}
           height={WEIGHT_CHART_HEIGHT}
           fromZero={false}
+          bezier
           withVerticalLabels
           withHorizontalLabels={false}
           data={{
             labels: weightChartSeries.labels,
-            datasets: [{ data: weightChartSeries.values }],
+            datasets: [{
+              data: weightChartSeries.values,
+              // Keep the line visually strong regardless of internal opacity handling.
+              color: () => theme.dark ? 'rgba(154, 239, 196, 0.98)' : 'rgba(12, 68, 42, 0.98)',
+              strokeWidth: 3,
+            }],
           }}
           renderDotContent={({ x, y, index }) => {
             weightPointPositionsRef.current[index] = { x, y };
