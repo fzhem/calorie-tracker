@@ -131,6 +131,7 @@ export default function GoalsScreen() {
   const [proteinGoalInput, setProteinGoalInput] = useState('');
   const [fatGoalInput, setFatGoalInput] = useState('');
   const [carbsGoalInput, setCarbsGoalInput] = useState('');
+  const [fiberGoalInput, setFiberGoalInput] = useState('');
   const [heightUnit, setHeightUnit] = useState<HeightUnit>('cm');
   const [weightUnit, setWeightUnit] = useState<WeightUnit>('kg');
   const [heightPickerOpen, setHeightPickerOpen] = useState(false);
@@ -165,6 +166,7 @@ export default function GoalsScreen() {
           setProteinGoalInput(next.proteinGoalGrams ? `${next.proteinGoalGrams}` : '');
           setFatGoalInput(next.fatGoalGrams ? `${next.fatGoalGrams}` : '');
           setCarbsGoalInput(next.carbsGoalGrams ? `${next.carbsGoalGrams}` : '');
+          setFiberGoalInput(next.fiberGoalGrams ? `${next.fiberGoalGrams}` : '');
         }
       })
       .catch(() => Alert.alert('Storage error', 'Saved data could not be loaded.'))
@@ -189,6 +191,10 @@ export default function GoalsScreen() {
           setData(next);
           setManualWeightInput(next.manualWeightKg ? formatWeightForUnit(next.manualWeightKg, weightUnit) : '');
           setSelectedHeightCm(next.metabolismHeightCm ?? null);
+          setProteinGoalInput(next.proteinGoalGrams ? `${next.proteinGoalGrams}` : '');
+          setFatGoalInput(next.fatGoalGrams ? `${next.fatGoalGrams}` : '');
+          setCarbsGoalInput(next.carbsGoalGrams ? `${next.carbsGoalGrams}` : '');
+          setFiberGoalInput(next.fiberGoalGrams ? `${next.fiberGoalGrams}` : '');
         })
         .catch(() => {});
     }, [weightUnit]),
@@ -393,6 +399,7 @@ export default function GoalsScreen() {
     const nextProtein = proteinGoalInput.trim() ? parseNumberInput(proteinGoalInput) : null;
     const nextFat = fatGoalInput.trim() ? parseNumberInput(fatGoalInput) : null;
     const nextCarbs = carbsGoalInput.trim() ? parseNumberInput(carbsGoalInput) : null;
+    const nextFiber = fiberGoalInput.trim() ? parseNumberInput(fiberGoalInput) : null;
 
     if (!nextBase || nextBase <= 0) { Alert.alert('Invalid goal', 'Enter a valid override calorie target.'); return; }
     if (!nextPerKg || nextPerKg <= 0) { Alert.alert('Invalid multiplier', 'Enter calories per kg as a positive number.'); return; }
@@ -404,6 +411,7 @@ export default function GoalsScreen() {
     if (nextProtein !== null && nextProtein < 0) { Alert.alert('Invalid protein goal', 'Protein must be 0 or more.'); return; }
     if (nextFat !== null && nextFat < 0) { Alert.alert('Invalid fat goal', 'Fat must be 0 or more.'); return; }
     if (nextCarbs !== null && nextCarbs < 0) { Alert.alert('Invalid carbs goal', 'Carbs must be 0 or more.'); return; }
+    if (nextFiber !== null && nextFiber < 0) { Alert.alert('Invalid fibre goal', 'Fibre must be 0 or more.'); return; }
 
     setData((prev) => {
       let nextWeightHistory = prev.weightHistory;
@@ -425,6 +433,7 @@ export default function GoalsScreen() {
         proteinGoalGrams: nextProtein !== null ? roundTo(nextProtein, 1) : null,
         fatGoalGrams: nextFat !== null ? roundTo(nextFat, 1) : null,
         carbsGoalGrams: nextCarbs !== null ? roundTo(nextCarbs, 1) : null,
+        fiberGoalGrams: nextFiber !== null ? roundTo(nextFiber, 1) : null,
       };
     });
 
@@ -439,6 +448,7 @@ export default function GoalsScreen() {
     setProteinGoalInput('');
     setFatGoalInput('');
     setCarbsGoalInput('');
+    setFiberGoalInput('');
     setData((prev) => ({
       ...prev,
       baseTarget: DEFAULT_DATA.baseTarget,
@@ -446,6 +456,7 @@ export default function GoalsScreen() {
       proteinGoalGrams: null,
       fatGoalGrams: null,
       carbsGoalGrams: null,
+      fiberGoalGrams: null,
     }));
   };
 
@@ -812,6 +823,15 @@ export default function GoalsScreen() {
                 value={fatGoalInput}
                 onChangeText={setFatGoalInput}
                 placeholder="e.g. 65"
+                keyboardType="numeric"
+                mode="outlined"
+                style={styles.macroInput}
+              />
+              <TextInput
+                label="Fibre (g)"
+                value={fiberGoalInput}
+                onChangeText={setFiberGoalInput}
+                placeholder="e.g. 30"
                 keyboardType="numeric"
                 mode="outlined"
                 style={styles.macroInput}

@@ -65,6 +65,7 @@ export type StoredData = {
   proteinGoalGrams: number | null;
   fatGoalGrams: number | null;
   carbsGoalGrams: number | null;
+  fiberGoalGrams: number | null;
 };
 
 export const STORAGE_KEY = 'calorie-tracker-storage-v1';
@@ -93,4 +94,5 @@ export const DEFAULT_DATA: StoredData = {
   proteinGoalGrams: null,
   fatGoalGrams: null,
   carbsGoalGrams: null,
+  fiberGoalGrams: null,
 };
