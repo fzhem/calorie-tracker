@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Menu, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
@@ -92,6 +92,12 @@ export default function GoalsScreen() {
     );
   }, [data, isReady]);
 
+  useFocusEffect(
+    useCallback(() => {
+      setManualWeightInput(data.manualWeightKg ? `${data.manualWeightKg}` : '');
+    }, [data.manualWeightKg]),
+  );
+
   const saveTargets = () => {
     const nextBase = parseNumberInput(baseTargetInput);
     const nextPerKg = parseNumberInput(caloriesPerKgInput);
@@ -122,10 +128,24 @@ export default function GoalsScreen() {
       manualWeightKg: nextWeight && nextWeight > 0 ? roundTo(nextWeight, 2) : null,
       weightHistory: nextWeightHistory,
     }));
+
+    setManualWeightInput(nextWeight && nextWeight > 0 ? `${roundTo(nextWeight, 2)}` : '');
   };
 
-  const latestWeightPoint = data.weightHistory[0] ?? null;
-  const latestWeight = latestWeightPoint?.weightKg ?? data.manualWeightKg;
+  const clearManualWeight = () => {
+    setManualWeightInput('');
+    setData((prev) => ({
+      ...prev,
+      manualWeightKg: null,
+      weightHistory: prev.weightHistory.filter((point) => point.source !== 'manual'),
+    }));
+  };
+
+  const hasSavedManualWeight = data.manualWeightKg !== null
+    || data.weightHistory.some((point) => point.source === 'manual');
+
+  const latestHealthConnectWeightPoint = data.weightHistory.find((point) => point.source === 'health-connect') ?? null;
+  const latestWeight = data.manualWeightKg ?? latestHealthConnectWeightPoint?.weightKg ?? null;
   const metabolism = estimateMetabolism({
     weightKg: latestWeight,
     heightCm: data.metabolismHeightCm,
@@ -273,6 +293,21 @@ export default function GoalsScreen() {
               editable={weightUnlocked}
               right={<TextInput.Icon icon={weightUnlocked ? 'lock-open-variant' : 'lock'} onPress={() => setWeightUnlocked(!weightUnlocked)} />}
             />
+            <Button
+              mode="text"
+              icon="delete-outline"
+              onPress={clearManualWeight}
+              textColor={theme.colors.error}
+              rippleColor={theme.colors.errorContainer}
+              disabled={!hasSavedManualWeight}
+              style={{ alignSelf: 'flex-start', marginTop: 2 }}
+            >
+              Clear manual weight
+            </Button>
+
+            <Button mode="contained" icon="content-save-outline" onPress={saveTargets} style={{ marginTop: 12 }}>
+              Save all settings
+            </Button>
 
             <Text variant="labelMedium" style={{ marginTop: 8 }}>Estimated Metabolism</Text>
             <Card style={{ backgroundColor: theme.colors.surfaceVariant, marginHorizontal: 0, marginVertical: 8 }}>
@@ -312,10 +347,6 @@ export default function GoalsScreen() {
               editable={fallbackUnlocked}
               right={<TextInput.Icon icon={fallbackUnlocked ? 'lock-open-variant' : 'lock'} onPress={() => setFallbackUnlocked(!fallbackUnlocked)} />}
             />
-
-            <Button mode="contained" icon="content-save-outline" onPress={saveTargets} style={{ marginTop: 8 }}>
-              Save all settings
-            </Button>
               </>
             )}
           </Card.Content>
