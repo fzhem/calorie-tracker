@@ -109,7 +109,7 @@ export default function GoalsScreen() {
     if (nextWeight && nextWeight > 0) {
       nextWeightHistory = mergeWeightHistory(data.weightHistory, [{
         recordedAt: new Date().toISOString(),
-        weightKg: roundTo(nextWeight, 1),
+        weightKg: roundTo(nextWeight, 2),
         source: 'manual',
       }]);
     }
@@ -120,7 +120,7 @@ export default function GoalsScreen() {
       caloriesPerKg: roundTo(nextPerKg, 1),
       metabolismAgeYears: nextAge !== null ? Math.round(nextAge) : null,
       metabolismHeightCm: nextHeight !== null ? roundTo(nextHeight, 1) : null,
-      manualWeightKg: nextWeight && nextWeight > 0 ? roundTo(nextWeight, 1) : null,
+      manualWeightKg: nextWeight && nextWeight > 0 ? roundTo(nextWeight, 2) : null,
       weightHistory: nextWeightHistory,
     }));
   };

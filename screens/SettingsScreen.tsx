@@ -309,7 +309,7 @@ export default function SettingsScreen() {
 
       const synced: WeightPoint[] = allRecords.map((r) => ({
         recordedAt: r.time,
-        weightKg: roundTo(r.weight.inKilograms, 1),
+        weightKg: roundTo(r.weight.inKilograms, 2),
         source: 'health-connect',
         ...extractHealthOrigin(r),
       }));
