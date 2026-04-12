@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import type { Permission } from 'react-native-health-connect';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, Chip, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Card, Chip, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
 import type { MealEntry, StoredData, WeightPoint } from '../storage';
@@ -31,11 +31,6 @@ function roundTo(value: number, digits = 1) {
   return Math.round(value * 10 ** digits) / 10 ** digits;
 }
 
-function parseNumberInput(value: string) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function mergeWeightHistory(existing: WeightPoint[], incoming: WeightPoint[]): WeightPoint[] {
   const keyed = new Map<string, WeightPoint>();
   for (const p of [...existing, ...incoming]) keyed.set(`${p.source}-${p.recordedAt}`, p);
@@ -56,13 +51,119 @@ function getErrorMessage(error: unknown) {
   return 'Unknown Health Connect error.';
 }
 
-function hasPermission(granted: unknown[], accessType: Permission['accessType'], recordType: Permission['recordType']) {
+function hasPermission(granted: unknown[], accessType: Permission['accessType'], recordType: string) {
   return Array.isArray(granted)
     && granted.some((permission) => {
       if (!permission || typeof permission !== 'object') return false;
-      const candidate = permission as Permission;
+      const candidate = permission as { accessType?: string; recordType?: string };
       return candidate.accessType === accessType && candidate.recordType === recordType;
     });
+}
+
+function getKnownOriginAppName(appId?: string) {
+  if (!appId) return undefined;
+  const normalized = appId.toLowerCase();
+  if (normalized === 'android') return 'Android (on-device)';
+  if (normalized.includes('shealth') || normalized.includes('samsung.health')) return 'Samsung Health';
+  if (normalized.includes('google.android.apps.fitness')) return 'Google Fit';
+  if (normalized.includes('healthmate')) return 'Withings Health Mate';
+  if (normalized.includes('fitbit')) return 'Fitbit';
+  if (normalized.includes('zepp') || normalized.includes('amazfit')) return 'Zepp';
+  if (normalized.includes('garmin')) return 'Garmin';
+  if (normalized.includes('healthconnect')) return 'Health Connect';
+  return undefined;
+}
+
+function getDeviceTypeLabel(deviceType?: number) {
+  if (typeof deviceType !== 'number') return undefined;
+  const byType: Record<number, string> = {
+    0: 'Unknown device type',
+    2: 'Phone',
+    3: 'Scale',
+    4: 'Ring',
+    5: 'Head-mounted device',
+    6: 'Fitness band',
+    7: 'Chest strap',
+    8: 'Smart display',
+  };
+  return byType[deviceType];
+}
+
+function getStringValueAtPath(input: unknown, path: string[]) {
+  let cursor: unknown = input;
+  for (const segment of path) {
+    if (!cursor || typeof cursor !== 'object') return undefined;
+    const next = (cursor as Record<string, unknown>)[segment];
+    cursor = next;
+  }
+  return typeof cursor === 'string' && cursor.trim() ? cursor : undefined;
+}
+
+function getFirstStringAtPaths(input: unknown, paths: string[][]) {
+  for (const path of paths) {
+    const value = getStringValueAtPath(input, path);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function getNumberValueAtPath(input: unknown, path: string[]) {
+  let cursor: unknown = input;
+  for (const segment of path) {
+    if (!cursor || typeof cursor !== 'object') return undefined;
+    const next = (cursor as Record<string, unknown>)[segment];
+    cursor = next;
+  }
+  return typeof cursor === 'number' ? cursor : undefined;
+}
+
+function getFirstNumberAtPaths(input: unknown, paths: string[][]) {
+  for (const path of paths) {
+    const value = getNumberValueAtPath(input, path);
+    if (typeof value === 'number') return value;
+  }
+  return undefined;
+}
+
+function extractHealthOrigin(record: unknown) {
+  const originAppId = getFirstStringAtPaths(record, [
+    ['metadata', 'dataOrigin', 'packageName'],
+    ['metadata', 'dataOrigin', 'applicationId'],
+    ['metadata', 'dataOrigin', 'id'],
+    ['metadata', 'dataOrigin'],
+    ['dataOrigin', 'packageName'],
+    ['dataOrigin', 'applicationId'],
+    ['dataOrigin', 'id'],
+    ['dataOrigin'],
+    ['metadata', 'clientPackageName'],
+  ]);
+
+  const deviceManufacturer = getFirstStringAtPaths(record, [
+    ['metadata', 'device', 'manufacturer'],
+    ['device', 'manufacturer'],
+  ]);
+  const deviceModel = getFirstStringAtPaths(record, [
+    ['metadata', 'device', 'model'],
+    ['device', 'model'],
+  ]);
+  const deviceType = getFirstStringAtPaths(record, [
+    ['metadata', 'device', 'type'],
+    ['device', 'type'],
+  ]);
+  const deviceTypeNumber = getFirstNumberAtPaths(record, [
+    ['metadata', 'device', 'type'],
+    ['device', 'type'],
+  ]);
+  const deviceTypeLabel = getDeviceTypeLabel(deviceTypeNumber);
+
+  const deviceParts = [deviceManufacturer, deviceModel].filter((value) => !!value?.trim());
+  const originDevice = deviceParts.join(' ').trim() || deviceType || deviceTypeLabel;
+
+  return {
+    originAppId,
+    originAppName: getKnownOriginAppName(originAppId) ?? originAppId,
+    originDevice,
+  } as Pick<WeightPoint, 'originAppId' | 'originAppName' | 'originDevice'>;
 }
 
 function buildNutritionRecord(entry: MealEntry, healthModule: HealthConnectModule) {
@@ -89,9 +190,6 @@ export default function SettingsScreen() {
   const { mode, setMode } = useThemeMode();
   const [data, setData] = useState<StoredData>(DEFAULT_DATA);
   const [isReady, setIsReady] = useState(false);
-  const [baseTargetInput, setBaseTargetInput] = useState(`${DEFAULT_DATA.baseTarget}`);
-  const [caloriesPerKgInput, setCaloriesPerKgInput] = useState(`${DEFAULT_DATA.caloriesPerKg}`);
-  const [manualWeightInput, setManualWeightInput] = useState('');
   const [healthStatus, setHealthStatus] = useState<HealthStatus>('idle');
   const [healthMessage, setHealthMessage] = useState('Health Connect sync is ready to configure.');
   const [isSyncingWeight, setIsSyncingWeight] = useState(false);
@@ -104,9 +202,6 @@ export default function SettingsScreen() {
           const parsed = JSON.parse(stored) as StoredData;
           const next = { ...DEFAULT_DATA, ...parsed, entries: parsed.entries ?? [], weightHistory: parsed.weightHistory ?? [] };
           setData(next);
-          setBaseTargetInput(`${next.baseTarget}`);
-          setCaloriesPerKgInput(`${next.caloriesPerKg}`);
-          setManualWeightInput(next.manualWeightKg ? `${next.manualWeightKg}` : '');
         }
       })
       .catch(() => Alert.alert('Storage error', 'Saved data could not be loaded.'))
@@ -143,32 +238,6 @@ export default function SettingsScreen() {
     );
   }, [data, isReady]);
 
-  const saveTargets = () => {
-    const nextBase = parseNumberInput(baseTargetInput);
-    const nextPerKg = parseNumberInput(caloriesPerKgInput);
-    const nextWeight = manualWeightInput.trim() ? parseNumberInput(manualWeightInput) : null;
-
-    if (!nextBase || nextBase <= 0) { Alert.alert('Invalid goal', 'Enter a valid fallback calorie target.'); return; }
-    if (!nextPerKg || nextPerKg <= 0) { Alert.alert('Invalid multiplier', 'Enter calories per kg as a positive number.'); return; }
-
-    let nextWeightHistory = data.weightHistory;
-    if (nextWeight && nextWeight > 0) {
-      nextWeightHistory = mergeWeightHistory(data.weightHistory, [{
-        recordedAt: new Date().toISOString(),
-        weightKg: roundTo(nextWeight, 1),
-        source: 'manual',
-      }]);
-    }
-
-    setData((prev) => ({
-      ...prev,
-      baseTarget: Math.round(nextBase),
-      caloriesPerKg: roundTo(nextPerKg, 1),
-      manualWeightKg: nextWeight && nextWeight > 0 ? roundTo(nextWeight, 1) : null,
-      weightHistory: nextWeightHistory,
-    }));
-  };
-
   const unsyncedCalorieEntries = useMemo(
     () => data.entries.filter((entry) => !entry.healthConnectSyncAt),
     [data.entries],
@@ -202,9 +271,13 @@ export default function SettingsScreen() {
       const available = await ensureHealthConnectAvailable();
       if (!available) return;
 
-      const permissions: Permission[] = [{ accessType: 'read', recordType: 'Weight' }];
+      const permissions = [
+        { accessType: 'read' as const, recordType: 'Weight' as const },
+        { accessType: 'read' as const, recordType: 'ReadHealthDataHistory' as const },
+      ];
       const granted = await healthConnect.requestPermission(permissions);
       const hasWeightPermission = hasPermission(granted, 'read', 'Weight');
+      const hasHistoryPermission = hasPermission(granted, 'read', 'ReadHealthDataHistory');
       if (!hasWeightPermission) {
         setHealthStatus('error');
         setHealthMessage(
@@ -219,16 +292,26 @@ export default function SettingsScreen() {
       }
 
       const endTime = new Date();
-      const result = await healthConnect.readRecords('Weight', {
-        timeRangeFilter: { operator: 'between', startTime: addDays(endTime, -30).toISOString(), endTime: endTime.toISOString() },
-        ascendingOrder: false,
-        pageSize: 100,
-      });
+      const startTime = addDays(endTime, -400).toISOString();
+      const allRecords: Array<{ time: string; weight: { inKilograms: number }; metadata?: unknown }> = [];
+      let pageToken: string | undefined;
 
-      const synced: WeightPoint[] = result.records.map((r) => ({
+      do {
+        const result = await healthConnect.readRecords('Weight', {
+          timeRangeFilter: { operator: 'between', startTime, endTime: endTime.toISOString() },
+          ascendingOrder: false,
+          pageSize: 1000,
+          pageToken,
+        });
+        allRecords.push(...result.records as Array<{ time: string; weight: { inKilograms: number }; metadata?: unknown }>);
+        pageToken = result.pageToken;
+      } while (pageToken);
+
+      const synced: WeightPoint[] = allRecords.map((r) => ({
         recordedAt: r.time,
         weightKg: roundTo(r.weight.inKilograms, 1),
         source: 'health-connect',
+        ...extractHealthOrigin(r),
       }));
 
       setData((prev) => ({
@@ -238,7 +321,11 @@ export default function SettingsScreen() {
       }));
 
       setHealthStatus('available');
-      setHealthMessage(synced.length ? `Synced ${synced.length} weight record${synced.length === 1 ? '' : 's'}.` : 'No recent weight records found in Health Connect.');
+      setHealthMessage(
+        synced.length
+          ? `Synced ${synced.length} weight record${synced.length === 1 ? '' : 's'}.${hasHistoryPermission ? '' : ' History permission is off, so older records may be limited.'}`
+          : 'No recent weight records found in Health Connect.',
+      );
     } catch (error) {
       const reason = getErrorMessage(error);
       setHealthStatus('error');
@@ -352,7 +439,7 @@ export default function SettingsScreen() {
         <Card style={styles.card} mode="elevated">
           <Card.Title title="Appearance" titleVariant="titleLarge" />
           <Card.Content style={styles.formArea}>
-            <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
               Theme follows your system preference by default.
             </Text>
             <SegmentedButtons
@@ -368,56 +455,19 @@ export default function SettingsScreen() {
         </Card>
 
         <Card style={styles.card} mode="elevated">
-          <Card.Title title="Daily Goal" titleVariant="titleLarge" />
-          <Card.Content style={styles.formArea}>
-          <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>
-            If a weight is available the target becomes weight × calories per kg, otherwise the fallback goal is used.
-          </Text>
-          <TextInput
-            label="Fallback calorie target"
-            value={baseTargetInput}
-            onChangeText={setBaseTargetInput}
-            keyboardType="numeric"
-            mode="outlined"
-          />
-          <TextInput
-            label="Calories per kg"
-            value={caloriesPerKgInput}
-            onChangeText={setCaloriesPerKgInput}
-            keyboardType="numeric"
-            mode="outlined"
-          />
-          <TextInput
-            label="Manual weight (kg)"
-            value={manualWeightInput}
-            onChangeText={setManualWeightInput}
-            keyboardType="numeric"
-            placeholder="78.4"
-            mode="outlined"
-          />
-          <Button mode="contained" icon="content-save-outline" onPress={saveTargets}>
-            Save settings
-          </Button>
-          <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>
-            Weight source: {data.weightHistory[0]?.source ?? (data.manualWeightKg ? 'manual' : 'none')}
-          </Text>
-          </Card.Content>
-        </Card>
-
-        <Card style={styles.card} mode="elevated">
           <Card.Title title="Health Connect" titleVariant="titleLarge" />
           <Card.Content style={styles.formArea}>
-          <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>{healthMessage}</Text>
-          <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>{healthMessage}</Text>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
             Latest weight: {latestWeight ? `${latestWeight} kg` : 'None yet'}
           </Text>
-          <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
             Last sync: {data.lastWeightSyncAt ? formatDisplayDate(data.lastWeightSyncAt) : 'Never'}
           </Text>
-          <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
             Pending calorie exports: {unsyncedCalorieEntries.length}
           </Text>
-          <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
             Last calorie sync: {data.lastCalorieSyncAt ? formatDisplayDate(data.lastCalorieSyncAt) : 'Never'}
           </Text>
           <Chip icon={healthStatus === 'available' ? 'check-circle' : 'information-outline'}>
@@ -462,7 +512,6 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, gap: 16 },
   card: { borderRadius: 24 },
   formArea: { gap: 10 },
-  supportingText: {},
   buttonColumn: { gap: 10 },
   buttonRow: { flexDirection: 'row', gap: 10 },
   button: { flex: 1 },
