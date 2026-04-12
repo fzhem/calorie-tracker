@@ -76,7 +76,7 @@ function toEndOfDay(date: Date) {
 function averageWeight(values: number[]) {
   if (!values.length) return 0;
   const total = values.reduce((sum, value) => sum + value, 0);
-  return Math.round((total / values.length) * 10) / 10;
+  return Math.round((total / values.length) * 100) / 100;
 }
 
 function formatDateRange(start: Date, end: Date, includeYear: boolean) {
