@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import type { Permission } from 'react-native-health-connect';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -203,24 +204,38 @@ export default function SettingsScreen() {
   const [isSyncingWeight, setIsSyncingWeight] = useState(false);
   const [isSyncingCalories, setIsSyncingCalories] = useState(false);
 
+  const loadStoredData = useCallback(async () => {
+    const stored = await AsyncStorage.getItem(STORAGE_KEY);
+    if (!stored) {
+      setData(DEFAULT_DATA);
+      return DEFAULT_DATA;
+    }
+
+    const parsed = JSON.parse(stored) as StoredData;
+    const next = {
+      ...DEFAULT_DATA,
+      ...parsed,
+      entries: parsed.entries ?? [],
+      weightHistory: parsed.weightHistory ?? [],
+      bodyFatHistory: parsed.bodyFatHistory ?? [],
+    };
+    setData(next);
+    return next;
+  }, []);
+
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((stored) => {
-        if (stored) {
-          const parsed = JSON.parse(stored) as StoredData;
-          const next = {
-            ...DEFAULT_DATA,
-            ...parsed,
-            entries: parsed.entries ?? [],
-            weightHistory: parsed.weightHistory ?? [],
-            bodyFatHistory: parsed.bodyFatHistory ?? [],
-          };
-          setData(next);
-        }
-      })
+    loadStoredData()
       .catch(() => Alert.alert('Storage error', 'Saved data could not be loaded.'))
       .finally(() => setIsReady(true));
-  }, []);
+  }, [loadStoredData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadStoredData().catch(() => {
+        Alert.alert('Storage error', 'Saved data could not be loaded.');
+      });
+    }, [loadStoredData]),
+  );
 
   useEffect(() => {
     if (!healthConnect) {
@@ -392,14 +407,21 @@ export default function SettingsScreen() {
 
   const syncCalories = async () => {
     if (!healthConnect) { Alert.alert('Unavailable', 'Health Connect requires an Android development build.'); return; }
-    if (!unsyncedCalorieEntries.length) {
+    const latestData = await loadStoredData().catch(() => null);
+    if (!latestData) {
+      Alert.alert('Storage error', 'Saved data could not be loaded.');
+      return;
+    }
+
+    const entriesToSync = latestData.entries.filter((entry) => !entry.healthConnectSyncAt);
+    if (!entriesToSync.length) {
       setHealthStatus('available');
       setHealthMessage('All meal entries are already exported to Health Connect.');
       return;
     }
 
     setIsSyncingCalories(true);
-    setHealthMessage(`Syncing ${unsyncedCalorieEntries.length} calorie entr${unsyncedCalorieEntries.length === 1 ? 'y' : 'ies'} to Health Connect...`);
+    setHealthMessage(`Syncing ${entriesToSync.length} calorie entr${entriesToSync.length === 1 ? 'y' : 'ies'} to Health Connect...`);
 
     try {
       const available = await ensureHealthConnectAvailable();
@@ -421,10 +443,10 @@ export default function SettingsScreen() {
         return;
       }
 
-      const records = unsyncedCalorieEntries.map((entry) => buildNutritionRecord(entry, healthConnect));
+      const records = entriesToSync.map((entry) => buildNutritionRecord(entry, healthConnect));
       await healthConnect.insertRecords(records);
 
-      const syncedEntryIds = new Set(unsyncedCalorieEntries.map((entry) => entry.id));
+      const syncedEntryIds = new Set(entriesToSync.map((entry) => entry.id));
       const syncedAt = new Date().toISOString();
 
       setData((prev) => ({
