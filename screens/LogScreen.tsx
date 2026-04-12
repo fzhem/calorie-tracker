@@ -118,7 +118,8 @@ export default function LogScreen() {
   const activeQuickAdds = quickAddTab === 'favorites' ? favoriteQuickAdds : recentQuickAdds;
   const visibleEntries = useMemo(() => sortedTodayEntries.slice(0, 40), [sortedTodayEntries]);
   const todayCalories = todayEntries.reduce((sum, e) => sum + e.calories, 0);
-  const latestWeight = data.weightHistory[0]?.weightKg ?? data.manualWeightKg;
+  const latestHealthConnectWeight = data.weightHistory.find((point) => point.source === 'health-connect')?.weightKg ?? null;
+  const latestWeight = data.manualWeightKg ?? latestHealthConnectWeight;
   const metabolism = estimateMetabolism({
     weightKg: latestWeight,
     heightCm: data.metabolismHeightCm,
