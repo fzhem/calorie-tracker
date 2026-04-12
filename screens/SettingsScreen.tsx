@@ -545,8 +545,10 @@ export default function SettingsScreen() {
               </Button>
               <Button
                 style={styles.button}
-                mode="contained-tonal"
+                mode="contained"
                 icon="food-apple"
+                buttonColor={theme.colors.tertiary}
+                textColor={theme.colors.onTertiary}
                 loading={isSyncingCalories}
                 disabled={isSyncingCalories || isSyncingWeight}
                 onPress={() => { void syncCalories(); }}
