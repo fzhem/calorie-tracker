@@ -23,6 +23,15 @@ export type WeightPoint = {
   originDevice?: string;
 };
 
+export type BodyFatPoint = {
+  recordedAt: string;
+  bodyFatPercentage: number;
+  source: 'health-connect';
+  originAppId?: string;
+  originAppName?: string;
+  originDevice?: string;
+};
+
 export type StoredData = {
   entries: MealEntry[];
   favoriteQuickAdds: FavoriteQuickAdd[];
@@ -34,7 +43,9 @@ export type StoredData = {
   activityLevel: ActivityLevel;
   manualWeightKg: number | null;
   weightHistory: WeightPoint[];
+  bodyFatHistory: BodyFatPoint[];
   lastWeightSyncAt: string | null;
+  lastBodyFatSyncAt: string | null;
   lastCalorieSyncAt: string | null;
 };
 
@@ -51,6 +62,8 @@ export const DEFAULT_DATA: StoredData = {
   activityLevel: 'moderate',
   manualWeightKg: null,
   weightHistory: [],
+  bodyFatHistory: [],
   lastWeightSyncAt: null,
+  lastBodyFatSyncAt: null,
   lastCalorieSyncAt: null,
 };

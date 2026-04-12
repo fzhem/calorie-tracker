@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
-import type { MealEntry, StoredData, WeightPoint } from '../storage';
+import type { BodyFatPoint, MealEntry, StoredData, WeightPoint } from '../storage';
 import { useThemeMode, type ThemeMode } from '../themeMode';
 
 type HealthConnectModule = typeof import('react-native-health-connect');
@@ -33,6 +33,14 @@ function roundTo(value: number, digits = 1) {
 
 function mergeWeightHistory(existing: WeightPoint[], incoming: WeightPoint[]): WeightPoint[] {
   const keyed = new Map<string, WeightPoint>();
+  for (const p of [...existing, ...incoming]) keyed.set(`${p.source}-${p.recordedAt}`, p);
+  return Array.from(keyed.values()).sort(
+    (a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+  );
+}
+
+function mergeBodyFatHistory(existing: BodyFatPoint[], incoming: BodyFatPoint[]): BodyFatPoint[] {
+  const keyed = new Map<string, BodyFatPoint>();
   for (const p of [...existing, ...incoming]) keyed.set(`${p.source}-${p.recordedAt}`, p);
   return Array.from(keyed.values()).sort(
     (a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
@@ -200,7 +208,13 @@ export default function SettingsScreen() {
       .then((stored) => {
         if (stored) {
           const parsed = JSON.parse(stored) as StoredData;
-          const next = { ...DEFAULT_DATA, ...parsed, entries: parsed.entries ?? [], weightHistory: parsed.weightHistory ?? [] };
+          const next = {
+            ...DEFAULT_DATA,
+            ...parsed,
+            entries: parsed.entries ?? [],
+            weightHistory: parsed.weightHistory ?? [],
+            bodyFatHistory: parsed.bodyFatHistory ?? [],
+          };
           setData(next);
         }
       })
@@ -217,10 +231,10 @@ export default function SettingsScreen() {
     healthConnect.getSdkStatus().then((status) => {
       if (status === healthConnect.SdkAvailabilityStatus.SDK_AVAILABLE) {
         setHealthStatus('available');
-        setHealthMessage('Health Connect is available. Sync weight to import measurements or sync calories to export meal logs.');
+        setHealthMessage('Health Connect is available. Sync body data to import weight/body fat, or sync calories to export meal logs.');
       } else if (status === healthConnect.SdkAvailabilityStatus.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) {
         setHealthStatus('update-required');
-        setHealthMessage('Install or update Health Connect before syncing weight or calorie data.');
+        setHealthMessage('Install or update Health Connect before syncing body or calorie data.');
       } else {
         setHealthStatus('unavailable');
         setHealthMessage('Health Connect is not available on this device yet.');
@@ -265,7 +279,7 @@ export default function SettingsScreen() {
   const syncWeight = async () => {
     if (!healthConnect) { Alert.alert('Unavailable', 'Health Connect requires an Android development build.'); return; }
     setIsSyncingWeight(true);
-    setHealthMessage('Syncing weight data from Health Connect...');
+    setHealthMessage('Syncing weight and body fat data from Health Connect...');
 
     try {
       const available = await ensureHealthConnectAvailable();
@@ -273,19 +287,21 @@ export default function SettingsScreen() {
 
       const permissions = [
         { accessType: 'read' as const, recordType: 'Weight' as const },
+        { accessType: 'read' as const, recordType: 'BodyFat' as const },
         { accessType: 'read' as const, recordType: 'ReadHealthDataHistory' as const },
       ];
       const granted = await healthConnect.requestPermission(permissions);
       const hasWeightPermission = hasPermission(granted, 'read', 'Weight');
+      const hasBodyFatPermission = hasPermission(granted, 'read', 'BodyFat');
       const hasHistoryPermission = hasPermission(granted, 'read', 'ReadHealthDataHistory');
-      if (!hasWeightPermission) {
+      if (!hasWeightPermission && !hasBodyFatPermission) {
         setHealthStatus('error');
         setHealthMessage(
-          'Weight permission is off. Open Health Connect settings and allow this app to read Weight records, then sync again.',
+          'Weight/Body Fat permissions are off. Open Health Connect settings and allow this app to read Weight or Body Fat records, then sync again.',
         );
         Alert.alert(
-          'Weight Permission Needed',
-          'This app needs Health Connect permission to read your weight data. In Health Connect, enable Weight under app permissions, then tap Sync weight again.',
+          'Body Data Permission Needed',
+          'This app needs Health Connect permission to read Weight and Body Fat data. In Health Connect, enable Weight and Body Fat under app permissions, then tap Sync body data again.',
           [{ text: 'OK' }],
         );
         return;
@@ -294,18 +310,35 @@ export default function SettingsScreen() {
       const endTime = new Date();
       const startTime = addDays(endTime, -400).toISOString();
       const allRecords: Array<{ time: string; weight: { inKilograms: number }; metadata?: unknown }> = [];
+      const allBodyFatRecords: Array<{ time: string; percentage: { value: number }; metadata?: unknown }> = [];
       let pageToken: string | undefined;
 
-      do {
-        const result = await healthConnect.readRecords('Weight', {
-          timeRangeFilter: { operator: 'between', startTime, endTime: endTime.toISOString() },
-          ascendingOrder: false,
-          pageSize: 1000,
-          pageToken,
-        });
-        allRecords.push(...result.records as Array<{ time: string; weight: { inKilograms: number }; metadata?: unknown }>);
-        pageToken = result.pageToken;
-      } while (pageToken);
+      if (hasWeightPermission) {
+        do {
+          const result = await healthConnect.readRecords('Weight', {
+            timeRangeFilter: { operator: 'between', startTime, endTime: endTime.toISOString() },
+            ascendingOrder: false,
+            pageSize: 1000,
+            pageToken,
+          });
+          allRecords.push(...result.records as Array<{ time: string; weight: { inKilograms: number }; metadata?: unknown }>);
+          pageToken = result.pageToken;
+        } while (pageToken);
+      }
+
+      pageToken = undefined;
+      if (hasBodyFatPermission) {
+        do {
+          const result: { records: unknown[]; pageToken?: string } = await healthConnect.readRecords('BodyFat', {
+            timeRangeFilter: { operator: 'between', startTime, endTime: endTime.toISOString() },
+            ascendingOrder: false,
+            pageSize: 1000,
+            pageToken,
+          });
+          allBodyFatRecords.push(...result.records as Array<{ time: string; percentage: { value: number }; metadata?: unknown }>);
+          pageToken = result.pageToken;
+        } while (pageToken);
+      }
 
       const synced: WeightPoint[] = allRecords.map((r) => ({
         recordedAt: r.time,
@@ -314,25 +347,34 @@ export default function SettingsScreen() {
         ...extractHealthOrigin(r),
       }));
 
+      const syncedBodyFat: BodyFatPoint[] = allBodyFatRecords.map((r) => ({
+        recordedAt: r.time,
+        bodyFatPercentage: roundTo(r.percentage.value * 100, 2),
+        source: 'health-connect',
+        ...extractHealthOrigin(r),
+      }));
+
       setData((prev) => ({
         ...prev,
         weightHistory: mergeWeightHistory(prev.weightHistory.filter((p) => p.source !== 'health-connect'), synced),
+        bodyFatHistory: mergeBodyFatHistory(prev.bodyFatHistory.filter((p) => p.source !== 'health-connect'), syncedBodyFat),
         lastWeightSyncAt: new Date().toISOString(),
+        lastBodyFatSyncAt: new Date().toISOString(),
       }));
 
       setHealthStatus('available');
       setHealthMessage(
-        synced.length
-          ? `Synced ${synced.length} weight record${synced.length === 1 ? '' : 's'}.${hasHistoryPermission ? '' : ' History permission is off, so older records may be limited.'}`
-          : 'No recent weight records found in Health Connect.',
+        synced.length || syncedBodyFat.length
+          ? `Synced ${synced.length} weight and ${syncedBodyFat.length} body fat record${(synced.length + syncedBodyFat.length) === 1 ? '' : 's'}.${hasHistoryPermission ? '' : ' History permission is off, so older records may be limited.'}`
+          : 'No recent body metric records found in Health Connect.',
       );
     } catch (error) {
       const reason = getErrorMessage(error);
       setHealthStatus('error');
-      setHealthMessage(`Weight sync failed: ${reason}`);
+      setHealthMessage(`Body sync failed: ${reason}`);
       Alert.alert(
         'Sync Failed',
-        `Could not sync weight data. ${reason}`,
+        `Could not sync body data. ${reason}`,
       );
     } finally {
       setIsSyncingWeight(false);
@@ -432,6 +474,7 @@ export default function SettingsScreen() {
   };
 
   const latestWeight = data.weightHistory[0]?.weightKg ?? data.manualWeightKg;
+  const latestBodyFat = data.bodyFatHistory[0]?.bodyFatPercentage ?? null;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
@@ -462,7 +505,13 @@ export default function SettingsScreen() {
             Latest weight: {latestWeight ? `${latestWeight} kg` : 'None yet'}
           </Text>
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            Latest body fat: {latestBodyFat !== null ? `${latestBodyFat}%` : 'None yet'}
+          </Text>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
             Last sync: {data.lastWeightSyncAt ? formatDisplayDate(data.lastWeightSyncAt) : 'Never'}
+          </Text>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            Last body fat sync: {data.lastBodyFatSyncAt ? formatDisplayDate(data.lastBodyFatSyncAt) : 'Never'}
           </Text>
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
             Pending calorie exports: {unsyncedCalorieEntries.length}
@@ -483,7 +532,7 @@ export default function SettingsScreen() {
                 disabled={isSyncingWeight || isSyncingCalories}
                 onPress={onPressSyncWeight}
               >
-                {isSyncingWeight ? 'Syncing...' : 'Sync weight'}
+                {isSyncingWeight ? 'Syncing...' : 'Sync body data'}
               </Button>
               <Button
                 style={styles.button}

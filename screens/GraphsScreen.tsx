@@ -8,7 +8,7 @@ import { Card, SegmentedButtons, Text, Button, useTheme } from 'react-native-pap
 import Svg, { G, Line, Rect, Text as SvgText, Circle } from 'react-native-svg';
 
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
-import type { MealEntry, StoredData, WeightPoint } from '../storage';
+import type { BodyFatPoint, MealEntry, StoredData, WeightPoint } from '../storage';
 
 const DEFAULT_CALORIE_DAYS = 7;
 const WEIGHT_CHART_HEIGHT = 220;
@@ -103,6 +103,10 @@ function formatDateRange(start: Date, end: Date, includeYear: boolean) {
 
 function formatWeightValue(weightKg: number) {
   return `${weightKg.toFixed(2)} kg`;
+}
+
+function formatBodyFatValue(bodyFatPercentage: number) {
+  return `${bodyFatPercentage.toFixed(2)}%`;
 }
 
 const WEIGHT_FILTER_OPTIONS = [
@@ -451,19 +455,30 @@ export default function GraphsScreen() {
   const theme = useTheme();
   const [data, setData] = useState<StoredData>(DEFAULT_DATA);
   const [selectedWeightIndex, setSelectedWeightIndex] = useState<number | null>(null);
+  const [selectedBodyFatIndex, setSelectedBodyFatIndex] = useState<number | null>(null);
   const [calorieDays, setCalorieDays] = useState(DEFAULT_CALORIE_DAYS);
   const [weightDays, setWeightDays] = useState(7);
+  const [bodyFatDays, setBodyFatDays] = useState(7);
   const [showCalorieChart, setShowCalorieChart] = useState(false);
   const [showWeightChart, setShowWeightChart] = useState(false);
+  const [showBodyFatChart, setShowBodyFatChart] = useState(false);
   const calorieTimelineRef = useRef<ScrollView | null>(null);
   const weightTimelineRef = useRef<ScrollView | null>(null);
+  const bodyFatTimelineRef = useRef<ScrollView | null>(null);
   const weightPointPositionsRef = useRef<Array<{ x: number; y: number }>>([]);
+  const bodyFatPointPositionsRef = useRef<Array<{ x: number; y: number }>>([]);
 
   const loadStoredData = useCallback(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
       if (stored) {
         const parsed = JSON.parse(stored) as StoredData;
-        setData({ ...DEFAULT_DATA, ...parsed, entries: parsed.entries ?? [], weightHistory: parsed.weightHistory ?? [] });
+        setData({
+          ...DEFAULT_DATA,
+          ...parsed,
+          entries: parsed.entries ?? [],
+          weightHistory: parsed.weightHistory ?? [],
+          bodyFatHistory: parsed.bodyFatHistory ?? [],
+        });
       }
     });
   }, []);
@@ -539,6 +554,24 @@ export default function GraphsScreen() {
     365: buildWeightSeries(data.weightHistory, 365),
   }), [data.weightHistory]);
 
+  const bodyFatAsWeightPoints = useMemo<WeightPoint[]>(
+    () => data.bodyFatHistory.map((point: BodyFatPoint) => ({
+      recordedAt: point.recordedAt,
+      weightKg: point.bodyFatPercentage,
+      source: 'health-connect',
+      originAppId: point.originAppId,
+      originAppName: point.originAppName,
+      originDevice: point.originDevice,
+    })),
+    [data.bodyFatHistory],
+  );
+
+  const allBodyFatSeries = useMemo(() => ({
+    7: buildWeightSeries(bodyFatAsWeightPoints, 7),
+    90: buildWeightSeries(bodyFatAsWeightPoints, 90),
+    365: buildWeightSeries(bodyFatAsWeightPoints, 365),
+  }), [bodyFatAsWeightPoints]);
+
   const weightSeries = allWeightSeries[weightDays as 7 | 90 | 365] ?? allWeightSeries[7];
   const weightChartSeries = useMemo(() => {
     const points = weightSeries;
@@ -553,6 +586,20 @@ export default function GraphsScreen() {
     return Math.max(chartWidth, weightChartSeries.values.length * pointWidth);
   }, [chartWidth, weightChartSeries.values.length, weightDays]);
 
+  const bodyFatSeries = allBodyFatSeries[bodyFatDays as 7 | 90 | 365] ?? allBodyFatSeries[7];
+  const bodyFatChartSeries = useMemo(() => {
+    const points = bodyFatSeries;
+    return {
+      points,
+      labels: sparsifyLabels(points.map((point) => point.axisLabel), 12),
+      values: points.map((point) => point.weightKg),
+    };
+  }, [bodyFatSeries]);
+  const bodyFatChartWidth = useMemo(() => {
+    const pointWidth = bodyFatDays <= 7 ? 44 : bodyFatDays <= 90 ? 64 : 72;
+    return Math.max(chartWidth, bodyFatChartSeries.values.length * pointWidth);
+  }, [bodyFatChartSeries.values.length, bodyFatDays, chartWidth]);
+
   const selectedWeightPoint =
     selectedWeightIndex !== null && selectedWeightIndex >= 0 && selectedWeightIndex < weightChartSeries.points.length
       ? weightChartSeries.points[selectedWeightIndex]
@@ -562,9 +609,22 @@ export default function GraphsScreen() {
       ? weightPointPositionsRef.current[selectedWeightIndex] ?? null
       : null;
 
+  const selectedBodyFatPoint =
+    selectedBodyFatIndex !== null && selectedBodyFatIndex >= 0 && selectedBodyFatIndex < bodyFatChartSeries.points.length
+      ? bodyFatChartSeries.points[selectedBodyFatIndex]
+      : null;
+  const selectedBodyFatMetrics =
+    selectedBodyFatIndex !== null && selectedBodyFatIndex >= 0 && selectedBodyFatIndex < bodyFatPointPositionsRef.current.length
+      ? bodyFatPointPositionsRef.current[selectedBodyFatIndex] ?? null
+      : null;
+
   useEffect(() => {
     setSelectedWeightIndex(null);
   }, [weightDays, weightChartSeries.points.length]);
+
+  useEffect(() => {
+    setSelectedBodyFatIndex(null);
+  }, [bodyFatDays, bodyFatChartSeries.points.length]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -580,6 +640,13 @@ export default function GraphsScreen() {
     return () => cancelAnimationFrame(frame);
   }, [weightChartWidth, weightDays, showWeightChart]);
 
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      bodyFatTimelineRef.current?.scrollToEnd({ animated: false });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [bodyFatChartWidth, bodyFatDays, showBodyFatChart]);
+
   const handleWeightTap = useCallback((tapX: number) => {
     const positions = weightPointPositionsRef.current.slice(0, weightChartSeries.points.length);
     if (!positions.length) return;
@@ -591,6 +658,18 @@ export default function GraphsScreen() {
     });
     setSelectedWeightIndex((prev) => (prev === nearestIndex ? null : nearestIndex));
   }, [weightChartSeries.points.length]);
+
+  const handleBodyFatTap = useCallback((tapX: number) => {
+    const positions = bodyFatPointPositionsRef.current.slice(0, bodyFatChartSeries.points.length);
+    if (!positions.length) return;
+    let nearestIndex = 0;
+    let nearestDist = Infinity;
+    positions.forEach((pos, i) => {
+      const d = Math.abs(pos.x - tapX);
+      if (d < nearestDist) { nearestDist = d; nearestIndex = i; }
+    });
+    setSelectedBodyFatIndex((prev) => (prev === nearestIndex ? null : nearestIndex));
+  }, [bodyFatChartSeries.points.length]);
 
   const selectedWeightBubble = selectedWeightPoint
     ? {
@@ -608,8 +687,26 @@ export default function GraphsScreen() {
     : 0;
   const bubbleY = selectedWeightMetrics ? Math.max(10, selectedWeightMetrics.y - 54) : 0;
 
+  const selectedBodyFatBubble = selectedBodyFatPoint
+    ? {
+        bodyFat: `${selectedBodyFatPoint.isAverage ? 'avg ' : ''}${formatBodyFatValue(selectedBodyFatPoint.weightKg)}`,
+        date: selectedBodyFatPoint.bubbleLabel,
+      }
+    : null;
+  const bodyFatBubbleWidth = selectedBodyFatBubble
+    ? Math.max(92, Math.max(selectedBodyFatBubble.bodyFat.length, selectedBodyFatBubble.date.length) * 8 + 24)
+    : 0;
+  const bodyFatBubbleHeight = selectedBodyFatBubble ? 46 : 0;
+  const bodyFatBubbleHalfWidth = bodyFatBubbleWidth / 2;
+  const bodyFatBubbleX = selectedBodyFatMetrics
+    ? Math.min(Math.max(8, selectedBodyFatMetrics.x - bodyFatBubbleHalfWidth), bodyFatChartWidth - bodyFatBubbleWidth - 8)
+    : 0;
+  const bodyFatBubbleY = selectedBodyFatMetrics ? Math.max(10, selectedBodyFatMetrics.y - 54) : 0;
+
   const latestWeightPoint = data.weightHistory[0] ?? null;
   const latestWeight = latestWeightPoint?.weightKg ?? null;
+  const latestBodyFatPoint = data.bodyFatHistory[0] ?? null;
+  const latestBodyFat = latestBodyFatPoint?.bodyFatPercentage ?? null;
   const latestCalorieEntry = useMemo(
     () => data.entries.reduce<MealEntry | null>((latest, entry) => {
       if (!latest) return entry;
@@ -651,6 +748,20 @@ export default function GraphsScreen() {
     const pad = Math.max(0.2, (max - min) * 0.2);
     return { min: min - pad, max: max + pad };
   }, [weeklyData.values]);
+
+  const bodyFatWeeklyData = useMemo(() => getWeeklyData(bodyFatAsWeightPoints), [bodyFatAsWeightPoints]);
+  const hasBodyFatWeeklyData = useMemo(
+    () => bodyFatWeeklyData.values.some((value) => typeof value === 'number'),
+    [bodyFatWeeklyData.values],
+  );
+  const bodyFatWeeklyValueRange = useMemo(() => {
+    const values = bodyFatWeeklyData.values.filter((value): value is number => typeof value === 'number');
+    if (!values.length) return null;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const pad = Math.max(0.2, (max - min) * 0.2);
+    return { min: min - pad, max: max + pad };
+  }, [bodyFatWeeklyData.values]);
 
   const calorieChartEl = useMemo(() => {
     return (
@@ -791,6 +902,128 @@ export default function GraphsScreen() {
   ) : (
     <Text variant="bodyMedium" style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No weight recorded in this period.</Text>
   ), [bubbleHeight, bubbleWidth, bubbleX, bubbleY, weightChartConfig, handleWeightTap, selectedWeightBubble, selectedWeightMetrics, theme.dark, weightChartSeries.labels, weightChartSeries.values, weightChartWidth]);
+
+  const bodyFatChartEl = useMemo(() => bodyFatChartSeries.values.length > 1 ? (
+    <ScrollView
+      ref={bodyFatTimelineRef}
+      horizontal
+      decelerationRate="fast"
+      bounces={false}
+      directionalLockEnabled
+      nestedScrollEnabled
+      showsHorizontalScrollIndicator={false}
+      scrollEventThrottle={16}
+    >
+      <View
+        onStartShouldSetResponder={() => true}
+        onResponderRelease={(e) => handleBodyFatTap(e.nativeEvent.locationX)}
+      >
+        <LineChart
+          width={bodyFatChartWidth}
+          height={WEIGHT_CHART_HEIGHT}
+          fromZero={false}
+          bezier
+          withVerticalLabels
+          withHorizontalLabels={false}
+          data={{
+            labels: bodyFatChartSeries.labels,
+            datasets: [{
+              data: bodyFatChartSeries.values,
+              color: () => theme.dark ? 'rgba(125, 205, 168, 0.9)' : 'rgba(22, 88, 56, 0.9)',
+              strokeWidth: 3,
+            }],
+          }}
+          renderDotContent={({ x, y, index }) => {
+            bodyFatPointPositionsRef.current[index] = { x, y };
+            return null;
+          }}
+          decorator={() => {
+            const allPositions = bodyFatPointPositionsRef.current.slice(0, bodyFatChartSeries.values.length);
+            return (
+              <G>
+                {allPositions.map((pos, index) => {
+                  const value = bodyFatChartSeries.values[index];
+                  if (value === undefined) return null;
+                  const above = index % 2 === 1;
+                  return (
+                    <SvgText
+                      key={`bf-label-${index}`}
+                      x={pos.x}
+                      y={above ? pos.y - 10 : pos.y + 18}
+                      fill={theme.dark ? '#7fd8a5' : '#146c43'}
+                      fontSize="9"
+                      fontWeight="500"
+                      textAnchor="middle"
+                    >
+                      {value.toFixed(2)}
+                    </SvgText>
+                  );
+                })}
+                {selectedBodyFatMetrics && selectedBodyFatBubble ? (
+                  <G>
+                    <Line
+                      x1={String(selectedBodyFatMetrics.x)}
+                      y1="0"
+                      x2={String(selectedBodyFatMetrics.x)}
+                      y2={String(WEIGHT_GUIDE_BOTTOM)}
+                      stroke={theme.dark ? '#7fd8a5' : '#146c43'}
+                      strokeWidth="1"
+                      strokeDasharray="4 4"
+                    />
+                    <Rect
+                      x={bodyFatBubbleX}
+                      y={bodyFatBubbleY}
+                      width={bodyFatBubbleWidth}
+                      height={bodyFatBubbleHeight}
+                      rx={12}
+                      fill={theme.dark ? '#173326' : '#146c43'}
+                    />
+                    <SvgText
+                      x={bodyFatBubbleX + bodyFatBubbleWidth / 2}
+                      y={bodyFatBubbleY + 18}
+                      fill="#ffffff"
+                      fontSize="11"
+                      fontWeight="500"
+                      textAnchor="middle"
+                    >
+                      {selectedBodyFatBubble.date}
+                    </SvgText>
+                    <SvgText
+                      x={bodyFatBubbleX + bodyFatBubbleWidth / 2}
+                      y={bodyFatBubbleY + 34}
+                      fill="#ffffff"
+                      fontSize="12"
+                      fontWeight="600"
+                      textAnchor="middle"
+                    >
+                      {selectedBodyFatBubble.bodyFat}
+                    </SvgText>
+                  </G>
+                ) : null}
+              </G>
+            );
+          }}
+          chartConfig={weightChartConfig}
+          style={styles.chart}
+        />
+      </View>
+    </ScrollView>
+  ) : (
+    <Text variant="bodyMedium" style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No body fat recorded in this period.</Text>
+  ), [
+    bodyFatBubbleHeight,
+    bodyFatBubbleWidth,
+    bodyFatBubbleX,
+    bodyFatBubbleY,
+    bodyFatChartSeries.labels,
+    bodyFatChartSeries.values,
+    bodyFatChartWidth,
+    handleBodyFatTap,
+    selectedBodyFatBubble,
+    selectedBodyFatMetrics,
+    theme.dark,
+    weightChartConfig,
+  ]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
@@ -1036,6 +1269,147 @@ export default function GraphsScreen() {
                 style={styles.filterButtons}
               />
               {weightChartEl}
+            </Card.Content>
+          </Card>
+        )}
+
+        {!showBodyFatChart ? (
+          <Pressable onPress={() => setShowBodyFatChart(true)}>
+            <Card style={[styles.weightTile, { backgroundColor: theme.colors.surfaceVariant }]} mode="elevated">
+              <Card.Content>
+                <View style={styles.weightTileContent}>
+                  <View style={styles.weightTileLeft}>
+                    <Text variant="labelMedium" style={{ fontWeight: '700', color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
+                      Body Fat
+                    </Text>
+                    <Text variant="displaySmall" style={{ fontWeight: '700', color: theme.colors.primary, marginBottom: 8 }}>
+                      {latestBodyFat !== null ? `${latestBodyFat}%` : '— %'}
+                    </Text>
+                    {bodyFatAsWeightPoints.length > 1 ? (
+                      <Text
+                        variant="labelSmall"
+                        style={{
+                          color: calculateWeightTrend(bodyFatAsWeightPoints) === 'gaining'
+                            ? theme.colors.error
+                            : calculateWeightTrend(bodyFatAsWeightPoints) === 'losing'
+                              ? theme.colors.primary
+                              : theme.colors.onSurfaceVariant,
+                          fontWeight: '600',
+                        }}
+                      >
+                        {calculateWeightTrend(bodyFatAsWeightPoints) === 'gaining'
+                          ? '↑ Gaining'
+                          : calculateWeightTrend(bodyFatAsWeightPoints) === 'losing'
+                            ? '↓ Losing'
+                            : '→ Maintaining'}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.weightTileRight}>
+                    <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      {latestBodyFatPoint ? formatRelativeTime(latestBodyFatPoint.recordedAt) : 'No data'}
+                    </Text>
+                    {hasBodyFatWeeklyData && bodyFatWeeklyValueRange ? (
+                      <View style={styles.weekMiniWrap}>
+                        <Svg width={126} height={56}>
+                          {(() => {
+                            const lines = [];
+                            for (let index = 0; index < bodyFatWeeklyData.values.length; index += 1) {
+                              const value = bodyFatWeeklyData.values[index];
+                              if (typeof value !== 'number') continue;
+
+                              let nextIndex = index + 1;
+                              while (nextIndex < bodyFatWeeklyData.values.length && typeof bodyFatWeeklyData.values[nextIndex] !== 'number') {
+                                nextIndex += 1;
+                              }
+                              if (nextIndex >= bodyFatWeeklyData.values.length) continue;
+
+                              const nextValue = bodyFatWeeklyData.values[nextIndex] as number;
+                              const x1 = 6 + index * 19;
+                              const x2 = 6 + nextIndex * 19;
+                              const y1 = 4 + ((bodyFatWeeklyValueRange.max - value) / (bodyFatWeeklyValueRange.max - bodyFatWeeklyValueRange.min || 1)) * 32;
+                              const y2 = 4 + ((bodyFatWeeklyValueRange.max - nextValue) / (bodyFatWeeklyValueRange.max - bodyFatWeeklyValueRange.min || 1)) * 32;
+                              lines.push(
+                                <Line
+                                  key={`mini-bf-line-${index}-${nextIndex}`}
+                                  x1={String(x1)}
+                                  y1={String(y1)}
+                                  x2={String(x2)}
+                                  y2={String(y2)}
+                                  stroke={theme.dark ? '#7fd8a5' : '#146c43'}
+                                  strokeWidth="1.5"
+                                />,
+                              );
+                            }
+                            return lines;
+                          })()}
+                          {bodyFatWeeklyData.values.map((value, index) => {
+                            if (typeof value !== 'number') return null;
+                            const x = 6 + index * 19;
+                            const y = 4 + ((bodyFatWeeklyValueRange.max - value) / (bodyFatWeeklyValueRange.max - bodyFatWeeklyValueRange.min || 1)) * 32;
+                            const isToday = index === bodyFatWeeklyData.todayIndex;
+                            const dotColor = theme.dark ? '#7fd8a5' : '#146c43';
+                            return (
+                              <Circle
+                                key={`mini-bf-dot-${index}`}
+                                cx={String(x)}
+                                cy={String(y)}
+                                r={isToday ? '3.5' : '2.5'}
+                                fill={isToday ? dotColor : 'transparent'}
+                                stroke={dotColor}
+                                strokeWidth="1.5"
+                              />
+                            );
+                          })}
+                        </Svg>
+                        <View style={styles.weekMiniAxis}>
+                          {bodyFatWeeklyData.dayLabels.map((label, index) => (
+                            <Text
+                              key={`mini-bf-axis-${index}`}
+                              variant="labelSmall"
+                              style={[styles.weekMiniAxisLabel, { color: theme.colors.onSurfaceVariant }]}
+                            >
+                              {label}
+                            </Text>
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              </Card.Content>
+            </Card>
+          </Pressable>
+        ) : (
+          <Card style={styles.card} mode="elevated">
+            <Card.Title
+              title="Body Fat Trend"
+              titleVariant="titleLarge"
+              right={() => (
+                <Button
+                  icon="close"
+                  onPress={() => setShowBodyFatChart(false)}
+                  mode="text"
+                  style={{ marginRight: 16 }}
+                >
+                  Close
+                </Button>
+              )}
+            />
+            <Card.Content>
+              <Text variant="bodyMedium" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}>Body fat percentage points from Health Connect.</Text>
+              <SegmentedButtons
+                value={String(bodyFatDays)}
+                onValueChange={(v) => {
+                  startTransition(() => {
+                    setBodyFatDays(Number(v));
+                    setSelectedBodyFatIndex(null);
+                  });
+                }}
+                buttons={WEIGHT_FILTER_OPTIONS}
+                style={styles.filterButtons}
+              />
+              {bodyFatChartEl}
             </Card.Content>
           </Card>
         )}
