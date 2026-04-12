@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, View, Vibration } from 'react-native';
 import { Button, Card, Chip, IconButton, ProgressBar, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -333,6 +333,7 @@ export default function LogScreen() {
     setMealFat('');
     setMealCarbs('');
     setMealFiber('');
+    Vibration.vibrate(12);
   }, [mealCalories, mealCarbs, mealFat, mealFiber, mealProtein, mealTitle]);
 
   const quickAddMeal = useCallback((item: QuickAddItem) => {
@@ -352,9 +353,11 @@ export default function LogScreen() {
         ...prev.entries,
       ],
     }));
+    Vibration.vibrate(10);
   }, []);
 
   const toggleFavoriteQuickAdd = useCallback((item: QuickAddItem) => {
+    Vibration.vibrate(10);
     const key = quickAddKey(item);
     setData((prev) => {
       const current = prev.favoriteQuickAdds ?? [];
@@ -371,6 +374,7 @@ export default function LogScreen() {
   }, []);
 
   const openEditEntry = useCallback((entry: MealEntry) => {
+    Vibration.vibrate(10);
     setShowEditMacros(false);
     setMacroInputsReady(false);
     setEditDraft({
