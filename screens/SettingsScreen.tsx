@@ -310,7 +310,7 @@ export default function SettingsScreen() {
       const endTime = new Date();
       const startTime = addDays(endTime, -400).toISOString();
       const allRecords: Array<{ time: string; weight: { inKilograms: number }; metadata?: unknown }> = [];
-      const allBodyFatRecords: Array<{ time: string; percentage: { value: number }; metadata?: unknown }> = [];
+      const allBodyFatRecords: Array<{ time: string; percentage: number; metadata?: unknown }> = [];
       let pageToken: string | undefined;
 
       if (hasWeightPermission) {
@@ -335,7 +335,7 @@ export default function SettingsScreen() {
             pageSize: 1000,
             pageToken,
           });
-          allBodyFatRecords.push(...result.records as Array<{ time: string; percentage: { value: number }; metadata?: unknown }>);
+          allBodyFatRecords.push(...result.records as Array<{ time: string; percentage: number; metadata?: unknown }>);
           pageToken = result.pageToken;
         } while (pageToken);
       }
@@ -347,12 +347,21 @@ export default function SettingsScreen() {
         ...extractHealthOrigin(r),
       }));
 
-      const syncedBodyFat: BodyFatPoint[] = allBodyFatRecords.map((r) => ({
-        recordedAt: r.time,
-        bodyFatPercentage: roundTo(r.percentage.value * 100, 2),
-        source: 'health-connect',
-        ...extractHealthOrigin(r),
-      }));
+      const syncedBodyFat: BodyFatPoint[] = allBodyFatRecords
+        .map((r) => {
+          const raw = typeof r.percentage === 'number'
+            ? r.percentage
+            : (typeof (r as { percentage?: { value?: number } }).percentage?.value === 'number'
+              ? (r as { percentage?: { value?: number } }).percentage!.value!
+              : NaN);
+          return {
+            recordedAt: r.time,
+            bodyFatPercentage: roundTo(raw, 2),
+            source: 'health-connect' as const,
+            ...extractHealthOrigin(r),
+          };
+        })
+        .filter((point) => Number.isFinite(point.bodyFatPercentage));
 
       setData((prev) => ({
         ...prev,
@@ -365,7 +374,7 @@ export default function SettingsScreen() {
       setHealthStatus('available');
       setHealthMessage(
         synced.length || syncedBodyFat.length
-          ? `Synced ${synced.length} weight and ${syncedBodyFat.length} body fat record${(synced.length + syncedBodyFat.length) === 1 ? '' : 's'}.${hasHistoryPermission ? '' : ' History permission is off, so older records may be limited.'}`
+          ? `Synced ${synced.length} weight and ${syncedBodyFat.length} body fat record${(synced.length + syncedBodyFat.length) === 1 ? '' : 's'}.${hasHistoryPermission ? '' : ' History access is turned off, so sync may only include recent records.'}`
           : 'No recent body metric records found in Health Connect.',
       );
     } catch (error) {
