@@ -237,11 +237,11 @@ export default function LogScreen() {
   const proteinGoal = data.proteinGoalGrams ?? autoMacroTargets.proteinGrams;
   const fatGoal = data.fatGoalGrams ?? autoMacroTargets.fatGrams;
   const carbsGoal = data.carbsGoalGrams ?? autoMacroTargets.carbsGrams;
+  const fiberGoal = data.fiberGoalGrams ?? Math.max(0, Math.round((adjustedTarget / 1000) * FIBER_GRAMS_PER_1000_KCAL));
 
   const proteinProgress = proteinGoal ? Math.min(todayTotalProtein / proteinGoal, 1) : 0;
   const fatProgress = fatGoal ? Math.min(todayTotalFat / fatGoal, 1) : 0;
   const carbsProgress = carbsGoal ? Math.min(todayTotalCarbs / carbsGoal, 1) : 0;
-  const fiberGoal = Math.max(0, Math.round((adjustedTarget / 1000) * FIBER_GRAMS_PER_1000_KCAL));
   const fiberProgress = fiberGoal ? Math.min(todayTotalFiber / fiberGoal, 1) : 0;
 
   const hasMacroGoals = proteinGoal > 0 || fatGoal > 0 || carbsGoal > 0;
@@ -267,10 +267,14 @@ export default function LogScreen() {
     });
   }, [editDraft]);
 
-  const macroGoalModeLabel =
-    data.proteinGoalGrams !== null || data.carbsGoalGrams !== null || data.fatGoalGrams !== null
-      ? 'Custom targets'
-      : 'Auto targets';
+  const macroGoalModeIcon =
+    data.proteinGoalGrams !== null || data.carbsGoalGrams !== null || data.fatGoalGrams !== null || data.fiberGoalGrams !== null
+      ? 'tune'
+      : 'brightness-auto';
+  const macroGoalModeText =
+    data.proteinGoalGrams !== null || data.carbsGoalGrams !== null || data.fatGoalGrams !== null || data.fiberGoalGrams !== null
+      ? 'Custom macro targets'
+      : 'Auto macro targets';
 
   const activeGoalAdjustmentType =
     data.goalPhase === 'cut'
@@ -298,6 +302,25 @@ export default function LogScreen() {
     : activeGoalAdjustmentType === 'percent'
       ? `${data.goalPhase === 'cut' ? '-' : '+'}${data.goalPhase === 'cut' ? (data.cutPercentPerWeek ?? 1) : (data.bulkPercentPerWeek ?? 1)}% / week`
       : `${goalDelta > 0 ? '+' : ''}${goalDelta} kcal / day`;
+
+  const macroPalette = useMemo(() => ({
+    protein: {
+      color: theme.dark ? '#ffb27a' : '#a34a12',
+      background: theme.dark ? '#4d2813' : '#ffe7d7',
+    },
+    carbs: {
+      color: theme.dark ? '#ffd56e' : '#976700',
+      background: theme.dark ? '#4c3902' : '#fff0c5',
+    },
+    fat: {
+      color: theme.dark ? '#8fc8ff' : '#1c5f97',
+      background: theme.dark ? '#1b3550' : '#dbeeff',
+    },
+    fiber: {
+      color: theme.dark ? '#96e0a0' : '#257536',
+      background: theme.dark ? '#1b3921' : '#dff4e2',
+    },
+  }), [theme.dark]);
 
   const addMeal = useCallback(() => {
     const calories = parseNumberInput(mealCalories);
@@ -476,25 +499,36 @@ export default function LogScreen() {
                 <View style={[styles.macroSummaryBar, { backgroundColor: theme.colors.elevation.level1, borderColor: theme.colors.outlineVariant }]}>
                   <View style={styles.macroSummaryContent}>
                     {proteinGoal !== null ? (
-                      <View style={styles.macroToken}>
-                        <MaterialCommunityIcons name="food-steak" size={16} color={theme.colors.onSurface} />
+                      <View style={[styles.macroToken, { backgroundColor: macroPalette.protein.background }]}>
+                        <Text variant="labelSmall" style={{ color: macroPalette.protein.color, fontWeight: '700' }}>
+                          P {Math.round(todayTotalProtein)}/{Math.round(proteinGoal)}
+                        </Text>
                       </View>
                     ) : null}
                     {carbsGoal !== null ? (
-                      <View style={styles.macroToken}>
-                        <MaterialCommunityIcons name="bread-slice-outline" size={16} color={theme.colors.onSurface} />
+                      <View style={[styles.macroToken, { backgroundColor: macroPalette.carbs.background }]}>
+                        <Text variant="labelSmall" style={{ color: macroPalette.carbs.color, fontWeight: '700' }}>
+                          C {Math.round(todayTotalCarbs)}/{Math.round(carbsGoal)}
+                        </Text>
                       </View>
                     ) : null}
                     {fatGoal !== null ? (
-                      <View style={styles.macroToken}>
-                        <MaterialCommunityIcons name="water-outline" size={16} color={theme.colors.onSurface} />
+                      <View style={[styles.macroToken, { backgroundColor: macroPalette.fat.background }]}>
+                        <Text variant="labelSmall" style={{ color: macroPalette.fat.color, fontWeight: '700' }}>
+                          F {Math.round(todayTotalFat)}/{Math.round(fatGoal)}
+                        </Text>
                       </View>
                     ) : null}
-                    <View style={styles.macroToken}>
-                      <MaterialCommunityIcons name="leaf" size={16} color={theme.colors.onSurface} />
+                    <View style={[styles.macroToken, { backgroundColor: macroPalette.fiber.background }]}>
+                      <Text variant="labelSmall" style={{ color: macroPalette.fiber.color, fontWeight: '700' }}>
+                        Fib {Math.round(todayTotalFiber)}/{Math.round(fiberGoal)}
+                      </Text>
                     </View>
                   </View>
-                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>{macroGoalModeLabel}  ▼</Text>
+                  <View style={styles.macroSummaryMeta}>
+                    <MaterialCommunityIcons name={macroGoalModeIcon} size={16} color={theme.colors.onSurfaceVariant} />
+                    <MaterialCommunityIcons name="chevron-down" size={16} color={theme.colors.onSurfaceVariant} />
+                  </View>
                 </View>
               </Pressable>
             ) : null}
@@ -590,11 +624,6 @@ export default function LogScreen() {
                         <Chip icon="plus" compact onPress={() => quickAddMeal(item)}>
                           {item.title} ({item.calories})
                         </Chip>
-                        {formatMacroLine(item) ? (
-                          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                            {formatMacroLine(item)}
-                          </Text>
-                        ) : null}
                         <IconButton
                           icon={isFavorite ? 'star' : 'star-outline'}
                           size={18}
@@ -826,13 +855,19 @@ export default function LogScreen() {
             <Text variant="titleMedium" style={{ fontWeight: '700', marginBottom: 4 }}>
               Today's Macros
             </Text>
+            <View style={styles.macroModeRow}>
+              <MaterialCommunityIcons name={macroGoalModeIcon} size={16} color={theme.colors.onSurfaceVariant} />
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                {macroGoalModeText}
+              </Text>
+            </View>
 
             {proteinGoal !== null ? (
               <View style={styles.macroRow}>
                 <View style={styles.macroLabel}>
                   <View style={styles.macroRowHeader}>
-                    <MaterialCommunityIcons name="food-steak" size={16} color={theme.colors.onSurface} />
-                    <Text variant="labelSmall" style={{ fontWeight: '700' }}>Protein</Text>
+                    <MaterialCommunityIcons name="food-steak" size={16} color={macroPalette.protein.color} />
+                    <Text variant="labelSmall" style={{ fontWeight: '700', color: macroPalette.protein.color }}>Protein</Text>
                   </View>
                   <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                     {Math.round(todayTotalProtein)} / {Math.round(proteinGoal)} g
@@ -840,7 +875,7 @@ export default function LogScreen() {
                 </View>
                 <ProgressBar
                   progress={proteinProgress}
-                  color={theme.colors.secondary}
+                  color={macroPalette.protein.color}
                   style={styles.macroBar}
                 />
               </View>
@@ -850,8 +885,8 @@ export default function LogScreen() {
               <View style={styles.macroRow}>
                 <View style={styles.macroLabel}>
                   <View style={styles.macroRowHeader}>
-                    <MaterialCommunityIcons name="bread-slice-outline" size={16} color={theme.colors.onSurface} />
-                    <Text variant="labelSmall" style={{ fontWeight: '700' }}>Carbs</Text>
+                    <MaterialCommunityIcons name="bread-slice-outline" size={16} color={macroPalette.carbs.color} />
+                    <Text variant="labelSmall" style={{ fontWeight: '700', color: macroPalette.carbs.color }}>Carbs</Text>
                   </View>
                   <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                     {Math.round(todayTotalCarbs)} / {Math.round(carbsGoal)} g
@@ -859,7 +894,7 @@ export default function LogScreen() {
                 </View>
                 <ProgressBar
                   progress={carbsProgress}
-                  color={theme.colors.tertiary}
+                  color={macroPalette.carbs.color}
                   style={styles.macroBar}
                 />
               </View>
@@ -869,8 +904,8 @@ export default function LogScreen() {
               <View style={styles.macroRow}>
                 <View style={styles.macroLabel}>
                   <View style={styles.macroRowHeader}>
-                    <MaterialCommunityIcons name="water-outline" size={16} color={theme.colors.onSurface} />
-                    <Text variant="labelSmall" style={{ fontWeight: '700' }}>Fat</Text>
+                    <MaterialCommunityIcons name="water-outline" size={16} color={macroPalette.fat.color} />
+                    <Text variant="labelSmall" style={{ fontWeight: '700', color: macroPalette.fat.color }}>Fat</Text>
                   </View>
                   <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                     {Math.round(todayTotalFat)} / {Math.round(fatGoal)} g
@@ -878,7 +913,7 @@ export default function LogScreen() {
                 </View>
                 <ProgressBar
                   progress={fatProgress}
-                  color={theme.colors.outline}
+                  color={macroPalette.fat.color}
                   style={styles.macroBar}
                 />
               </View>
@@ -887,8 +922,8 @@ export default function LogScreen() {
             <View style={styles.macroRow}>
               <View style={styles.macroLabel}>
                 <View style={styles.macroRowHeader}>
-                  <MaterialCommunityIcons name="leaf" size={16} color={theme.colors.onSurface} />
-                  <Text variant="labelSmall" style={{ fontWeight: '700' }}>Fibre</Text>
+                  <MaterialCommunityIcons name="leaf" size={16} color={macroPalette.fiber.color} />
+                  <Text variant="labelSmall" style={{ fontWeight: '700', color: macroPalette.fiber.color }}>Fibre</Text>
                 </View>
                 <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                   {Math.round(todayTotalFiber)} / {Math.round(fiberGoal)} g
@@ -896,7 +931,7 @@ export default function LogScreen() {
               </View>
               <ProgressBar
                 progress={fiberProgress}
-                color={theme.colors.primary}
+                color={macroPalette.fiber.color}
                 style={styles.macroBar}
               />
             </View>
@@ -935,14 +970,22 @@ const styles = StyleSheet.create({
   },
   macroSummaryContent: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 6,
     flex: 1,
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
+  },
+  macroSummaryMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginLeft: 8,
   },
   macroToken: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
   },
   modalBackdrop: {
     flex: 1,
@@ -960,6 +1003,7 @@ const styles = StyleSheet.create({
   },
   macrosSection: { marginTop: 8, paddingTop: 8, borderTopWidth: 1 },
   macroRow: { marginBottom: 8, gap: 8 },
+  macroModeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   macroLabel: { gap: 4 },
   macroRowHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   macroBar: { height: 8, borderRadius: 999 },
