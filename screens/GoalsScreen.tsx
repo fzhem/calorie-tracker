@@ -1,13 +1,55 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Menu, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
 import type { StoredData, WeightPoint } from '../storage';
 import { estimateMetabolism, getActivityFactor } from '../metabolism';
+
+const KG_PER_LB = 0.45359237;
+const CM_PER_IN = 2.54;
+const DEFAULT_HEIGHT_CM = 175;
+const HEIGHT_MIN_CM = 100;
+const HEIGHT_MAX_CM = 250;
+const HEIGHT_MIN_IN = Math.ceil(HEIGHT_MIN_CM / CM_PER_IN);
+const HEIGHT_MAX_IN = Math.floor(HEIGHT_MAX_CM / CM_PER_IN);
+const HEIGHT_ROW_HEIGHT = 44;
+
+type WeightUnit = 'kg' | 'lb';
+type HeightUnit = 'cm' | 'ft-in';
+type HeightPickerItem = { key: string; cm: number; label: string };
+
+type HeightPickerOptionProps = {
+  label: string;
+  cm: number;
+  isSelected: boolean;
+  onSelect: (cm: number) => void;
+};
+
+const HeightPickerOption = memo(function HeightPickerOption({
+  label,
+  cm,
+  isSelected,
+  onSelect,
+}: HeightPickerOptionProps) {
+  const handlePress = useCallback(() => {
+    onSelect(cm);
+  }, [cm, onSelect]);
+
+  return (
+    <Button
+      mode={isSelected ? 'contained' : 'text'}
+      onPress={handlePress}
+      style={styles.heightPickerRow}
+      contentStyle={styles.heightPickerRowContent}
+    >
+      {label}
+    </Button>
+  );
+});
 
 function roundTo(value: number, digits = 1) {
   return Math.round(value * 10 ** digits) / 10 ** digits;
@@ -51,6 +93,25 @@ function getActivityIcon(activityLevel: StoredData['activityLevel']) {
   return 'dumbbell';
 }
 
+function formatWeightForUnit(weightKg: number, unit: WeightUnit) {
+  const displayValue = unit === 'kg' ? weightKg : weightKg / KG_PER_LB;
+  return `${roundTo(displayValue, 2)}`;
+}
+
+function formatHeightForUnit(heightCm: number, unit: HeightUnit) {
+  if (unit === 'cm') return `${roundTo(heightCm, 1)}`;
+  const totalInches = Math.round(heightCm / CM_PER_IN);
+  const feet = Math.floor(totalInches / 12);
+  const inches = totalInches % 12;
+  return `${feet} ft ${inches} in`;
+}
+
+function formatFeetInches(totalInches: number) {
+  const feet = Math.floor(totalInches / 12);
+  const inches = totalInches % 12;
+  return `${feet} ft ${inches} in`;
+}
+
 export default function GoalsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
@@ -60,12 +121,17 @@ export default function GoalsScreen() {
   const [caloriesPerKgInput, setCaloriesPerKgInput] = useState(`${DEFAULT_DATA.caloriesPerKg}`);
   const [metabolismAgeInput, setMetabolismAgeInput] = useState('');
   const [metabolismHeightInput, setMetabolismHeightInput] = useState('');
+  const [selectedHeightCm, setSelectedHeightCm] = useState<number | null>(null);
   const [manualWeightInput, setManualWeightInput] = useState('');
+  const [heightUnit, setHeightUnit] = useState<HeightUnit>('cm');
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>('kg');
+  const [heightPickerVisible, setHeightPickerVisible] = useState(false);
   const [sexMenuVisible, setSexMenuVisible] = useState(false);
   const [activityMenuVisible, setActivityMenuVisible] = useState(false);
   const [fallbackUnlocked, setFallbackUnlocked] = useState(false);
   const [weightUnlocked, setWeightUnlocked] = useState(false);
   const [goalsTab, setGoalsTab] = useState<'profile' | 'fallback'>('profile');
+  const heightListRef = useRef<FlatList<HeightPickerItem> | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
@@ -77,8 +143,9 @@ export default function GoalsScreen() {
           setBaseTargetInput(`${next.baseTarget}`);
           setCaloriesPerKgInput(`${next.caloriesPerKg}`);
           setMetabolismAgeInput(next.metabolismAgeYears ? `${next.metabolismAgeYears}` : '');
-          setMetabolismHeightInput(next.metabolismHeightCm ? `${next.metabolismHeightCm}` : '');
-          setManualWeightInput(next.manualWeightKg ? `${next.manualWeightKg}` : '');
+          setSelectedHeightCm(next.metabolismHeightCm ?? null);
+          setMetabolismHeightInput(next.metabolismHeightCm ? formatHeightForUnit(next.metabolismHeightCm, heightUnit) : '');
+          setManualWeightInput(next.manualWeightKg ? formatWeightForUnit(next.manualWeightKg, weightUnit) : '');
         }
       })
       .catch(() => Alert.alert('Storage error', 'Saved data could not be loaded.'))
@@ -94,27 +161,128 @@ export default function GoalsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setManualWeightInput(data.manualWeightKg ? `${data.manualWeightKg}` : '');
-    }, [data.manualWeightKg]),
+      setManualWeightInput(data.manualWeightKg ? formatWeightForUnit(data.manualWeightKg, weightUnit) : '');
+      setSelectedHeightCm(data.metabolismHeightCm ?? null);
+      setMetabolismHeightInput(data.metabolismHeightCm ? formatHeightForUnit(data.metabolismHeightCm, heightUnit) : '');
+    }, [data.manualWeightKg, data.metabolismHeightCm, weightUnit, heightUnit]),
   );
+
+  const onWeightUnitChange = (nextValue: string) => {
+    const nextUnit = nextValue as WeightUnit;
+    if (nextUnit === weightUnit) return;
+    const parsed = parseNumberInput(manualWeightInput);
+    if (parsed !== null) {
+      const inKg = weightUnit === 'kg' ? parsed : parsed * KG_PER_LB;
+      setManualWeightInput(formatWeightForUnit(inKg, nextUnit));
+    }
+    setWeightUnit(nextUnit);
+  };
+
+  const onHeightUnitChange = (nextValue: string) => {
+    const nextUnit = nextValue as HeightUnit;
+    if (nextUnit === heightUnit) return;
+    if (selectedHeightCm !== null) {
+      setMetabolismHeightInput(formatHeightForUnit(selectedHeightCm, nextUnit));
+    }
+    setHeightUnit(nextUnit);
+  };
+
+  const openHeightPicker = () => {
+    if (selectedHeightCm === null) {
+      setSelectedHeightCm(DEFAULT_HEIGHT_CM);
+      setMetabolismHeightInput(formatHeightForUnit(DEFAULT_HEIGHT_CM, heightUnit));
+    }
+    setHeightPickerVisible(true);
+  };
+
+  const heightPickerItems = useMemo<HeightPickerItem[]>(() => {
+    if (heightUnit === 'cm') {
+      return Array.from({ length: HEIGHT_MAX_CM - HEIGHT_MIN_CM + 1 }, (_, index) => {
+        const cm = HEIGHT_MIN_CM + index;
+        return {
+          key: `cm-${cm}`,
+          cm,
+          label: `${cm} cm`,
+        };
+      });
+    }
+
+    return Array.from({ length: HEIGHT_MAX_IN - HEIGHT_MIN_IN + 1 }, (_, index) => {
+      const inches = HEIGHT_MIN_IN + index;
+      const cm = inches * CM_PER_IN;
+      return {
+        key: `in-${inches}`,
+        cm,
+        label: formatFeetInches(inches),
+      };
+    });
+  }, [heightUnit]);
+
+  useEffect(() => {
+    if (!heightPickerVisible || selectedHeightCm === null) return;
+    let index = 0;
+    let nearestDelta = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < heightPickerItems.length; i += 1) {
+      const delta = Math.abs(heightPickerItems[i].cm - selectedHeightCm);
+      if (delta < nearestDelta) {
+        nearestDelta = delta;
+        index = i;
+      }
+    }
+    requestAnimationFrame(() => {
+      heightListRef.current?.scrollToIndex({ index, animated: false, viewPosition: 0.5 });
+    });
+  }, [heightPickerItems, heightPickerVisible, selectedHeightCm]);
+
+  const onSelectHeightCm = useCallback((heightCm: number) => {
+    setSelectedHeightCm(heightCm);
+    setMetabolismHeightInput(formatHeightForUnit(heightCm, heightUnit));
+    setHeightPickerVisible(false);
+  }, [heightUnit]);
+
+  const heightKeyExtractor = useCallback((item: HeightPickerItem) => item.key, []);
+
+  const heightGetItemLayout = useCallback((_: ArrayLike<HeightPickerItem> | null | undefined, index: number) => ({
+    length: HEIGHT_ROW_HEIGHT,
+    offset: HEIGHT_ROW_HEIGHT * index,
+    index,
+  }), []);
+
+  const renderHeightPickerItem = useCallback(({ item }: { item: HeightPickerItem }) => {
+    const isSelected = selectedHeightCm !== null && Math.abs(selectedHeightCm - item.cm) < 0.51;
+    return (
+      <HeightPickerOption
+        label={item.label}
+        cm={item.cm}
+        isSelected={isSelected}
+        onSelect={onSelectHeightCm}
+      />
+    );
+  }, [onSelectHeightCm, selectedHeightCm]);
 
   const saveTargets = () => {
     const nextBase = parseNumberInput(baseTargetInput);
     const nextPerKg = parseNumberInput(caloriesPerKgInput);
-    const nextWeight = manualWeightInput.trim() ? parseNumberInput(manualWeightInput) : null;
+    const nextWeightInput = manualWeightInput.trim() ? parseNumberInput(manualWeightInput) : null;
+    const nextWeightKg = nextWeightInput !== null
+      ? (weightUnit === 'kg' ? nextWeightInput : nextWeightInput * KG_PER_LB)
+      : null;
     const nextAge = metabolismAgeInput.trim() ? parseNumberInput(metabolismAgeInput) : null;
-    const nextHeight = metabolismHeightInput.trim() ? parseNumberInput(metabolismHeightInput) : null;
+    const nextHeightCm = selectedHeightCm;
 
     if (!nextBase || nextBase <= 0) { Alert.alert('Invalid goal', 'Enter a valid fallback calorie target.'); return; }
     if (!nextPerKg || nextPerKg <= 0) { Alert.alert('Invalid multiplier', 'Enter calories per kg as a positive number.'); return; }
     if (nextAge !== null && (nextAge < 13 || nextAge > 120)) { Alert.alert('Invalid age', 'Enter an age between 13 and 120.'); return; }
-    if (nextHeight !== null && (nextHeight < 100 || nextHeight > 250)) { Alert.alert('Invalid height', 'Enter height in cm between 100 and 250.'); return; }
+    if (nextHeightCm !== null && (nextHeightCm < 100 || nextHeightCm > 250)) {
+      Alert.alert('Invalid height', 'Enter a valid height for your selected unit.');
+      return;
+    }
 
     let nextWeightHistory = data.weightHistory;
-    if (nextWeight && nextWeight > 0) {
+    if (nextWeightKg && nextWeightKg > 0) {
       nextWeightHistory = mergeWeightHistory(data.weightHistory, [{
         recordedAt: new Date().toISOString(),
-        weightKg: roundTo(nextWeight, 2),
+        weightKg: roundTo(nextWeightKg, 2),
         source: 'manual',
       }]);
     }
@@ -124,12 +292,13 @@ export default function GoalsScreen() {
       baseTarget: Math.round(nextBase),
       caloriesPerKg: roundTo(nextPerKg, 1),
       metabolismAgeYears: nextAge !== null ? Math.round(nextAge) : null,
-      metabolismHeightCm: nextHeight !== null ? roundTo(nextHeight, 1) : null,
-      manualWeightKg: nextWeight && nextWeight > 0 ? roundTo(nextWeight, 2) : null,
+      metabolismHeightCm: nextHeightCm !== null ? roundTo(nextHeightCm, 1) : null,
+      manualWeightKg: nextWeightKg && nextWeightKg > 0 ? roundTo(nextWeightKg, 2) : null,
       weightHistory: nextWeightHistory,
     }));
 
-    setManualWeightInput(nextWeight && nextWeight > 0 ? `${roundTo(nextWeight, 2)}` : '');
+    setManualWeightInput(nextWeightKg && nextWeightKg > 0 ? formatWeightForUnit(roundTo(nextWeightKg, 2), weightUnit) : '');
+    setMetabolismHeightInput(nextHeightCm !== null ? formatHeightForUnit(roundTo(nextHeightCm, 1), heightUnit) : '');
   };
 
   const clearManualWeight = () => {
@@ -184,13 +353,18 @@ export default function GoalsScreen() {
               keyboardType="numeric"
               mode="outlined"
             />
-            <TextInput
-              label="Height (cm)"
-              value={metabolismHeightInput}
-              onChangeText={setMetabolismHeightInput}
-              keyboardType="numeric"
-              mode="outlined"
-            />
+            <Pressable onPress={openHeightPicker}>
+              <View pointerEvents="none">
+                <TextInput
+                  label={`Height (${heightUnit})`}
+                  value={metabolismHeightInput}
+                  mode="outlined"
+                  editable={false}
+                  placeholder={heightUnit === 'cm' ? 'Tap to pick' : 'Tap to pick'}
+                  right={<TextInput.Icon icon="chevron-down" />}
+                />
+              </View>
+            </Pressable>
 
             <Text variant="bodySmall" style={{ marginTop: 10, color: theme.colors.onSurfaceVariant }}>Sex</Text>
             <Menu
@@ -284,14 +458,22 @@ export default function GoalsScreen() {
 
             <Text variant="labelMedium" style={{ marginTop: 8 }}>Weight Tracking</Text>
             <TextInput
-              label="Manual weight (kg)"
+              label={`Manual weight (${weightUnit})`}
               value={manualWeightInput}
               onChangeText={setManualWeightInput}
               keyboardType="numeric"
-              placeholder="78.45"
+              placeholder={weightUnit === 'kg' ? '78.45' : '173.00'}
               mode="outlined"
               editable={weightUnlocked}
               right={<TextInput.Icon icon={weightUnlocked ? 'lock-open-variant' : 'lock'} onPress={() => setWeightUnlocked(!weightUnlocked)} />}
+            />
+            <SegmentedButtons
+              value={weightUnit}
+              onValueChange={onWeightUnitChange}
+              buttons={[
+                { value: 'kg', label: 'kg' },
+                { value: 'lb', label: 'lb' },
+              ]}
             />
             <Button
               mode="text"
@@ -352,6 +534,53 @@ export default function GoalsScreen() {
           </Card.Content>
         </Card>
       </ScrollView>
+
+      <Modal
+        visible={heightPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setHeightPickerVisible(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setHeightPickerVisible(false)}>
+          <Pressable style={[styles.modalCard, { backgroundColor: theme.colors.surface }]} onPress={() => {}}>
+            <Text variant="titleMedium" style={{ fontWeight: '700' }}>Select height</Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              Scroll and tap your value.
+            </Text>
+            <SegmentedButtons
+              value={heightUnit}
+              onValueChange={onHeightUnitChange}
+              buttons={[
+                { value: 'cm', label: 'cm' },
+                { value: 'ft-in', label: 'ft/in' },
+              ]}
+            />
+            <FlatList
+              ref={heightListRef}
+              data={heightPickerItems}
+              keyExtractor={heightKeyExtractor}
+              style={styles.heightPickerList}
+              showsVerticalScrollIndicator
+              initialNumToRender={12}
+              maxToRenderPerBatch={12}
+              updateCellsBatchingPeriod={16}
+              windowSize={7}
+              removeClippedSubviews
+              getItemLayout={heightGetItemLayout}
+              onScrollToIndexFailed={({ index }) => {
+                heightListRef.current?.scrollToOffset({
+                  offset: Math.max(0, index * HEIGHT_ROW_HEIGHT),
+                  animated: false,
+                });
+              }}
+              renderItem={renderHeightPickerItem}
+            />
+            <Button mode="outlined" onPress={() => setHeightPickerVisible(false)}>
+              Close
+            </Button>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -362,4 +591,26 @@ const styles = StyleSheet.create({
   card: { borderRadius: 24 },
   formArea: { gap: 6 },
   supportingText: {},
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    borderRadius: 20,
+    padding: 14,
+    gap: 10,
+    maxHeight: '80%',
+  },
+  heightPickerList: {
+    maxHeight: 320,
+  },
+  heightPickerRow: {
+    justifyContent: 'center',
+    height: HEIGHT_ROW_HEIGHT,
+  },
+  heightPickerRowContent: {
+    height: HEIGHT_ROW_HEIGHT,
+  },
 });
