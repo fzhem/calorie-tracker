@@ -7,7 +7,6 @@ export type MealEntry = {
   carbsGrams?: number | null;
   fiberGrams?: number | null;
   loggedAt: string;
-  healthConnectSyncAt?: string | null;
 };
 
 export type FavoriteQuickAdd = {
@@ -63,7 +62,6 @@ export type StoredData = {
   bodyFatHistory: BodyFatPoint[];
   lastWeightSyncAt: string | null;
   lastBodyFatSyncAt: string | null;
-  lastCalorieSyncAt: string | null;
   proteinGoalGrams: number | null;
   fatGoalGrams: number | null;
   carbsGoalGrams: number | null;
@@ -92,7 +90,6 @@ export const DEFAULT_DATA: StoredData = {
   bodyFatHistory: [],
   lastWeightSyncAt: null,
   lastBodyFatSyncAt: null,
-  lastCalorieSyncAt: null,
   proteinGoalGrams: null,
   fatGoalGrams: null,
   carbsGoalGrams: null,

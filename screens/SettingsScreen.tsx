@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
-import type { BodyFatPoint, MealEntry, StoredData, WeightPoint } from '../storage';
+import type { BodyFatPoint, StoredData, WeightPoint } from '../storage';
 import { useThemeMode, type ThemeMode } from '../themeMode';
 
 type HealthConnectModule = typeof import('react-native-health-connect');
@@ -19,12 +19,6 @@ type HealthStatus = 'idle' | 'available' | 'syncing' | 'unavailable' | 'update-r
 function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
-  return next;
-}
-
-function addMinutes(date: Date, minutes: number) {
-  const next = new Date(date);
-  next.setMinutes(next.getMinutes() + minutes);
   return next;
 }
 
@@ -175,28 +169,6 @@ function extractHealthOrigin(record: unknown) {
   } as Pick<WeightPoint, 'originAppId' | 'originAppName' | 'originDevice'>;
 }
 
-function buildNutritionRecord(entry: MealEntry, healthModule: HealthConnectModule) {
-  const startTime = new Date(entry.loggedAt);
-
-  return {
-    recordType: 'Nutrition' as const,
-    startTime: startTime.toISOString(),
-    endTime: addMinutes(startTime, 1).toISOString(),
-    name: entry.title,
-    mealType: healthModule.MealType.UNKNOWN,
-    energy: { value: entry.calories, unit: 'kilocalories' as const },
-    ...(typeof entry.proteinGrams === 'number' ? { protein: { value: entry.proteinGrams, unit: 'grams' as const } } : {}),
-    ...(typeof entry.fatGrams === 'number' ? { totalFat: { value: entry.fatGrams, unit: 'grams' as const } } : {}),
-    ...(typeof entry.carbsGrams === 'number' ? { totalCarbohydrate: { value: entry.carbsGrams, unit: 'grams' as const } } : {}),
-    ...(typeof entry.fiberGrams === 'number' ? { dietaryFiber: { value: entry.fiberGrams, unit: 'grams' as const } } : {}),
-    metadata: {
-      clientRecordId: `meal-entry-${entry.id}`,
-      clientRecordVersion: 1,
-      recordingMethod: healthModule.RecordingMethod.RECORDING_METHOD_MANUAL_ENTRY,
-    },
-  };
-}
-
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
@@ -206,7 +178,6 @@ export default function SettingsScreen() {
   const [healthStatus, setHealthStatus] = useState<HealthStatus>('idle');
   const [healthMessage, setHealthMessage] = useState('Health Connect sync is ready to configure.');
   const [isSyncingWeight, setIsSyncingWeight] = useState(false);
-  const [isSyncingCalories, setIsSyncingCalories] = useState(false);
 
   const loadStoredData = useCallback(async () => {
     const stored = await AsyncStorage.getItem(STORAGE_KEY);
@@ -250,10 +221,10 @@ export default function SettingsScreen() {
     healthConnect.getSdkStatus().then((status) => {
       if (status === healthConnect.SdkAvailabilityStatus.SDK_AVAILABLE) {
         setHealthStatus('available');
-        setHealthMessage('Health Connect is available. Sync body data to import weight/body fat, or sync calories to export meal logs.');
+        setHealthMessage('Health Connect is available. Sync body data to import weight and body fat records.');
       } else if (status === healthConnect.SdkAvailabilityStatus.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) {
         setHealthStatus('update-required');
-        setHealthMessage('Install or update Health Connect before syncing body or calorie data.');
+        setHealthMessage('Install or update Health Connect before syncing body data.');
       } else {
         setHealthStatus('unavailable');
         setHealthMessage('Health Connect is not available on this device yet.');
@@ -270,11 +241,6 @@ export default function SettingsScreen() {
       Alert.alert('Storage error', 'Changes could not be saved.'),
     );
   }, [data, isReady]);
-
-  const unsyncedCalorieEntries = useMemo(
-    () => data.entries.filter((entry) => !entry.healthConnectSyncAt),
-    [data.entries],
-  );
 
   const ensureHealthConnectAvailable = async () => {
     if (!healthConnect) {
@@ -408,75 +374,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const syncCalories = async () => {
-    if (!healthConnect) { Alert.alert('Unavailable', 'Health Connect requires an Android development build.'); return; }
-    const latestData = await loadStoredData().catch(() => null);
-    if (!latestData) {
-      Alert.alert('Storage error', 'Saved data could not be loaded.');
-      return;
-    }
-
-    const entriesToSync = latestData.entries.filter((entry) => !entry.healthConnectSyncAt);
-    if (!entriesToSync.length) {
-      setHealthStatus('available');
-      setHealthMessage('All meal entries are already exported to Health Connect.');
-      return;
-    }
-
-    setIsSyncingCalories(true);
-    setHealthMessage(`Syncing ${entriesToSync.length} calorie entr${entriesToSync.length === 1 ? 'y' : 'ies'} to Health Connect...`);
-
-    try {
-      const available = await ensureHealthConnectAvailable();
-      if (!available) return;
-
-      const permissions: Permission[] = [{ accessType: 'write', recordType: 'Nutrition' }];
-      const granted = await healthConnect.requestPermission(permissions);
-      const hasNutritionWrite = hasPermission(granted, 'write', 'Nutrition');
-      if (!hasNutritionWrite) {
-        setHealthStatus('error');
-        setHealthMessage(
-          'Nutrition write permission is off. Open Health Connect settings and allow this app to write Nutrition records, then sync calories again.',
-        );
-        Alert.alert(
-          'Nutrition Permission Needed',
-          'This app needs Health Connect permission to write Nutrition records. In Health Connect, enable Nutrition under app permissions, then tap Sync calories again.',
-          [{ text: 'OK' }],
-        );
-        return;
-      }
-
-      const records = entriesToSync.map((entry) => buildNutritionRecord(entry, healthConnect));
-      await healthConnect.insertRecords(records);
-
-      const syncedEntryIds = new Set(entriesToSync.map((entry) => entry.id));
-      const syncedAt = new Date().toISOString();
-
-      setData((prev) => ({
-        ...prev,
-        entries: prev.entries.map((entry) => (
-          syncedEntryIds.has(entry.id)
-            ? { ...entry, healthConnectSyncAt: syncedAt }
-            : entry
-        )),
-        lastCalorieSyncAt: syncedAt,
-      }));
-
-      setHealthStatus('available');
-      setHealthMessage(`Exported ${records.length} calorie entr${records.length === 1 ? 'y' : 'ies'} to Health Connect.`);
-    } catch (error) {
-      const reason = getErrorMessage(error);
-      setHealthStatus('error');
-      setHealthMessage(`Calorie sync failed: ${reason}`);
-      Alert.alert(
-        'Calorie Sync Failed',
-        `Could not export calorie data. ${reason}`,
-      );
-    } finally {
-      setIsSyncingCalories(false);
-    }
-  };
-
   const openHealthSettings = () => {
     if (!healthConnect) {
       Alert.alert('Unavailable', 'Health Connect requires an Android development build.');
@@ -547,40 +444,20 @@ export default function SettingsScreen() {
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
             Last body fat sync: {data.lastBodyFatSyncAt ? formatDisplayDate(data.lastBodyFatSyncAt) : 'Never'}
           </Text>
-          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            Pending calorie exports: {unsyncedCalorieEntries.length}
-          </Text>
-          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            Last calorie sync: {data.lastCalorieSyncAt ? formatDisplayDate(data.lastCalorieSyncAt) : 'Never'}
-          </Text>
           <Chip icon={healthStatus === 'available' ? 'check-circle' : 'information-outline'}>
             Status: {healthStatus}
           </Chip>
           <View style={styles.buttonColumn}>
-            <View style={styles.buttonRow}>
-              <Button
-                style={styles.button}
-                mode="contained"
-                icon="sync"
-                loading={isSyncingWeight}
-                disabled={isSyncingWeight || isSyncingCalories}
-                onPress={onPressSyncWeight}
-              >
-                {isSyncingWeight ? 'Syncing...' : 'Sync body data'}
-              </Button>
-              <Button
-                style={styles.button}
-                mode="contained"
-                icon="food-apple"
-                buttonColor={theme.colors.tertiary}
-                textColor={theme.colors.onTertiary}
-                loading={isSyncingCalories}
-                disabled={isSyncingCalories || isSyncingWeight}
-                onPress={() => { void syncCalories(); }}
-              >
-                {isSyncingCalories ? 'Syncing...' : 'Sync calories'}
-              </Button>
-            </View>
+            <Button
+              style={styles.button}
+              mode="contained"
+              icon="sync"
+              loading={isSyncingWeight}
+              disabled={isSyncingWeight}
+              onPress={onPressSyncWeight}
+            >
+              {isSyncingWeight ? 'Syncing...' : 'Sync body data'}
+            </Button>
             <Button mode="outlined" icon="cog" onPress={openHealthSettings}>
               Open settings
             </Button>
@@ -598,6 +475,5 @@ const styles = StyleSheet.create({
   card: { borderRadius: 24 },
   formArea: { gap: 10 },
   buttonColumn: { gap: 10 },
-  buttonRow: { flexDirection: 'row', gap: 10 },
   button: { flex: 1 },
 });
