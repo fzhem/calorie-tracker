@@ -269,10 +269,13 @@ export default function GoalsScreen() {
 
     const timer = setTimeout(() => {
       heightListRef.current?.scrollTo({ y: pending * HEIGHT_ROW_HEIGHT, animated: false });
+      lastScrollIndexRef.current = pending;
       pendingUnitTargetIndexRef.current = null;
-      suppressEffectScrollRef.current = false;
-      isUnitSwitchingRef.current = false;
-    }, 0);
+      setTimeout(() => {
+        suppressEffectScrollRef.current = false;
+        isUnitSwitchingRef.current = false;
+      }, 180);
+    }, 60);
 
     return () => clearTimeout(timer);
   }, [heightUnit, heightPickerOpen]);
@@ -427,6 +430,7 @@ export default function GoalsScreen() {
 
     setManualWeightInput(nextWeightKg && nextWeightKg > 0 ? formatWeightForUnit(roundTo(nextWeightKg, 2), weightUnit) : '');
     setMetabolismHeightInput(nextHeightCm !== null ? formatHeightForUnit(roundTo(nextHeightCm, 1), heightUnit) : '');
+    Vibration.vibrate(18);
   };
 
   const resetOverrides = () => {
