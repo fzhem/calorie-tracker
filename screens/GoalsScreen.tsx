@@ -147,7 +147,7 @@ export default function GoalsScreen() {
       .then((stored) => {
         if (stored) {
           const parsed = JSON.parse(stored) as StoredData;
-          const next = { ...DEFAULT_DATA, ...parsed, entries: parsed.entries ?? [], weightHistory: parsed.weightHistory ?? [] };
+          const next = { ...DEFAULT_DATA, ...parsed, entries: parsed.entries ?? [], weightHistory: parsed.weightHistory ?? [], bodyFatHistory: parsed.bodyFatHistory ?? [] };
           setData(next);
           setBaseTargetInput(`${next.baseTarget}`);
           setCaloriesPerKgInput(`${next.caloriesPerKg}`);
@@ -176,10 +176,19 @@ export default function GoalsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setManualWeightInput(data.manualWeightKg ? formatWeightForUnit(data.manualWeightKg, weightUnit) : '');
-      setSelectedHeightCm(data.metabolismHeightCm ?? null);
-      setMetabolismHeightInput(data.metabolismHeightCm ? formatHeightForUnit(data.metabolismHeightCm, heightUnit) : '');
-    }, [data.manualWeightKg, data.metabolismHeightCm, weightUnit, heightUnit]),
+      AsyncStorage.getItem(STORAGE_KEY)
+        .then((stored) => {
+          const base = stored ? (JSON.parse(stored) as StoredData) : null;
+          const next: StoredData = base
+            ? { ...DEFAULT_DATA, ...base, entries: base.entries ?? [], weightHistory: base.weightHistory ?? [], bodyFatHistory: base.bodyFatHistory ?? [] }
+            : DEFAULT_DATA;
+          setData(next);
+          setManualWeightInput(next.manualWeightKg ? formatWeightForUnit(next.manualWeightKg, weightUnit) : '');
+          setSelectedHeightCm(next.metabolismHeightCm ?? null);
+          setMetabolismHeightInput(next.metabolismHeightCm ? formatHeightForUnit(next.metabolismHeightCm, heightUnit) : '');
+        })
+        .catch(() => {});
+    }, [weightUnit, heightUnit]),
   );
 
   const onWeightUnitChange = (nextValue: string) => {
@@ -330,27 +339,28 @@ export default function GoalsScreen() {
     if (nextFat !== null && nextFat < 0) { Alert.alert('Invalid fat goal', 'Fat must be 0 or more.'); return; }
     if (nextCarbs !== null && nextCarbs < 0) { Alert.alert('Invalid carbs goal', 'Carbs must be 0 or more.'); return; }
 
-    let nextWeightHistory = data.weightHistory;
-    if (nextWeightKg && nextWeightKg > 0) {
-      nextWeightHistory = mergeWeightHistory(data.weightHistory, [{
-        recordedAt: new Date().toISOString(),
-        weightKg: roundTo(nextWeightKg, 2),
-        source: 'manual',
-      }]);
-    }
-
-    setData((prev) => ({
-      ...prev,
-      baseTarget: Math.round(nextBase),
-      caloriesPerKg: roundTo(nextPerKg, 1),
-      metabolismAgeYears: nextAge !== null ? Math.round(nextAge) : null,
-      metabolismHeightCm: nextHeightCm !== null ? roundTo(nextHeightCm, 1) : null,
-      manualWeightKg: nextWeightKg && nextWeightKg > 0 ? roundTo(nextWeightKg, 2) : null,
-      weightHistory: nextWeightHistory,
-      proteinGoalGrams: nextProtein !== null ? roundTo(nextProtein, 1) : null,
-      fatGoalGrams: nextFat !== null ? roundTo(nextFat, 1) : null,
-      carbsGoalGrams: nextCarbs !== null ? roundTo(nextCarbs, 1) : null,
-    }));
+    setData((prev) => {
+      let nextWeightHistory = prev.weightHistory;
+      if (nextWeightKg && nextWeightKg > 0) {
+        nextWeightHistory = mergeWeightHistory(prev.weightHistory, [{
+          recordedAt: new Date().toISOString(),
+          weightKg: roundTo(nextWeightKg, 2),
+          source: 'manual',
+        }]);
+      }
+      return {
+        ...prev,
+        baseTarget: Math.round(nextBase),
+        caloriesPerKg: roundTo(nextPerKg, 1),
+        metabolismAgeYears: nextAge !== null ? Math.round(nextAge) : null,
+        metabolismHeightCm: nextHeightCm !== null ? roundTo(nextHeightCm, 1) : null,
+        manualWeightKg: nextWeightKg && nextWeightKg > 0 ? roundTo(nextWeightKg, 2) : null,
+        weightHistory: nextWeightHistory,
+        proteinGoalGrams: nextProtein !== null ? roundTo(nextProtein, 1) : null,
+        fatGoalGrams: nextFat !== null ? roundTo(nextFat, 1) : null,
+        carbsGoalGrams: nextCarbs !== null ? roundTo(nextCarbs, 1) : null,
+      };
+    });
 
     setManualWeightInput(nextWeightKg && nextWeightKg > 0 ? formatWeightForUnit(roundTo(nextWeightKg, 2), weightUnit) : '');
     setMetabolismHeightInput(nextHeightCm !== null ? formatHeightForUnit(roundTo(nextHeightCm, 1), heightUnit) : '');
