@@ -27,10 +27,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Set up JDK 25
+      - name: Set up JDK 21
         uses: actions/setup-java@1d018f9b8b9b505bb578a83b230fabcce01af93b
         with:
-          java-version: '25'
+          java-version: '21'
           distribution: 'temurin'
 
       - name: Prebuild Android
@@ -38,11 +38,11 @@ jobs:
 
       - name: Build APK
         if: github.event.inputs.build_type == 'apk'
-        run: cd android && ./gradlew assembleRelease -Dorg.gradle.jvmargs="-XX:+IgnoreUnrecognizedVMOptions -XX:+UseG1GC"
+        run: cd android && ./gradlew assembleRelease
 
       - name: Build AAB
         if: github.event.inputs.build_type == 'aab'
-        run: cd android && ./gradlew bundleRelease -Dorg.gradle.jvmargs="-XX:+IgnoreUnrecognizedVMOptions -XX:+UseG1GC"
+        run: cd android && ./gradlew bundleRelease
 
       - name: Upload APK artifact
         if: github.event.inputs.build_type == 'apk'
