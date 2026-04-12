@@ -133,7 +133,7 @@ function formatRelativeTime(dateStr: string) {
 
 type WeightTrend = 'gaining' | 'losing' | 'maintaining';
 
-function calculateWeightTrend(history: WeightPoint[]): WeightTrend | null {
+function calculateTrendWithBand(history: WeightPoint[], maintainBandPerWeek: number): WeightTrend | null {
   if (history.length < 2) return null;
 
   const sorted = [...history].sort(
@@ -165,13 +165,20 @@ function calculateWeightTrend(history: WeightPoint[]): WeightTrend | null {
 
   if (denominator === 0) return 'maintaining';
 
-  const slopeKgPerDay = numerator / denominator;
-  const weeklyChangeKg = slopeKgPerDay * 7;
-  const maintainBandKgPerWeek = 0.2;
+  const slopePerDay = numerator / denominator;
+  const weeklyChange = slopePerDay * 7;
 
-  if (weeklyChangeKg > maintainBandKgPerWeek) return 'gaining';
-  if (weeklyChangeKg < -maintainBandKgPerWeek) return 'losing';
+  if (weeklyChange > maintainBandPerWeek) return 'gaining';
+  if (weeklyChange < -maintainBandPerWeek) return 'losing';
   return 'maintaining';
+}
+
+function calculateWeightTrend(history: WeightPoint[]): WeightTrend | null {
+  return calculateTrendWithBand(history, 0.2);
+}
+
+function calculateBodyFatTrend(history: WeightPoint[]): WeightTrend | null {
+  return calculateTrendWithBand(history, 0.05);
 }
 
 function getWeeklyData(history: WeightPoint[]): { values: Array<number | null>; dayLabels: string[]; todayIndex: number } {
@@ -1303,17 +1310,17 @@ export default function GraphsScreen() {
                       <Text
                         variant="labelSmall"
                         style={{
-                          color: calculateWeightTrend(bodyFatAsWeightPoints) === 'gaining'
+                          color: calculateBodyFatTrend(bodyFatAsWeightPoints) === 'gaining'
                             ? theme.colors.error
-                            : calculateWeightTrend(bodyFatAsWeightPoints) === 'losing'
+                            : calculateBodyFatTrend(bodyFatAsWeightPoints) === 'losing'
                               ? theme.colors.primary
                               : theme.colors.onSurfaceVariant,
                           fontWeight: '600',
                         }}
                       >
-                        {calculateWeightTrend(bodyFatAsWeightPoints) === 'gaining'
+                        {calculateBodyFatTrend(bodyFatAsWeightPoints) === 'gaining'
                           ? '↑ Gaining'
-                          : calculateWeightTrend(bodyFatAsWeightPoints) === 'losing'
+                          : calculateBodyFatTrend(bodyFatAsWeightPoints) === 'losing'
                             ? '↓ Losing'
                             : '→ Maintaining'}
                       </Text>
