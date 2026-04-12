@@ -66,7 +66,6 @@ export default function GoalsScreen() {
   const [fallbackUnlocked, setFallbackUnlocked] = useState(false);
   const [weightUnlocked, setWeightUnlocked] = useState(false);
   const [goalsTab, setGoalsTab] = useState<'profile' | 'fallback'>('profile');
-  const [showWeightDetails, setShowWeightDetails] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
@@ -269,26 +268,11 @@ export default function GoalsScreen() {
               value={manualWeightInput}
               onChangeText={setManualWeightInput}
               keyboardType="numeric"
-              placeholder="78.4"
+              placeholder="78.45"
               mode="outlined"
               editable={weightUnlocked}
               right={<TextInput.Icon icon={weightUnlocked ? 'lock-open-variant' : 'lock'} onPress={() => setWeightUnlocked(!weightUnlocked)} />}
             />
-            <Pressable onPress={() => setShowWeightDetails((prev) => !prev)}>
-              <Text variant="bodySmall" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}> 
-                Latest: {latestWeight ? `${latestWeight} kg` : 'No weight recorded yet'} ({showWeightDetails ? 'Hide details' : 'Show details'})
-              </Text>
-            </Pressable>
-            {showWeightDetails ? (
-              <>
-                <Text variant="bodySmall" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}> 
-                  Recorded: {latestWeightPoint ? formatDisplayDate(latestWeightPoint.recordedAt) : (data.manualWeightKg ? 'Manual profile value' : 'N/A')}
-                </Text>
-                <Text variant="bodySmall" style={[styles.supportingText, { color: theme.colors.onSurfaceVariant }]}> 
-                  Health Connect sync: {data.lastWeightSyncAt ? formatDisplayDate(data.lastWeightSyncAt) : 'Never'}
-                </Text>
-              </>
-            ) : null}
 
             <Text variant="labelMedium" style={{ marginTop: 8 }}>Estimated Metabolism</Text>
             <Card style={{ backgroundColor: theme.colors.surfaceVariant, marginHorizontal: 0, marginVertical: 8 }}>
