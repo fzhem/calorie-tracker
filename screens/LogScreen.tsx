@@ -290,29 +290,49 @@ const QuickLogCard = memo(function QuickLogCard({
                 { value: 'favorites', label: 'Favourites', icon: 'star' },
               ]}
             />
-            <View style={styles.quickAddRow}>
-              {activeQuickAdds.length ? activeQuickAdds.map((item) => {
-                const key = quickAddKey(item);
-                const isFavorite = favoriteQuickAddKeys.has(key);
-                return (
-                  <View key={key} style={styles.quickAddItem}>
-                    <Chip icon="plus" compact onPress={() => onQuickAddMeal(item)}>
-                      {item.title} ({item.calories})
-                    </Chip>
-                    <IconButton
-                      icon={isFavorite ? 'star' : 'star-outline'}
-                      size={18}
-                      onPress={() => onToggleFavoriteQuickAdd(item)}
-                      accessibilityLabel={isFavorite ? 'Remove favourite' : 'Add favourite'}
-                    />
+            {activeQuickAdds.length ? (
+              <View>
+                <View style={[styles.quickAddScrollFrame, { borderColor: theme.colors.outlineVariant }]}> 
+                  <ScrollView
+                    style={styles.quickAddScroll}
+                    showsVerticalScrollIndicator={false}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={styles.quickAddRow}
+                  >
+                    {activeQuickAdds.map((item) => {
+                      const key = quickAddKey(item);
+                      const isFavorite = favoriteQuickAddKeys.has(key);
+                      return (
+                        <View key={key} style={styles.quickAddItem}>
+                          <Chip icon="plus" compact onPress={() => onQuickAddMeal(item)}>
+                            {item.title} ({item.calories})
+                          </Chip>
+                          <IconButton
+                            icon={isFavorite ? 'star' : 'star-outline'}
+                            size={18}
+                            onPress={() => onToggleFavoriteQuickAdd(item)}
+                            accessibilityLabel={isFavorite ? 'Remove favourite' : 'Add favourite'}
+                          />
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+                {activeQuickAdds.length > 3 ? (
+                  <View style={styles.quickAddScrollHint}>
+                    <MaterialCommunityIcons name="chevron-double-down" size={14} color={theme.colors.onSurfaceVariant} />
+                    <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      Scroll for more
+                    </Text>
                   </View>
-                );
-              }) : (
-                <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                  No favourites yet. Star an item from Recents.
-                </Text>
-              )}
-            </View>
+                ) : null}
+              </View>
+            ) : (
+              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                No favourites yet. Star an item from Recents.
+              </Text>
+            )}
           </View>
         ) : null}
       </Card.Content>
@@ -598,6 +618,103 @@ export default function LogScreen() {
     closeEditModal();
   }, [closeEditModal, editDraft]);
 
+  const renderedEntries = useMemo(() => {
+    return visibleEntries.map((entry) => {
+      const mismatch = getMacroCalorieMismatch(entry.calories, entry);
+      const entryAsQuickAdd: QuickAddItem = {
+        title: entry.title,
+        calories: entry.calories,
+        proteinGrams: entry.proteinGrams ?? null,
+        fatGrams: entry.fatGrams ?? null,
+        carbsGrams: entry.carbsGrams ?? null,
+        fiberGrams: entry.fiberGrams ?? null,
+      };
+      const isEntryFavorite = favoriteQuickAddKeys.has(quickAddKey(entryAsQuickAdd));
+
+      return (
+        <Surface
+          key={entry.id}
+          style={[
+            styles.entryRow,
+            {
+              backgroundColor: theme.colors.elevation.level1,
+              borderColor: theme.colors.outlineVariant,
+            },
+          ]}
+          elevation={1}
+        >
+          <View style={styles.entryMain}>
+            <View style={styles.entryTopLine}>
+              <View style={styles.entryTitleRow}>
+                <Text
+                  variant="titleSmall"
+                  numberOfLines={1}
+                  style={[styles.entryTitle, { color: theme.colors.onSurface }]}
+                >
+                  {entry.title}
+                </Text>
+                <Text variant="labelMedium" style={{ color: theme.colors.primary, fontWeight: '700' }}>
+                  {entry.calories} kcal
+                </Text>
+              </View>
+            </View>
+            <Text
+              variant="bodySmall"
+              numberOfLines={1}
+              style={[styles.entryMeta, { color: theme.colors.onSurfaceVariant }]}
+            >
+              {formatDisplayDate(entry.loggedAt)}{formatMacroLine(entry) ? `  •  ${formatMacroLine(entry)}` : ''}
+            </Text>
+            {mismatch ? (
+              <View style={styles.mismatchRow}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={14} color={theme.colors.error} />
+                <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.error }}>
+                  Macros imply ~{mismatch.macroCalories} kcal.
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.entryActions}>
+            <IconButton
+              icon={isEntryFavorite ? 'star' : 'star-outline'}
+              size={18}
+              style={styles.entryActionIcon}
+              onPress={() => toggleFavoriteQuickAdd(entryAsQuickAdd)}
+              accessibilityLabel={isEntryFavorite ? 'Remove favourite' : 'Add favourite'}
+            />
+            <IconButton
+              icon="pencil-outline"
+              size={18}
+              style={styles.entryActionIcon}
+              onPress={() => openEditEntry(entry)}
+              accessibilityLabel="Edit entry"
+            />
+            <IconButton
+              icon="delete-outline"
+              size={18}
+              style={styles.entryActionIcon}
+              iconColor={theme.colors.error}
+              onPress={() => deleteEntry(entry.id)}
+              accessibilityLabel="Delete entry"
+            />
+          </View>
+        </Surface>
+      );
+    });
+  }, [
+    deleteEntry,
+    favoriteQuickAddKeys,
+    openEditEntry,
+    theme.colors.elevation.level1,
+    theme.colors.error,
+    theme.colors.onSurface,
+    theme.colors.onSurfaceVariant,
+    theme.colors.outlineVariant,
+    theme.colors.primary,
+    toggleFavoriteQuickAdd,
+    visibleEntries,
+  ]);
+
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -634,7 +751,12 @@ export default function LogScreen() {
               style={styles.progressBar}
             />
             {hasMacroGoals ? (
-              <Pressable onPress={() => setMacroModalVisible(true)}>
+              <Pressable
+                onPress={() => {
+                  Vibration.vibrate(10);
+                  setMacroModalVisible(true);
+                }}
+              >
                 <View style={[styles.macroSummaryBar, { backgroundColor: theme.colors.elevation.level1, borderColor: theme.colors.outlineVariant }]}>
                   <View style={styles.macroSummaryContent}>
                     {proteinGoal !== null ? (
@@ -705,89 +827,7 @@ export default function LogScreen() {
             )}
           />
           <Card.Content style={styles.entriesList}>
-          {visibleEntries.length ? (
-            visibleEntries.map((entry) => {
-              const mismatch = getMacroCalorieMismatch(entry.calories, entry);
-              const entryAsQuickAdd: QuickAddItem = {
-                title: entry.title,
-                calories: entry.calories,
-                proteinGrams: entry.proteinGrams ?? null,
-                fatGrams: entry.fatGrams ?? null,
-                carbsGrams: entry.carbsGrams ?? null,
-                fiberGrams: entry.fiberGrams ?? null,
-              };
-              const isEntryFavorite = favoriteQuickAddKeys.has(quickAddKey(entryAsQuickAdd));
-              return (
-                <Surface
-                  key={entry.id}
-                  style={[
-                    styles.entryRow,
-                    {
-                      backgroundColor: theme.colors.elevation.level1,
-                      borderColor: theme.colors.outlineVariant,
-                    },
-                  ]}
-                  elevation={1}
-                >
-                  <View style={styles.entryMain}>
-                    <View style={styles.entryTopLine}>
-                      <View style={styles.entryTitleRow}>
-                        <Text
-                          variant="titleSmall"
-                          numberOfLines={1}
-                          style={[styles.entryTitle, { color: theme.colors.onSurface }]}
-                        >
-                          {entry.title}
-                        </Text>
-                        <Text variant="labelMedium" style={{ color: theme.colors.primary, fontWeight: '700' }}>
-                          {entry.calories} kcal
-                        </Text>
-                      </View>
-                    </View>
-                    <Text
-                      variant="bodySmall"
-                      numberOfLines={1}
-                      style={[styles.entryMeta, { color: theme.colors.onSurfaceVariant }]}
-                    >
-                      {formatDisplayDate(entry.loggedAt)}{formatMacroLine(entry) ? `  •  ${formatMacroLine(entry)}` : ''}
-                    </Text>
-                    {mismatch ? (
-                      <View style={styles.mismatchRow}>
-                        <MaterialCommunityIcons name="alert-circle-outline" size={14} color={theme.colors.error} />
-                        <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.error }}>
-                          Macros imply ~{mismatch.macroCalories} kcal.
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.entryActions}>
-                    <IconButton
-                      icon={isEntryFavorite ? 'star' : 'star-outline'}
-                      size={18}
-                      style={styles.entryActionIcon}
-                      onPress={() => toggleFavoriteQuickAdd(entryAsQuickAdd)}
-                      accessibilityLabel={isEntryFavorite ? 'Remove favourite' : 'Add favourite'}
-                    />
-                    <IconButton
-                      icon="pencil-outline"
-                      size={18}
-                      style={styles.entryActionIcon}
-                      onPress={() => openEditEntry(entry)}
-                      accessibilityLabel="Edit entry"
-                    />
-                    <IconButton
-                      icon="delete-outline"
-                      size={18}
-                      style={styles.entryActionIcon}
-                      iconColor={theme.colors.error}
-                      onPress={() => deleteEntry(entry.id)}
-                      accessibilityLabel="Delete entry"
-                    />
-                  </View>
-                </Surface>
-                    );
-            })
-          ) : (
+          {visibleEntries.length ? renderedEntries : (
             <Text variant="bodyMedium" style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No entries logged today yet.</Text>
           )}
           </Card.Content>
@@ -798,7 +838,6 @@ export default function LogScreen() {
         visible={editDraft !== null}
         transparent
         animationType="fade"
-        hardwareAccelerated
         onRequestClose={closeEditModal}
       >
         <Pressable style={styles.modalBackdrop} onPress={closeEditModal}>
@@ -1069,7 +1108,20 @@ const styles = StyleSheet.create({
   macroGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   macroInput: { minWidth: '47%', flexGrow: 1 },
   quickAddSection: { gap: 8 },
-  quickAddRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  quickAddScrollFrame: {
+    borderWidth: 1,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  quickAddScroll: { maxHeight: 164 },
+  quickAddRow: { flexDirection: 'column', gap: 8, paddingRight: 4, paddingBottom: 2 },
+  quickAddScrollHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
   quickAddItem: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   quickLogHeader: { minHeight: 56, paddingVertical: 6 },
   quickLogTitle: { marginLeft: -2 },
