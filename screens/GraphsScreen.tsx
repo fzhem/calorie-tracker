@@ -133,52 +133,44 @@ function formatRelativeTime(dateStr: string) {
 
 type WeightTrend = 'gaining' | 'losing' | 'maintaining';
 
-function calculateTrendWithBand(history: WeightPoint[], maintainBandPerWeek: number): WeightTrend | null {
+function calculateTrendWithEMA(history: WeightPoint[], smoothingFactor: number, threshold: number): WeightTrend | null {
   if (history.length < 2) return null;
 
   const sorted = [...history].sort(
     (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
   );
 
-  // Prefer recent data to reflect current trajectory while smoothing noise.
-  const lookbackDays = 21;
-  const lookbackStart = addDays(toStartOfDay(new Date()), -(lookbackDays - 1));
-  const recent = sorted.filter((p) => new Date(p.recordedAt) >= lookbackStart);
-  const points = recent.length >= 3 ? recent : sorted;
+  const weights = sorted.map((p) => p.weightKg);
+  const ema = calculateEMA(weights, smoothingFactor);
 
-  if (points.length < 2) return null;
+  const change = ema[ema.length - 1] - ema[0];
 
-  const baseTime = new Date(points[0].recordedAt).getTime();
-  const xs = points.map((p) => (new Date(p.recordedAt).getTime() - baseTime) / 86_400_000);
-  const ys = points.map((p) => p.weightKg);
-
-  const meanX = xs.reduce((sum, x) => sum + x, 0) / xs.length;
-  const meanY = ys.reduce((sum, y) => sum + y, 0) / ys.length;
-
-  let numerator = 0;
-  let denominator = 0;
-  for (let i = 0; i < xs.length; i += 1) {
-    const dx = xs[i] - meanX;
-    numerator += dx * (ys[i] - meanY);
-    denominator += dx * dx;
-  }
-
-  if (denominator === 0) return 'maintaining';
-
-  const slopePerDay = numerator / denominator;
-  const weeklyChange = slopePerDay * 7;
-
-  if (weeklyChange > maintainBandPerWeek) return 'gaining';
-  if (weeklyChange < -maintainBandPerWeek) return 'losing';
+  if (change > threshold) return 'gaining';
+  if (change < -threshold) return 'losing';
   return 'maintaining';
 }
 
+function calculateEMA(values: number[], smoothingFactor: number = 0.2): number[] {
+  if (values.length === 0) return [];
+
+  const ema: number[] = [];
+  ema[0] = values[0]; // Initialize with the first value
+
+  for (let i = 1; i < values.length; i++) {
+    ema[i] = smoothingFactor * values[i] + (1 - smoothingFactor) * ema[i - 1];
+  }
+
+  return ema;
+}
+
 function calculateWeightTrend(history: WeightPoint[]): WeightTrend | null {
-  return calculateTrendWithBand(history, 0.2);
+  // Use EMA with a smoothing factor of 0.2 and a threshold of 0.1
+  return calculateTrendWithEMA(history, 0.2, 0.1);
 }
 
 function calculateBodyFatTrend(history: WeightPoint[]): WeightTrend | null {
-  return calculateTrendWithBand(history, 0.05);
+  // Use EMA with a smoothing factor of 0.2 and a threshold of 0.02
+  return calculateTrendWithEMA(history, 0.2, 0.02);
 }
 
 function getWeeklyData(history: WeightPoint[]): { values: Array<number | null>; dayLabels: string[]; todayIndex: number } {
