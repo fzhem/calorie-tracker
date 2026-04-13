@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -8,7 +7,7 @@ import { Card, SegmentedButtons, Text, Button, useTheme } from 'react-native-pap
 import Svg, { G, Line, Rect, Text as SvgText, Circle } from 'react-native-svg';
 
 import { getAdjustedCalorieTarget } from '../metabolism';
-import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
+import { DEFAULT_DATA, getCachedData, loadStoredData as readStoredData } from '../storage';
 import type { BodyFatPoint, MealEntry, StoredData, WeightPoint } from '../storage';
 
 const WEIGHT_CHART_HEIGHT = 220;
@@ -476,7 +475,8 @@ function buildWeightSeries(weightHistory: StoredData['weightHistory'], days: num
 export default function GraphsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const [data, setData] = useState<StoredData>(DEFAULT_DATA);
+  const [data, setData] = useState<StoredData>(() => getCachedData() ?? DEFAULT_DATA);
+  const hasCompletedInitialLoad = useRef(false);
   const [selectedWeightIndex, setSelectedWeightIndex] = useState<number | null>(null);
   const [selectedBodyFatIndex, setSelectedBodyFatIndex] = useState<number | null>(null);
   const [weightDays, setWeightDays] = useState(7);
@@ -490,30 +490,24 @@ export default function GraphsScreen() {
   const weightPointPositionsRef = useRef<Array<{ x: number; y: number }>>([]);
   const bodyFatPointPositionsRef = useRef<Array<{ x: number; y: number }>>([]);
 
-  const loadStoredData = useCallback(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
-      if (stored) {
-        const parsed = JSON.parse(stored) as StoredData;
-        setData({
-          ...DEFAULT_DATA,
-          ...parsed,
-          entries: parsed.entries ?? [],
-          weightHistory: parsed.weightHistory ?? [],
-          bodyFatHistory: parsed.bodyFatHistory ?? [],
-        });
-      }
+  const loadScreenData = useCallback(() => {
+    readStoredData().then((next) => {
+      setData(next);
     });
   }, []);
 
   useEffect(() => {
-    loadStoredData();
-  }, [loadStoredData]);
+    loadScreenData().finally(() => {
+      hasCompletedInitialLoad.current = true;
+    });
+  }, [loadScreenData]);
 
   useFocusEffect(
     useCallback(() => {
-      loadStoredData();
+      if (!hasCompletedInitialLoad.current) return undefined;
+      loadScreenData();
       return undefined;
-    }, [loadStoredData]),
+    }, [loadScreenData]),
   );
 
   const screenWidth = Dimensions.get('window').width;

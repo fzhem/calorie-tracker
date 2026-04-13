@@ -1,3 +1,5 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export type MealEntry = {
   id: string;
   title: string;
@@ -96,3 +98,32 @@ export const DEFAULT_DATA: StoredData = {
   carbsGoalGrams: null,
   fiberGoalGrams: null,
 };
+
+let cachedData: StoredData | null = null;
+
+function normalizeStoredData(parsed: Partial<StoredData>): StoredData {
+  return {
+    ...DEFAULT_DATA,
+    ...parsed,
+    entries: parsed.entries ?? [],
+    favoriteQuickAdds: parsed.favoriteQuickAdds ?? [],
+    weightHistory: parsed.weightHistory ?? [],
+    bodyFatHistory: parsed.bodyFatHistory ?? [],
+  };
+}
+
+export function getCachedData() {
+  return cachedData;
+}
+
+export async function loadStoredData() {
+  const stored = await AsyncStorage.getItem(STORAGE_KEY);
+  const next = stored ? normalizeStoredData(JSON.parse(stored) as Partial<StoredData>) : DEFAULT_DATA;
+  cachedData = next;
+  return next;
+}
+
+export async function saveStoredData(next: StoredData) {
+  cachedData = next;
+  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+}

@@ -1,9 +1,12 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultTheme, NavigationContainer } from '@react-navigation/native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, useColorScheme, View } from 'react-native';
+import { enableFreeze, enableScreens } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider, type MD3Theme } from 'react-native-paper';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
@@ -12,9 +15,16 @@ import GoalsScreen from './screens/GoalsScreen';
 import GraphsScreen from './screens/GraphsScreen';
 import LogScreen from './screens/LogScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import { loadStoredData } from './storage';
 import { ThemeModeProvider, useThemeMode } from './themeMode';
 
 const Tab = createBottomTabNavigator();
+
+enableScreens(true);
+enableFreeze(true);
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // Ignore: splash screen can already be controlled by the runtime.
+});
 
 const APP_LIGHT_THEME: MD3Theme = {
   ...MD3LightTheme,
@@ -134,6 +144,31 @@ function RippleTabBarButton({
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts(MaterialCommunityIcons.font);
+  const [isBootstrapped, setIsBootstrapped] = useState(false);
+
+  useEffect(() => {
+    if (!fontsLoaded) return;
+    loadStoredData()
+      .catch(() => {
+        // Screens already handle storage errors; keep app startup resilient.
+      })
+      .finally(() => {
+        setIsBootstrapped(true);
+      });
+  }, [fontsLoaded]);
+
+  useEffect(() => {
+    if (!fontsLoaded || !isBootstrapped) return;
+    SplashScreen.hideAsync().catch(() => {
+      // No-op if splash is already hidden.
+    });
+  }, [fontsLoaded, isBootstrapped]);
+
+  if (!fontsLoaded || !isBootstrapped) {
+    return null;
+  }
+
   return (
     <ThemeModeProvider>
       <AppWithTheme />
@@ -187,7 +222,10 @@ function AppTabs({
     <NavigationContainer theme={navTheme}>
       <StatusBar style={statusBarStyle} />
       <Tab.Navigator
+        detachInactiveScreens
         screenOptions={({ route }) => ({
+          lazy: true,
+          freezeOnBlur: true,
           headerShown: false,
           tabBarStyle: {
             backgroundColor: theme.colors.surface,

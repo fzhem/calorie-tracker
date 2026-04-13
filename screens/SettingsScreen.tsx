@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
@@ -6,7 +5,7 @@ import type { Permission } from 'react-native-health-connect';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
-import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
+import { DEFAULT_DATA, getCachedData, loadStoredData as readStoredData, saveStoredData } from '../storage';
 import type { BodyFatPoint, StoredData, WeightPoint } from '../storage';
 import { useThemeMode, type ThemeMode } from '../themeMode';
 
@@ -173,27 +172,14 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const { mode, setMode } = useThemeMode();
-  const [data, setData] = useState<StoredData>(DEFAULT_DATA);
+  const [data, setData] = useState<StoredData>(() => getCachedData() ?? DEFAULT_DATA);
   const [isReady, setIsReady] = useState(false);
   const [healthStatus, setHealthStatus] = useState<HealthStatus>('idle');
   const [healthMessage, setHealthMessage] = useState('Health Connect sync is ready to configure.');
   const [isSyncingWeight, setIsSyncingWeight] = useState(false);
 
   const loadStoredData = useCallback(async () => {
-    const stored = await AsyncStorage.getItem(STORAGE_KEY);
-    if (!stored) {
-      setData(DEFAULT_DATA);
-      return DEFAULT_DATA;
-    }
-
-    const parsed = JSON.parse(stored) as StoredData;
-    const next = {
-      ...DEFAULT_DATA,
-      ...parsed,
-      entries: parsed.entries ?? [],
-      weightHistory: parsed.weightHistory ?? [],
-      bodyFatHistory: parsed.bodyFatHistory ?? [],
-    };
+    const next = await readStoredData();
     setData(next);
     return next;
   }, []);
@@ -237,7 +223,7 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (!isReady) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data)).catch(() =>
+    saveStoredData(data).catch(() =>
       Alert.alert('Storage error', 'Changes could not be saved.'),
     );
   }, [data, isReady]);

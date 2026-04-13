@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, View, Vibration } from 'react-native';
@@ -6,7 +5,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, Menu, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 
-import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
+import { DEFAULT_DATA, getCachedData, loadStoredData, saveStoredData } from '../storage';
 import type { GoalAdjustmentType, GoalPhase, StoredData, WeightPoint } from '../storage';
 import { estimateMetabolism, getActivityFactor, getGoalCalorieDelta } from '../metabolism';
 
@@ -116,22 +115,23 @@ function formatFeetInches(totalInches: number) {
 export default function GoalsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const [data, setData] = useState<StoredData>(DEFAULT_DATA);
+  const initialData = getCachedData() ?? DEFAULT_DATA;
+  const [data, setData] = useState<StoredData>(initialData);
   const [isReady, setIsReady] = useState(false);
-  const [baseTargetInput, setBaseTargetInput] = useState(`${DEFAULT_DATA.baseTarget}`);
-  const [caloriesPerKgInput, setCaloriesPerKgInput] = useState(`${DEFAULT_DATA.caloriesPerKg}`);
+  const [baseTargetInput, setBaseTargetInput] = useState(`${initialData.baseTarget}`);
+  const [caloriesPerKgInput, setCaloriesPerKgInput] = useState(`${initialData.caloriesPerKg}`);
   const [goalAdjustmentEditorPhase, setGoalAdjustmentEditorPhase] = useState<EditableGoalPhase>('cut');
   const [goalAdjustmentTypeInput, setGoalAdjustmentTypeInput] = useState<GoalAdjustmentType>('kcal');
   const [goalAdjustmentInput, setGoalAdjustmentInput] = useState('500');
   const [goalPercentInput, setGoalPercentInput] = useState('1');
-  const [metabolismAgeInput, setMetabolismAgeInput] = useState('');
+  const [metabolismAgeInput, setMetabolismAgeInput] = useState(initialData.metabolismAgeYears ? `${initialData.metabolismAgeYears}` : '');
   const [metabolismHeightInput, setMetabolismHeightInput] = useState('');
-  const [selectedHeightCm, setSelectedHeightCm] = useState<number | null>(null);
-  const [manualWeightInput, setManualWeightInput] = useState('');
-  const [proteinGoalInput, setProteinGoalInput] = useState('');
-  const [fatGoalInput, setFatGoalInput] = useState('');
-  const [carbsGoalInput, setCarbsGoalInput] = useState('');
-  const [fiberGoalInput, setFiberGoalInput] = useState('');
+  const [selectedHeightCm, setSelectedHeightCm] = useState<number | null>(initialData.metabolismHeightCm ?? null);
+  const [manualWeightInput, setManualWeightInput] = useState(initialData.manualWeightKg ? `${initialData.manualWeightKg}` : '');
+  const [proteinGoalInput, setProteinGoalInput] = useState(initialData.proteinGoalGrams ? `${initialData.proteinGoalGrams}` : '');
+  const [fatGoalInput, setFatGoalInput] = useState(initialData.fatGoalGrams ? `${initialData.fatGoalGrams}` : '');
+  const [carbsGoalInput, setCarbsGoalInput] = useState(initialData.carbsGoalGrams ? `${initialData.carbsGoalGrams}` : '');
+  const [fiberGoalInput, setFiberGoalInput] = useState(initialData.fiberGoalGrams ? `${initialData.fiberGoalGrams}` : '');
   const [heightUnit, setHeightUnit] = useState<HeightUnit>('cm');
   const [weightUnit, setWeightUnit] = useState<WeightUnit>('kg');
   const [heightPickerOpen, setHeightPickerOpen] = useState(false);
@@ -146,48 +146,45 @@ export default function GoalsScreen() {
   const suppressEffectScrollRef = useRef(false);
   const isUnitSwitchingRef = useRef(false);
   const pendingUnitTargetIndexRef = useRef<number | null>(null);
+  const hasCompletedInitialLoad = useRef(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((stored) => {
-        if (stored) {
-          const parsed = JSON.parse(stored) as StoredData;
-          const next = { ...DEFAULT_DATA, ...parsed, entries: parsed.entries ?? [], weightHistory: parsed.weightHistory ?? [], bodyFatHistory: parsed.bodyFatHistory ?? [] };
-          setData(next);
-          setBaseTargetInput(`${next.baseTarget}`);
-          setCaloriesPerKgInput(`${next.caloriesPerKg}`);
-          setGoalAdjustmentTypeInput(next.cutAdjustmentType ?? 'kcal');
-          setGoalAdjustmentInput(`${next.cutCalorieAdjustment ?? 500}`);
-          setGoalPercentInput(`${next.cutPercentPerWeek ?? 1}`);
-          setMetabolismAgeInput(next.metabolismAgeYears ? `${next.metabolismAgeYears}` : '');
-          setSelectedHeightCm(next.metabolismHeightCm ?? null);
-          setMetabolismHeightInput(next.metabolismHeightCm ? formatHeightForUnit(next.metabolismHeightCm, heightUnit) : '');
-          setManualWeightInput(next.manualWeightKg ? formatWeightForUnit(next.manualWeightKg, weightUnit) : '');
-          setProteinGoalInput(next.proteinGoalGrams ? `${next.proteinGoalGrams}` : '');
-          setFatGoalInput(next.fatGoalGrams ? `${next.fatGoalGrams}` : '');
-          setCarbsGoalInput(next.carbsGoalGrams ? `${next.carbsGoalGrams}` : '');
-          setFiberGoalInput(next.fiberGoalGrams ? `${next.fiberGoalGrams}` : '');
-        }
+    loadStoredData()
+      .then((next) => {
+        setData(next);
+        setBaseTargetInput(`${next.baseTarget}`);
+        setCaloriesPerKgInput(`${next.caloriesPerKg}`);
+        setGoalAdjustmentTypeInput(next.cutAdjustmentType ?? 'kcal');
+        setGoalAdjustmentInput(`${next.cutCalorieAdjustment ?? 500}`);
+        setGoalPercentInput(`${next.cutPercentPerWeek ?? 1}`);
+        setMetabolismAgeInput(next.metabolismAgeYears ? `${next.metabolismAgeYears}` : '');
+        setSelectedHeightCm(next.metabolismHeightCm ?? null);
+        setMetabolismHeightInput(next.metabolismHeightCm ? formatHeightForUnit(next.metabolismHeightCm, heightUnit) : '');
+        setManualWeightInput(next.manualWeightKg ? formatWeightForUnit(next.manualWeightKg, weightUnit) : '');
+        setProteinGoalInput(next.proteinGoalGrams ? `${next.proteinGoalGrams}` : '');
+        setFatGoalInput(next.fatGoalGrams ? `${next.fatGoalGrams}` : '');
+        setCarbsGoalInput(next.carbsGoalGrams ? `${next.carbsGoalGrams}` : '');
+        setFiberGoalInput(next.fiberGoalGrams ? `${next.fiberGoalGrams}` : '');
       })
       .catch(() => Alert.alert('Storage error', 'Saved data could not be loaded.'))
-      .finally(() => setIsReady(true));
+      .finally(() => {
+        hasCompletedInitialLoad.current = true;
+        setIsReady(true);
+      });
   }, []);
 
   useEffect(() => {
     if (!isReady) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data)).catch(() =>
+    saveStoredData(data).catch(() =>
       Alert.alert('Storage error', 'Changes could not be saved.'),
     );
   }, [data, isReady]);
 
   useFocusEffect(
     useCallback(() => {
-      AsyncStorage.getItem(STORAGE_KEY)
-        .then((stored) => {
-          const base = stored ? (JSON.parse(stored) as StoredData) : null;
-          const next: StoredData = base
-            ? { ...DEFAULT_DATA, ...base, entries: base.entries ?? [], weightHistory: base.weightHistory ?? [], bodyFatHistory: base.bodyFatHistory ?? [] }
-            : DEFAULT_DATA;
+      if (!hasCompletedInitialLoad.current) return;
+      loadStoredData()
+        .then((next) => {
           setData(next);
           setManualWeightInput(next.manualWeightKg ? formatWeightForUnit(next.manualWeightKg, weightUnit) : '');
           setSelectedHeightCm(next.metabolismHeightCm ?? null);

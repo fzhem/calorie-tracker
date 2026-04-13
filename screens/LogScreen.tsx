@@ -1,13 +1,12 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, View, Vibration } from 'react-native';
 import { Button, Card, Chip, IconButton, ProgressBar, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getAdjustedCalorieTarget, getAutoMacroTargets } from '../metabolism';
-import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
+import { DEFAULT_DATA, getCachedData, loadStoredData, saveStoredData } from '../storage';
 import type { MealEntry, StoredData } from '../storage';
 
 type QuickAddItem = {
@@ -109,8 +108,9 @@ const FIBER_GRAMS_PER_1000_KCAL = 14;
 export default function LogScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const [data, setData] = useState<StoredData>(DEFAULT_DATA);
+  const [data, setData] = useState<StoredData>(() => getCachedData() ?? DEFAULT_DATA);
   const [isReady, setIsReady] = useState(false);
+  const hasCompletedInitialLoad = useRef(false);
   const [mealTitle, setMealTitle] = useState('');
   const [mealCalories, setMealCalories] = useState('');
   const [mealProtein, setMealProtein] = useState('');
@@ -125,33 +125,27 @@ export default function LogScreen() {
   const [macroInputsReady, setMacroInputsReady] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((stored) => {
-        if (stored) {
-          const parsed = JSON.parse(stored) as StoredData;
-          setData({ ...DEFAULT_DATA, ...parsed, entries: parsed.entries ?? [], weightHistory: parsed.weightHistory ?? [] });
-        }
-      })
+    loadStoredData()
+      .then((next) => setData(next))
       .catch(() => Alert.alert('Storage error', 'Saved data could not be loaded.'))
-      .finally(() => setIsReady(true));
+      .finally(() => {
+        hasCompletedInitialLoad.current = true;
+        setIsReady(true);
+      });
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      AsyncStorage.getItem(STORAGE_KEY)
-        .then((stored) => {
-          if (stored) {
-            const parsed = JSON.parse(stored) as StoredData;
-            setData({ ...DEFAULT_DATA, ...parsed, entries: parsed.entries ?? [], weightHistory: parsed.weightHistory ?? [] });
-          }
-        })
+      if (!hasCompletedInitialLoad.current) return;
+      loadStoredData()
+        .then((next) => setData(next))
         .catch(() => Alert.alert('Storage error', 'Saved data could not be loaded.'));
     }, []),
   );
 
   useEffect(() => {
     if (!isReady) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data)).catch(() =>
+    saveStoredData(data).catch(() =>
       Alert.alert('Storage error', 'Changes could not be saved.'),
     );
   }, [data, isReady]);
