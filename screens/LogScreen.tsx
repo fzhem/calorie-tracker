@@ -6,7 +6,7 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, View, Vibration } from
 import { Button, Card, Chip, IconButton, ProgressBar, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { estimateMetabolism, getAutoMacroTargets, getGoalCalorieDelta } from '../metabolism';
+import { getAdjustedCalorieTarget, getAutoMacroTargets } from '../metabolism';
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
 import type { MealEntry, StoredData } from '../storage';
 
@@ -193,33 +193,10 @@ export default function LogScreen() {
   const activeQuickAdds = quickAddTab === 'favorites' ? favoriteQuickAdds : recentQuickAdds;
   const visibleEntries = useMemo(() => sortedTodayEntries.slice(0, 40), [sortedTodayEntries]);
   const todayCalories = todayEntries.reduce((sum, e) => sum + e.calories, 0);
-  const latestHealthConnectWeight = data.weightHistory.find((point) => point.source === 'health-connect')?.weightKg ?? null;
-  const latestWeight = data.manualWeightKg ?? latestHealthConnectWeight;
-  const metabolism = estimateMetabolism({
-    weightKg: latestWeight,
-    heightCm: data.metabolismHeightCm,
-    ageYears: data.metabolismAgeYears,
-    sex: data.metabolismSex,
-    activityLevel: data.activityLevel,
-  });
-  const goalDelta = getGoalCalorieDelta(data.goalPhase ?? 'maintain', {
-    adjustmentType:
-      data.goalPhase === 'cut'
-        ? (data.cutAdjustmentType ?? 'kcal')
-        : (data.goalPhase === 'bulk' ? (data.bulkAdjustmentType ?? 'kcal') : 'kcal'),
-    adjustmentKcal:
-      data.goalPhase === 'cut'
-        ? (data.cutCalorieAdjustment ?? 500)
-        : (data.goalPhase === 'bulk' ? (data.bulkCalorieAdjustment ?? 500) : 500),
-    percentPerWeek:
-      data.goalPhase === 'cut'
-        ? (data.cutPercentPerWeek ?? 1)
-        : (data.goalPhase === 'bulk' ? (data.bulkPercentPerWeek ?? 1) : 1),
-    weightKg: latestWeight,
-  });
-  const baseCalculatedTarget = metabolism.maintenanceCalories
-    ?? (latestWeight ? Math.round(latestWeight * data.caloriesPerKg) : data.baseTarget);
-  const adjustedTarget = Math.round(baseCalculatedTarget + goalDelta);
+  const { adjustedTarget, goalDelta, metabolism } = useMemo(
+    () => getAdjustedCalorieTarget(data),
+    [data],
+  );
   const remaining = adjustedTarget - todayCalories;
   const progress = Math.min(todayCalories / Math.max(adjustedTarget, 1), 1);
 

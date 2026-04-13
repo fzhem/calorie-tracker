@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, SegmentedButtons, Text, Button, useTheme } from 'react-native-paper';
 import Svg, { G, Line, Rect, Text as SvgText, Circle } from 'react-native-svg';
 
+import { getAdjustedCalorieTarget } from '../metabolism';
 import { DEFAULT_DATA, STORAGE_KEY } from '../storage';
 import type { BodyFatPoint, MealEntry, StoredData, WeightPoint } from '../storage';
 
@@ -720,6 +721,10 @@ export default function GraphsScreen() {
 
   const latestWeightPoint = data.weightHistory[0] ?? null;
   const latestWeight = latestWeightPoint?.weightKg ?? null;
+  const { adjustedTarget } = useMemo(
+    () => getAdjustedCalorieTarget(data),
+    [data],
+  );
   const latestBodyFatPoint = data.bodyFatHistory[0] ?? null;
   const latestBodyFat = latestBodyFatPoint?.bodyFatPercentage ?? null;
   const latestCalorieEntry = useMemo(
@@ -736,8 +741,8 @@ export default function GraphsScreen() {
       .reduce((sum, entry) => sum + entry.calories, 0);
   }, [data.entries]);
   const calorieStatus = useMemo(
-    () => getCalorieStatus(todayCalorieTotal, data.baseTarget),
-    [todayCalorieTotal, data.baseTarget],
+    () => getCalorieStatus(todayCalorieTotal, adjustedTarget),
+    [todayCalorieTotal, adjustedTarget],
   );
   const calorieWeeklyData = useMemo(() => getWeeklyCalorieData(data.entries), [data.entries]);
   const hasWeeklyCalorieData = useMemo(

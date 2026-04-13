@@ -1,4 +1,4 @@
-import type { ActivityLevel, GoalAdjustmentType, GoalPhase, MetabolismSex } from './storage';
+import type { ActivityLevel, GoalAdjustmentType, GoalPhase, MetabolismSex, StoredData } from './storage';
 
 const KCAL_PER_KG_BODY_WEIGHT = 7700;
 
@@ -81,6 +81,47 @@ export function estimateMetabolism(input: MetabolismInput): MetabolismMetrics {
     bmr: Math.round(bmr),
     tdee: Math.round(tdee),
     maintenanceCalories: Math.round(tdee),
+  };
+}
+
+export function getAdjustedCalorieTarget(data: StoredData) {
+  const latestHealthConnectWeight = data.weightHistory.find((point) => point.source === 'health-connect')?.weightKg ?? null;
+  const effectiveWeightKg = data.manualWeightKg ?? latestHealthConnectWeight;
+
+  const metabolism = estimateMetabolism({
+    weightKg: effectiveWeightKg,
+    heightCm: data.metabolismHeightCm,
+    ageYears: data.metabolismAgeYears,
+    sex: data.metabolismSex,
+    activityLevel: data.activityLevel,
+  });
+
+  const goalDelta = getGoalCalorieDelta(data.goalPhase ?? 'maintain', {
+    adjustmentType:
+      data.goalPhase === 'cut'
+        ? (data.cutAdjustmentType ?? 'kcal')
+        : (data.goalPhase === 'bulk' ? (data.bulkAdjustmentType ?? 'kcal') : 'kcal'),
+    adjustmentKcal:
+      data.goalPhase === 'cut'
+        ? (data.cutCalorieAdjustment ?? 500)
+        : (data.goalPhase === 'bulk' ? (data.bulkCalorieAdjustment ?? 500) : 500),
+    percentPerWeek:
+      data.goalPhase === 'cut'
+        ? (data.cutPercentPerWeek ?? 1)
+        : (data.goalPhase === 'bulk' ? (data.bulkPercentPerWeek ?? 1) : 1),
+    weightKg: effectiveWeightKg,
+  });
+
+  const baseCalculatedTarget = metabolism.maintenanceCalories
+    ?? (effectiveWeightKg ? Math.round(effectiveWeightKg * data.caloriesPerKg) : data.baseTarget);
+  const adjustedTarget = Math.round(baseCalculatedTarget + goalDelta);
+
+  return {
+    adjustedTarget,
+    baseCalculatedTarget,
+    goalDelta,
+    metabolism,
+    effectiveWeightKg,
   };
 }
 
