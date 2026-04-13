@@ -119,9 +119,9 @@ function RippleTabBarButton({
       accessibilityState={accessibilityState}
       accessibilityLabel={accessibilityLabel}
       testID={testID}
+      onPressIn={triggerRipple}
       onLongPress={onLongPress}
       onPress={(event) => {
-        triggerRipple();
         onPress?.(event);
       }}
       style={style}
