@@ -2,10 +2,11 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultTheme, NavigationContainer } from '@react-navigation/native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo } from 'react';
-import { useColorScheme } from 'react-native';
+import { useMemo, useRef } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, useColorScheme, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider, type MD3Theme } from 'react-native-paper';
+import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 
 import GoalsScreen from './screens/GoalsScreen';
 import GraphsScreen from './screens/GraphsScreen';
@@ -69,6 +70,68 @@ const TAB_ICONS: Record<string, IconName> = {
   Goals: 'bullseye',
   Settings: 'cog-outline',
 };
+
+function RippleTabBarButton({
+  children,
+  onPress,
+  onLongPress,
+  accessibilityState,
+  accessibilityLabel,
+  testID,
+  style,
+  rippleColor,
+}: BottomTabBarButtonProps & { rippleColor: string }) {
+  const rippleScale = useRef(new Animated.Value(0)).current;
+  const rippleOpacity = useRef(new Animated.Value(0)).current;
+
+  const triggerRipple = () => {
+    rippleScale.setValue(0);
+    rippleOpacity.setValue(0.24);
+
+    Animated.parallel([
+      Animated.timing(rippleScale, {
+        toValue: 1,
+        duration: 320,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(rippleOpacity, {
+        toValue: 0,
+        duration: 320,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  return (
+    <Pressable
+      accessibilityState={accessibilityState}
+      accessibilityLabel={accessibilityLabel}
+      testID={testID}
+      onLongPress={onLongPress}
+      onPress={(event) => {
+        triggerRipple();
+        onPress?.(event);
+      }}
+      style={style}
+    >
+      <View pointerEvents="none" style={styles.tabRippleContainer}>
+        <Animated.View
+          style={[
+            styles.tabRipple,
+            {
+              backgroundColor: rippleColor,
+              opacity: rippleOpacity,
+              transform: [{ scale: rippleScale }],
+            },
+          ]}
+        />
+      </View>
+      {children}
+    </Pressable>
+  );
+}
 
 export default function App() {
   return (
@@ -137,6 +200,7 @@ function AppTabs({
           tabBarActiveTintColor: theme.colors.primary,
           tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
           tabBarLabelStyle: { fontSize: 12, fontWeight: '700', paddingBottom: 3 },
+          tabBarButton: (props) => <RippleTabBarButton {...props} rippleColor={theme.colors.primary} />,
           tabBarIcon: ({ focused, color }) => (
             <MaterialCommunityIcons
               name={TAB_ICONS[route.name] ?? 'circle-outline'}
@@ -154,3 +218,17 @@ function AppTabs({
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  tabRippleContainer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  tabRipple: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+  },
+});
