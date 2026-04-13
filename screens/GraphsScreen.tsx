@@ -491,7 +491,7 @@ export default function GraphsScreen() {
   const bodyFatPointPositionsRef = useRef<Array<{ x: number; y: number }>>([]);
 
   const loadScreenData = useCallback(() => {
-    readStoredData().then((next) => {
+    return readStoredData().then((next) => {
       setData(next);
     });
   }, []);
