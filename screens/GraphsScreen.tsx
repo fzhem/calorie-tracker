@@ -184,41 +184,37 @@ function calculateBodyFatTrend(history: WeightPoint[]): WeightTrend | null {
 function getWeeklyData(history: WeightPoint[]): { values: Array<number | null>; dayLabels: string[]; todayIndex: number } {
   if (history.length === 0) return { values: [], dayLabels: [], todayIndex: -1 };
 
-  const now = new Date();
-  const today = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  
-  // Calculate start of week (Monday)
-  const startOfWeek = new Date(now);
-  const day = startOfWeek.getDay();
-  const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
-  startOfWeek.setDate(diff);
-  startOfWeek.setHours(0, 0, 0, 0);
-
-  // Day abbreviations starting from Monday
-  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-  
-  // Map data to days of week; keep latest value for each day.
-  const weekData = Array(7).fill(null) as Array<number | null>;
   const sorted = [...history].sort(
     (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
   );
 
-  for (const point of sorted) {
-    const pointDate = new Date(point.recordedAt);
-    pointDate.setHours(0, 0, 0, 0);
-    
-    if (pointDate >= startOfWeek && pointDate < new Date(startOfWeek.getTime() + 7 * 24 * 60 * 60 * 1000)) {
-      const dayIndex = Math.floor((pointDate.getTime() - startOfWeek.getTime()) / (24 * 60 * 60 * 1000));
-      if (dayIndex >= 0 && dayIndex < 7) {
-        weekData[dayIndex] = point.weightKg;
-      }
-    }
-  }
-  
-  // Today's index (0 = Monday, 6 = Sunday)
-  const todayWeekIndex = today === 0 ? 6 : today - 1;
+  const latestDate = new Date(sorted[sorted.length - 1].recordedAt);
+  const dayLabels: string[] = [];
+  const weekData: Array<number | null> = [];
 
-  return { values: weekData, dayLabels, todayIndex: todayWeekIndex };
+  let steps = 0;
+  let currentDate = latestDate;
+
+  while (steps < 7) {
+    const dateKey = getLocalDateKey(currentDate);
+    const point = sorted.find((p) => getLocalDateKey(new Date(p.recordedAt)) === dateKey);
+
+    if (point) {
+      weekData.unshift(point.weightKg);
+      dayLabels.unshift(currentDate.toLocaleDateString(undefined, { weekday: 'short' }).charAt(0));
+    } else {
+      weekData.unshift(null);
+      dayLabels.unshift(''); // Add an empty label for missing data
+    }
+
+    steps++;
+    currentDate.setDate(currentDate.getDate() - 1);
+  }
+
+  // Today's index is always the last data point in this case
+  const todayIndex = weekData.length - 1;
+
+  return { values: weekData, dayLabels, todayIndex };
 }
 
 function getWeeklyCalorieData(entries: MealEntry[]): { values: Array<number | null>; dayLabels: string[]; todayIndex: number } {
@@ -1262,12 +1258,12 @@ export default function GraphsScreen() {
           </Pressable>
         ) : (
           <Card style={styles.card} mode="elevated">
-            <Card.Title 
-              title="Weight Trend" 
+            <Card.Title
+              title="Weight Trend"
               titleVariant="titleLarge"
               right={() => (
-                <Button 
-                  icon="close" 
+                <Button
+                  icon="close"
                   onPress={() => setShowWeightChart(false)}
                   mode="text"
                   style={{ marginRight: 16 }}
