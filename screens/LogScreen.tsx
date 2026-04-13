@@ -330,7 +330,6 @@ export default function LogScreen() {
   const [macroModalVisible, setMacroModalVisible] = useState(false);
   const [editDraft, setEditDraft] = useState<EditEntryDraft | null>(null);
   const [showEditMacros, setShowEditMacros] = useState(false);
-  const [macroInputsReady, setMacroInputsReady] = useState(false);
 
   useEffect(() => {
     loadStoredData()
@@ -549,7 +548,6 @@ export default function LogScreen() {
   const openEditEntry = useCallback((entry: MealEntry) => {
     Vibration.vibrate(10);
     setShowEditMacros(false);
-    setMacroInputsReady(false);
     setEditDraft({
       id: entry.id,
       title: entry.title,
@@ -563,17 +561,8 @@ export default function LogScreen() {
 
   const closeEditModal = useCallback(() => {
     setShowEditMacros(false);
-    setMacroInputsReady(false);
     setEditDraft(null);
   }, []);
-
-  useEffect(() => {
-    if (!editDraft) return;
-    const timer = setTimeout(() => {
-      setMacroInputsReady(true);
-    }, 80);
-    return () => clearTimeout(timer);
-  }, [editDraft]);
 
   const saveEditedEntry = useCallback(() => {
     if (!editDraft) return;
@@ -809,6 +798,7 @@ export default function LogScreen() {
         visible={editDraft !== null}
         transparent
         animationType="fade"
+        hardwareAccelerated
         onRequestClose={closeEditModal}
       >
         <Pressable style={styles.modalBackdrop} onPress={closeEditModal}>
@@ -830,17 +820,23 @@ export default function LogScreen() {
               keyboardType="numeric"
               mode="outlined"
             />
-            <Button
-              mode={showEditMacros ? 'contained-tonal' : 'outlined'}
-              compact
-              icon={showEditMacros ? 'chevron-up' : 'chevron-down'}
+            <Pressable
               onPress={() => setShowEditMacros((prev) => !prev)}
-              style={{ alignSelf: 'flex-start' }}
-              labelStyle={{ marginLeft: 2 }}
-              contentStyle={{ paddingHorizontal: 8 }}
+              style={[styles.macroSectionHeader, { backgroundColor: theme.colors.elevation.level1, borderColor: theme.colors.outlineVariant }]}
             >
-              Macros
-            </Button>
+              <View style={styles.macroSectionTitle}>
+                <MaterialCommunityIcons name="nutrition" size={16} color={theme.colors.primary} />
+                <Text variant="labelLarge" style={{ color: theme.colors.onSurface }}>Macros</Text>
+                <Chip compact mode="flat" style={{ backgroundColor: theme.colors.surfaceVariant }} textStyle={{ color: theme.colors.onSurfaceVariant }}>
+                  Optional
+                </Chip>
+              </View>
+              <MaterialCommunityIcons
+                name={showEditMacros ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </Pressable>
             {editDraftMismatch ? (
               <View style={styles.mismatchRow}>
                 <MaterialCommunityIcons name="alert-circle-outline" size={14} color={theme.colors.error} />
@@ -849,8 +845,7 @@ export default function LogScreen() {
                 </Text>
               </View>
             ) : null}
-            {macroInputsReady ? (
-              <View style={showEditMacros ? undefined : styles.collapsedMacros}>
+            {showEditMacros ? (
               <View style={styles.macroGrid}>
                 <TextInput
                   label="Protein (g)"
@@ -859,6 +854,7 @@ export default function LogScreen() {
                   keyboardType="numeric"
                   mode="outlined"
                   style={styles.macroInput}
+                  theme={QUICK_LOG_INPUT_THEME}
                 />
                 <TextInput
                   label="Carbs (g)"
@@ -867,6 +863,7 @@ export default function LogScreen() {
                   keyboardType="numeric"
                   mode="outlined"
                   style={styles.macroInput}
+                  theme={QUICK_LOG_INPUT_THEME}
                 />
                 <TextInput
                   label="Fat (g)"
@@ -875,6 +872,7 @@ export default function LogScreen() {
                   keyboardType="numeric"
                   mode="outlined"
                   style={styles.macroInput}
+                  theme={QUICK_LOG_INPUT_THEME}
                 />
                 <TextInput
                   label="Fibre (g)"
@@ -883,8 +881,8 @@ export default function LogScreen() {
                   keyboardType="numeric"
                   mode="outlined"
                   style={styles.macroInput}
+                  theme={QUICK_LOG_INPUT_THEME}
                 />
-              </View>
               </View>
             ) : null}
             <View style={styles.editActionsRow}>
@@ -1097,7 +1095,6 @@ const styles = StyleSheet.create({
   entriesList: { gap: 8 },
   editActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 8 },
   mismatchRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  collapsedMacros: { height: 0, opacity: 0, overflow: 'hidden' },
   entryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
