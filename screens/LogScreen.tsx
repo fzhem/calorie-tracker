@@ -110,6 +110,8 @@ type QuickLogCardProps = {
   recentQuickAdds: QuickAddItem[];
   favoriteQuickAdds: QuickAddItem[];
   favoriteQuickAddKeys: Set<string>;
+  isMacrosExpanded: boolean;
+  onSetMacrosExpanded: (next: boolean) => void;
   onAddMeal: (item: QuickAddItem) => void;
   onQuickAddMeal: (item: QuickAddItem) => void;
   onToggleFavoriteQuickAdd: (item: QuickAddItem) => void;
@@ -119,6 +121,8 @@ const QuickLogCard = memo(function QuickLogCard({
   recentQuickAdds,
   favoriteQuickAdds,
   favoriteQuickAddKeys,
+  isMacrosExpanded,
+  onSetMacrosExpanded,
   onAddMeal,
   onQuickAddMeal,
   onToggleFavoriteQuickAdd,
@@ -178,7 +182,12 @@ const QuickLogCard = memo(function QuickLogCard({
 
   return (
     <Card style={styles.card} mode="elevated">
-      <Card.Title title="Quick Log" titleVariant="titleLarge" />
+      <Card.Title
+        title="Quick Log"
+        titleVariant="titleLarge"
+        style={styles.quickLogHeader}
+        titleStyle={styles.quickLogTitle}
+      />
       <Card.Content style={styles.formArea}>
         <TextInput
           label="Meal"
@@ -197,58 +206,76 @@ const QuickLogCard = memo(function QuickLogCard({
           mode="outlined"
           theme={QUICK_LOG_INPUT_THEME}
         />
-        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-          Macros below are optional.
-        </Text>
-        <View style={styles.macroGrid}>
-          <TextInput
-            label="Protein (g)"
-            value={mealProtein}
-            onChangeText={setMealProtein}
-            placeholder="35"
-            keyboardType="numeric"
-            mode="outlined"
-            style={styles.macroInput}
-            theme={QUICK_LOG_INPUT_THEME}
-          />
-          <TextInput
-            label="Carbs (g)"
-            value={mealCarbs}
-            onChangeText={setMealCarbs}
-            placeholder="60"
-            keyboardType="numeric"
-            mode="outlined"
-            style={styles.macroInput}
-            theme={QUICK_LOG_INPUT_THEME}
-          />
-          <TextInput
-            label="Fat (g)"
-            value={mealFat}
-            onChangeText={setMealFat}
-            placeholder="18"
-            keyboardType="numeric"
-            mode="outlined"
-            style={styles.macroInput}
-            theme={QUICK_LOG_INPUT_THEME}
-          />
-          <TextInput
-            label="Fibre (g)"
-            value={mealFiber}
-            onChangeText={setMealFiber}
-            placeholder="8"
-            keyboardType="numeric"
-            mode="outlined"
-            style={styles.macroInput}
-            theme={QUICK_LOG_INPUT_THEME}
-          />
-        </View>
-        {addDraftMismatch ? (
-          <View style={styles.mismatchRow}>
-            <MaterialCommunityIcons name="alert-circle-outline" size={14} color={theme.colors.error} />
-            <Text variant="bodySmall" style={{ color: theme.colors.error }}>
-              Macros estimate about {addDraftMismatch.macroCalories} kcal, which differs from logged calories.
-            </Text>
+        <Pressable
+          onPress={() => onSetMacrosExpanded(!isMacrosExpanded)}
+          style={[styles.macroSectionHeader, { backgroundColor: theme.colors.elevation.level1, borderColor: theme.colors.outlineVariant }]}
+        >
+          <View style={styles.macroSectionTitle}>
+            <MaterialCommunityIcons name="nutrition" size={16} color={theme.colors.primary} />
+            <Text variant="labelLarge" style={{ color: theme.colors.onSurface }}>Macros</Text>
+            <Chip compact mode="flat" style={{ backgroundColor: theme.colors.surfaceVariant }} textStyle={{ color: theme.colors.onSurfaceVariant }}>
+              Optional
+            </Chip>
           </View>
+          <MaterialCommunityIcons
+            name={isMacrosExpanded ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={theme.colors.onSurfaceVariant}
+          />
+        </Pressable>
+        {isMacrosExpanded ? (
+          <>
+            <View style={styles.macroGrid}>
+              <TextInput
+                label="Protein (g)"
+                value={mealProtein}
+                onChangeText={setMealProtein}
+                placeholder="35"
+                keyboardType="numeric"
+                mode="outlined"
+                style={styles.macroInput}
+                theme={QUICK_LOG_INPUT_THEME}
+              />
+              <TextInput
+                label="Carbs (g)"
+                value={mealCarbs}
+                onChangeText={setMealCarbs}
+                placeholder="60"
+                keyboardType="numeric"
+                mode="outlined"
+                style={styles.macroInput}
+                theme={QUICK_LOG_INPUT_THEME}
+              />
+              <TextInput
+                label="Fat (g)"
+                value={mealFat}
+                onChangeText={setMealFat}
+                placeholder="18"
+                keyboardType="numeric"
+                mode="outlined"
+                style={styles.macroInput}
+                theme={QUICK_LOG_INPUT_THEME}
+              />
+              <TextInput
+                label="Fibre (g)"
+                value={mealFiber}
+                onChangeText={setMealFiber}
+                placeholder="8"
+                keyboardType="numeric"
+                mode="outlined"
+                style={styles.macroInput}
+                theme={QUICK_LOG_INPUT_THEME}
+              />
+            </View>
+            {addDraftMismatch ? (
+              <View style={styles.mismatchRow}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={14} color={theme.colors.error} />
+                <Text variant="bodySmall" style={{ color: theme.colors.error }}>
+                  Macros estimate about {addDraftMismatch.macroCalories} kcal, which differs from logged calories.
+                </Text>
+              </View>
+            ) : null}
+          </>
         ) : null}
         <Button mode="contained" icon="plus" onPress={handleAddMeal}>
           Add entry
@@ -662,6 +689,8 @@ export default function LogScreen() {
           recentQuickAdds={recentQuickAdds}
           favoriteQuickAdds={favoriteQuickAdds}
           favoriteQuickAddKeys={favoriteQuickAddKeys}
+          isMacrosExpanded={data.quickLogMacrosExpanded}
+          onSetMacrosExpanded={(next) => setData((prev) => ({ ...prev, quickLogMacrosExpanded: next }))}
           onAddMeal={addMeal}
           onQuickAddMeal={quickAddMeal}
           onToggleFavoriteQuickAdd={toggleFavoriteQuickAdd}
@@ -671,11 +700,15 @@ export default function LogScreen() {
           <Card.Title
             title="Today's Entries"
             titleVariant="titleLarge"
+            rightStyle={styles.entriesHeaderRight}
             right={() => (
               <Button
                 mode="text"
                 compact
                 icon="sort-clock-descending"
+                style={styles.entriesSortButton}
+                contentStyle={styles.entriesSortButtonContent}
+                labelStyle={styles.entriesSortButtonLabel}
                 onPress={() => setSortMode((prev) => (prev === 'newest' ? 'oldest' : 'newest'))}
               >
                 {sortMode === 'newest' ? 'Newest' : 'Oldest'}
@@ -1040,6 +1073,27 @@ const styles = StyleSheet.create({
   quickAddSection: { gap: 8 },
   quickAddRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   quickAddItem: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  quickLogHeader: { minHeight: 56, paddingVertical: 6 },
+  quickLogTitle: { marginLeft: -2 },
+  macroSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  macroSectionTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  entriesHeaderRight: { marginRight: 8 },
+  entriesSortButton: { marginVertical: 0 },
+  entriesSortButtonContent: { paddingHorizontal: 2 },
+  entriesSortButtonLabel: { marginHorizontal: 4 },
   entriesList: { gap: 8 },
   editActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 8 },
   mismatchRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

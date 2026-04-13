@@ -46,6 +46,7 @@ export type BodyFatPoint = {
 export type StoredData = {
   entries: MealEntry[];
   favoriteQuickAdds: FavoriteQuickAdd[];
+  quickLogMacrosExpanded: boolean;
   baseTarget: number;
   caloriesPerKg: number;
   goalPhase: GoalPhase;
@@ -75,6 +76,7 @@ export const STORAGE_KEY = 'calorie-tracker-storage-v1';
 export const DEFAULT_DATA: StoredData = {
   entries: [],
   favoriteQuickAdds: [],
+  quickLogMacrosExpanded: false,
   baseTarget: 2100,
   caloriesPerKg: 30,
   goalPhase: 'maintain',
