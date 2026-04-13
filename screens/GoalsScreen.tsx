@@ -20,6 +20,7 @@ const HEIGHT_ROW_HEIGHT = 44;
 const PICKER_VISIBLE_ROWS = 3;
 const PICKER_HEIGHT = PICKER_VISIBLE_ROWS * HEIGHT_ROW_HEIGHT;
 const PICKER_PADDING = Math.floor(PICKER_VISIBLE_ROWS / 2) * HEIGHT_ROW_HEIGHT;
+const GOALS_PROFILE_INPUT_THEME = { animation: { scale: 0 } };
 
 type WeightUnit = 'kg' | 'lb';
 type HeightUnit = 'cm' | 'ft-in';
@@ -527,6 +528,7 @@ export default function GoalsScreen() {
               onChangeText={setMetabolismAgeInput}
               keyboardType="numeric"
               mode="outlined"
+              theme={GOALS_PROFILE_INPUT_THEME}
             />
             <Pressable onPress={onPressHeightField}>
               <View pointerEvents="none">
@@ -536,6 +538,7 @@ export default function GoalsScreen() {
                   mode="outlined"
                   editable={false}
                   right={<TextInput.Icon icon={heightPickerOpen ? 'chevron-up' : 'chevron-down'} />}
+                  theme={GOALS_PROFILE_INPUT_THEME}
                 />
               </View>
             </Pressable>
@@ -727,6 +730,7 @@ export default function GoalsScreen() {
               mode="outlined"
               editable={weightUnlocked}
               right={<TextInput.Icon icon={weightUnlocked ? 'lock-open-variant' : 'lock'} onPress={() => setWeightUnlocked(!weightUnlocked)} />}
+              theme={GOALS_PROFILE_INPUT_THEME}
             />
             <SegmentedButtons
               value={weightUnit}
@@ -783,6 +787,7 @@ export default function GoalsScreen() {
               onChangeText={setBaseTargetInput}
               keyboardType="numeric"
               mode="outlined"
+              theme={GOALS_PROFILE_INPUT_THEME}
             />
             <TextInput
               label="Calories per kg"
@@ -790,6 +795,7 @@ export default function GoalsScreen() {
               onChangeText={setCaloriesPerKgInput}
               keyboardType="numeric"
               mode="outlined"
+              theme={GOALS_PROFILE_INPUT_THEME}
             />
 
             <Text variant="labelMedium" style={{ marginTop: 6 }}>Macro Overrides</Text>
@@ -805,6 +811,7 @@ export default function GoalsScreen() {
                 keyboardType="numeric"
                 mode="outlined"
                 style={styles.macroInput}
+                theme={GOALS_PROFILE_INPUT_THEME}
               />
               <TextInput
                 label="Carbs (g)"
@@ -814,6 +821,7 @@ export default function GoalsScreen() {
                 keyboardType="numeric"
                 mode="outlined"
                 style={styles.macroInput}
+                theme={GOALS_PROFILE_INPUT_THEME}
               />
               <TextInput
                 label="Fat (g)"
@@ -823,6 +831,7 @@ export default function GoalsScreen() {
                 keyboardType="numeric"
                 mode="outlined"
                 style={styles.macroInput}
+                theme={GOALS_PROFILE_INPUT_THEME}
               />
               <TextInput
                 label="Fibre (g)"
@@ -832,6 +841,7 @@ export default function GoalsScreen() {
                 keyboardType="numeric"
                 mode="outlined"
                 style={styles.macroInput}
+                theme={GOALS_PROFILE_INPUT_THEME}
               />
             </View>
 

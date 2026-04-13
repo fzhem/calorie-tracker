@@ -1,6 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, View, Vibration } from 'react-native';
 import { Button, Card, Chip, IconButton, ProgressBar, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -104,6 +104,194 @@ function getMacroCalorieMismatch(
 }
 
 const FIBER_GRAMS_PER_1000_KCAL = 14;
+const QUICK_LOG_INPUT_THEME = { animation: { scale: 0 } };
+
+type QuickLogCardProps = {
+  recentQuickAdds: QuickAddItem[];
+  favoriteQuickAdds: QuickAddItem[];
+  favoriteQuickAddKeys: Set<string>;
+  onAddMeal: (item: QuickAddItem) => void;
+  onQuickAddMeal: (item: QuickAddItem) => void;
+  onToggleFavoriteQuickAdd: (item: QuickAddItem) => void;
+};
+
+const QuickLogCard = memo(function QuickLogCard({
+  recentQuickAdds,
+  favoriteQuickAdds,
+  favoriteQuickAddKeys,
+  onAddMeal,
+  onQuickAddMeal,
+  onToggleFavoriteQuickAdd,
+}: QuickLogCardProps) {
+  const theme = useTheme();
+  const [mealTitle, setMealTitle] = useState('');
+  const [mealCalories, setMealCalories] = useState('');
+  const [mealProtein, setMealProtein] = useState('');
+  const [mealFat, setMealFat] = useState('');
+  const [mealCarbs, setMealCarbs] = useState('');
+  const [mealFiber, setMealFiber] = useState('');
+  const [quickAddTab, setQuickAddTab] = useState<QuickAddTab>('recent');
+
+  const activeQuickAdds = quickAddTab === 'favorites' ? favoriteQuickAdds : recentQuickAdds;
+
+  const addDraftMismatch = useMemo(() => {
+    const calories = parseNumberInput(mealCalories);
+    if (!calories || calories <= 0) return null;
+    return getMacroCalorieMismatch(Math.round(calories), {
+      proteinGrams: mealProtein.trim() ? parseNumberInput(mealProtein) : null,
+      fatGrams: mealFat.trim() ? parseNumberInput(mealFat) : null,
+      carbsGrams: mealCarbs.trim() ? parseNumberInput(mealCarbs) : null,
+    });
+  }, [mealCalories, mealCarbs, mealFat, mealProtein]);
+
+  const handleAddMeal = useCallback(() => {
+    const calories = parseNumberInput(mealCalories);
+    const protein = mealProtein.trim() ? parseNumberInput(mealProtein) : null;
+    const fat = mealFat.trim() ? parseNumberInput(mealFat) : null;
+    const carbs = mealCarbs.trim() ? parseNumberInput(mealCarbs) : null;
+    const fiber = mealFiber.trim() ? parseNumberInput(mealFiber) : null;
+
+    if (!mealTitle.trim()) { Alert.alert('Missing meal name', 'Add a label.'); return; }
+    if (!calories || calories <= 0) { Alert.alert('Invalid calories', 'Enter a positive number.'); return; }
+    if (protein !== null && protein < 0) { Alert.alert('Invalid protein', 'Protein must be 0 or more.'); return; }
+    if (fat !== null && fat < 0) { Alert.alert('Invalid fat', 'Fat must be 0 or more.'); return; }
+    if (carbs !== null && carbs < 0) { Alert.alert('Invalid carbs', 'Carbs must be 0 or more.'); return; }
+    if (fiber !== null && fiber < 0) { Alert.alert('Invalid fibre', 'Fibre must be 0 or more.'); return; }
+
+    onAddMeal({
+      title: mealTitle.trim(),
+      calories: Math.round(calories),
+      proteinGrams: protein !== null ? Math.round(protein * 10) / 10 : null,
+      fatGrams: fat !== null ? Math.round(fat * 10) / 10 : null,
+      carbsGrams: carbs !== null ? Math.round(carbs * 10) / 10 : null,
+      fiberGrams: fiber !== null ? Math.round(fiber * 10) / 10 : null,
+    });
+
+    setMealTitle('');
+    setMealCalories('');
+    setMealProtein('');
+    setMealFat('');
+    setMealCarbs('');
+    setMealFiber('');
+    Vibration.vibrate(12);
+  }, [mealCalories, mealCarbs, mealFat, mealFiber, mealProtein, mealTitle, onAddMeal]);
+
+  return (
+    <Card style={styles.card} mode="elevated">
+      <Card.Title title="Quick Log" titleVariant="titleLarge" />
+      <Card.Content style={styles.formArea}>
+        <TextInput
+          label="Meal"
+          value={mealTitle}
+          onChangeText={setMealTitle}
+          placeholder="Breakfast burrito"
+          mode="outlined"
+          theme={QUICK_LOG_INPUT_THEME}
+        />
+        <TextInput
+          label="Calories (kcal)"
+          value={mealCalories}
+          onChangeText={setMealCalories}
+          placeholder="620"
+          keyboardType="numeric"
+          mode="outlined"
+          theme={QUICK_LOG_INPUT_THEME}
+        />
+        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+          Macros below are optional.
+        </Text>
+        <View style={styles.macroGrid}>
+          <TextInput
+            label="Protein (g)"
+            value={mealProtein}
+            onChangeText={setMealProtein}
+            placeholder="35"
+            keyboardType="numeric"
+            mode="outlined"
+            style={styles.macroInput}
+            theme={QUICK_LOG_INPUT_THEME}
+          />
+          <TextInput
+            label="Carbs (g)"
+            value={mealCarbs}
+            onChangeText={setMealCarbs}
+            placeholder="60"
+            keyboardType="numeric"
+            mode="outlined"
+            style={styles.macroInput}
+            theme={QUICK_LOG_INPUT_THEME}
+          />
+          <TextInput
+            label="Fat (g)"
+            value={mealFat}
+            onChangeText={setMealFat}
+            placeholder="18"
+            keyboardType="numeric"
+            mode="outlined"
+            style={styles.macroInput}
+            theme={QUICK_LOG_INPUT_THEME}
+          />
+          <TextInput
+            label="Fibre (g)"
+            value={mealFiber}
+            onChangeText={setMealFiber}
+            placeholder="8"
+            keyboardType="numeric"
+            mode="outlined"
+            style={styles.macroInput}
+            theme={QUICK_LOG_INPUT_THEME}
+          />
+        </View>
+        {addDraftMismatch ? (
+          <View style={styles.mismatchRow}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={14} color={theme.colors.error} />
+            <Text variant="bodySmall" style={{ color: theme.colors.error }}>
+              Macros estimate about {addDraftMismatch.macroCalories} kcal, which differs from logged calories.
+            </Text>
+          </View>
+        ) : null}
+        <Button mode="contained" icon="plus" onPress={handleAddMeal}>
+          Add entry
+        </Button>
+        {(recentQuickAdds.length || favoriteQuickAdds.length) ? (
+          <View style={styles.quickAddSection}>
+            <SegmentedButtons
+              value={quickAddTab}
+              onValueChange={(value) => setQuickAddTab(value as QuickAddTab)}
+              buttons={[
+                { value: 'recent', label: 'Recents', icon: 'history' },
+                { value: 'favorites', label: 'Favourites', icon: 'star' },
+              ]}
+            />
+            <View style={styles.quickAddRow}>
+              {activeQuickAdds.length ? activeQuickAdds.map((item) => {
+                const key = quickAddKey(item);
+                const isFavorite = favoriteQuickAddKeys.has(key);
+                return (
+                  <View key={key} style={styles.quickAddItem}>
+                    <Chip icon="plus" compact onPress={() => onQuickAddMeal(item)}>
+                      {item.title} ({item.calories})
+                    </Chip>
+                    <IconButton
+                      icon={isFavorite ? 'star' : 'star-outline'}
+                      size={18}
+                      onPress={() => onToggleFavoriteQuickAdd(item)}
+                      accessibilityLabel={isFavorite ? 'Remove favourite' : 'Add favourite'}
+                    />
+                  </View>
+                );
+              }) : (
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                  No favourites yet. Star an item from Recents.
+                </Text>
+              )}
+            </View>
+          </View>
+        ) : null}
+      </Card.Content>
+    </Card>
+  );
+});
 
 export default function LogScreen() {
   const insets = useSafeAreaInsets();
@@ -111,14 +299,7 @@ export default function LogScreen() {
   const [data, setData] = useState<StoredData>(() => getCachedData() ?? DEFAULT_DATA);
   const [isReady, setIsReady] = useState(false);
   const hasCompletedInitialLoad = useRef(false);
-  const [mealTitle, setMealTitle] = useState('');
-  const [mealCalories, setMealCalories] = useState('');
-  const [mealProtein, setMealProtein] = useState('');
-  const [mealFat, setMealFat] = useState('');
-  const [mealCarbs, setMealCarbs] = useState('');
-  const [mealFiber, setMealFiber] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
-  const [quickAddTab, setQuickAddTab] = useState<QuickAddTab>('recent');
   const [macroModalVisible, setMacroModalVisible] = useState(false);
   const [editDraft, setEditDraft] = useState<EditEntryDraft | null>(null);
   const [showEditMacros, setShowEditMacros] = useState(false);
@@ -184,7 +365,6 @@ export default function LogScreen() {
   }, [data.entries]);
   const favoriteQuickAdds = useMemo(() => data.favoriteQuickAdds ?? [], [data.favoriteQuickAdds]);
   const favoriteQuickAddKeys = useMemo(() => new Set(favoriteQuickAdds.map(quickAddKey)), [favoriteQuickAdds]);
-  const activeQuickAdds = quickAddTab === 'favorites' ? favoriteQuickAdds : recentQuickAdds;
   const visibleEntries = useMemo(() => sortedTodayEntries.slice(0, 40), [sortedTodayEntries]);
   const todayCalories = todayEntries.reduce((sum, e) => sum + e.calories, 0);
   const { adjustedTarget, goalDelta, metabolism } = useMemo(
@@ -216,16 +396,6 @@ export default function LogScreen() {
   const fiberProgress = fiberGoal ? Math.min(todayTotalFiber / fiberGoal, 1) : 0;
 
   const hasMacroGoals = proteinGoal > 0 || fatGoal > 0 || carbsGoal > 0;
-
-  const addDraftMismatch = useMemo(() => {
-    const calories = parseNumberInput(mealCalories);
-    if (!calories || calories <= 0) return null;
-    return getMacroCalorieMismatch(Math.round(calories), {
-      proteinGrams: mealProtein.trim() ? parseNumberInput(mealProtein) : null,
-      fatGrams: mealFat.trim() ? parseNumberInput(mealFat) : null,
-      carbsGrams: mealCarbs.trim() ? parseNumberInput(mealCarbs) : null,
-    });
-  }, [mealCalories, mealCarbs, mealFat, mealProtein]);
 
   const editDraftMismatch = useMemo(() => {
     if (!editDraft) return null;
@@ -293,42 +463,24 @@ export default function LogScreen() {
     },
   }), [theme.dark]);
 
-  const addMeal = useCallback(() => {
-    const calories = parseNumberInput(mealCalories);
-    const protein = mealProtein.trim() ? parseNumberInput(mealProtein) : null;
-    const fat = mealFat.trim() ? parseNumberInput(mealFat) : null;
-    const carbs = mealCarbs.trim() ? parseNumberInput(mealCarbs) : null;
-    const fiber = mealFiber.trim() ? parseNumberInput(mealFiber) : null;
-    if (!mealTitle.trim()) { Alert.alert('Missing meal name', 'Add a label.'); return; }
-    if (!calories || calories <= 0) { Alert.alert('Invalid calories', 'Enter a positive number.'); return; }
-    if (protein !== null && protein < 0) { Alert.alert('Invalid protein', 'Protein must be 0 or more.'); return; }
-    if (fat !== null && fat < 0) { Alert.alert('Invalid fat', 'Fat must be 0 or more.'); return; }
-    if (carbs !== null && carbs < 0) { Alert.alert('Invalid carbs', 'Carbs must be 0 or more.'); return; }
-    if (fiber !== null && fiber < 0) { Alert.alert('Invalid fibre', 'Fibre must be 0 or more.'); return; }
+  const addMeal = useCallback((item: QuickAddItem) => {
     setData((prev) => ({
       ...prev,
       entries: [
         {
           id: createId(),
-          title: mealTitle.trim(),
-          calories: Math.round(calories),
-          proteinGrams: protein !== null ? Math.round(protein * 10) / 10 : null,
-          fatGrams: fat !== null ? Math.round(fat * 10) / 10 : null,
-          carbsGrams: carbs !== null ? Math.round(carbs * 10) / 10 : null,
-          fiberGrams: fiber !== null ? Math.round(fiber * 10) / 10 : null,
+          title: item.title,
+          calories: item.calories,
+          proteinGrams: item.proteinGrams ?? null,
+          fatGrams: item.fatGrams ?? null,
+          carbsGrams: item.carbsGrams ?? null,
+          fiberGrams: item.fiberGrams ?? null,
           loggedAt: new Date().toISOString(),
         },
         ...prev.entries,
       ],
     }));
-    setMealTitle('');
-    setMealCalories('');
-    setMealProtein('');
-    setMealFat('');
-    setMealCarbs('');
-    setMealFiber('');
-    Vibration.vibrate(12);
-  }, [mealCalories, mealCarbs, mealFat, mealFiber, mealProtein, mealTitle]);
+  }, []);
 
   const quickAddMeal = useCallback((item: QuickAddItem) => {
     setData((prev) => ({
@@ -506,113 +658,14 @@ export default function LogScreen() {
           </View>
         </Surface>
 
-        <Card style={styles.card} mode="elevated">
-          <Card.Title title="Quick Log" titleVariant="titleLarge" />
-          <Card.Content style={styles.formArea}>
-            <TextInput
-              label="Meal"
-              value={mealTitle}
-              onChangeText={setMealTitle}
-              placeholder="Breakfast burrito"
-              mode="outlined"
-            />
-            <TextInput
-              label="Calories (kcal)"
-              value={mealCalories}
-              onChangeText={setMealCalories}
-              placeholder="620"
-              keyboardType="numeric"
-              mode="outlined"
-            />
-            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-              Macros below are optional.
-            </Text>
-            <View style={styles.macroGrid}>
-              <TextInput
-                label="Protein (g)"
-                value={mealProtein}
-                onChangeText={setMealProtein}
-                placeholder="35"
-                keyboardType="numeric"
-                mode="outlined"
-                style={styles.macroInput}
-              />
-              <TextInput
-                label="Carbs (g)"
-                value={mealCarbs}
-                onChangeText={setMealCarbs}
-                placeholder="60"
-                keyboardType="numeric"
-                mode="outlined"
-                style={styles.macroInput}
-              />
-              <TextInput
-                label="Fat (g)"
-                value={mealFat}
-                onChangeText={setMealFat}
-                placeholder="18"
-                keyboardType="numeric"
-                mode="outlined"
-                style={styles.macroInput}
-              />
-              <TextInput
-                label="Fibre (g)"
-                value={mealFiber}
-                onChangeText={setMealFiber}
-                placeholder="8"
-                keyboardType="numeric"
-                mode="outlined"
-                style={styles.macroInput}
-              />
-            </View>
-            {addDraftMismatch ? (
-              <View style={styles.mismatchRow}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={14} color={theme.colors.error} />
-                <Text variant="bodySmall" style={{ color: theme.colors.error }}>
-                  Macros estimate about {addDraftMismatch.macroCalories} kcal, which differs from logged calories.
-                </Text>
-              </View>
-            ) : null}
-            <Button mode="contained" icon="plus" onPress={addMeal}>
-              Add entry
-            </Button>
-            {(recentQuickAdds.length || favoriteQuickAdds.length) ? (
-              <View style={styles.quickAddSection}>
-                <SegmentedButtons
-                  value={quickAddTab}
-                  onValueChange={(value) => setQuickAddTab(value as QuickAddTab)}
-                  buttons={[
-                    { value: 'recent', label: 'Recents', icon: 'history' },
-                    { value: 'favorites', label: 'Favourites', icon: 'star' },
-                  ]}
-                />
-                <View style={styles.quickAddRow}>
-                  {activeQuickAdds.length ? activeQuickAdds.map((item) => {
-                    const key = quickAddKey(item);
-                    const isFavorite = favoriteQuickAddKeys.has(key);
-                    return (
-                      <View key={key} style={styles.quickAddItem}>
-                        <Chip icon="plus" compact onPress={() => quickAddMeal(item)}>
-                          {item.title} ({item.calories})
-                        </Chip>
-                        <IconButton
-                          icon={isFavorite ? 'star' : 'star-outline'}
-                          size={18}
-                          onPress={() => toggleFavoriteQuickAdd(item)}
-                          accessibilityLabel={isFavorite ? 'Remove favourite' : 'Add favourite'}
-                        />
-                      </View>
-                    );
-                  }) : (
-                    <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                      No favourites yet. Star an item from Recents.
-                    </Text>
-                  )}
-                </View>
-              </View>
-            ) : null}
-          </Card.Content>
-        </Card>
+        <QuickLogCard
+          recentQuickAdds={recentQuickAdds}
+          favoriteQuickAdds={favoriteQuickAdds}
+          favoriteQuickAddKeys={favoriteQuickAddKeys}
+          onAddMeal={addMeal}
+          onQuickAddMeal={quickAddMeal}
+          onToggleFavoriteQuickAdd={toggleFavoriteQuickAdd}
+        />
 
         <Card style={styles.card} mode="elevated">
           <Card.Title
@@ -710,7 +763,7 @@ export default function LogScreen() {
                     />
                   </View>
                 </Surface>
-              );
+                    );
             })
           ) : (
             <Text variant="bodyMedium" style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No entries logged today yet.</Text>
