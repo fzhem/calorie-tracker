@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import type { Permission } from 'react-native-health-connect';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, Chip, SegmentedButtons, Text, useTheme } from 'react-native-paper';
+import { Button, Card, Chip, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { DEFAULT_DATA, getCachedData, loadStoredData as readStoredData, saveStoredData } from '../storage';
 import type { BodyFatPoint, StoredData, WeightPoint } from '../storage';
@@ -448,6 +448,48 @@ export default function SettingsScreen() {
               Open settings
             </Button>
           </View>
+          </Card.Content>
+        </Card>
+
+        <Card style={styles.card} mode="elevated">
+          <Card.Title title="Advanced" titleVariant="titleLarge" />
+          <Card.Content style={styles.formArea}>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
+              Macro Mismatch Tolerance
+            </Text>
+            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
+              Percentage of logged calories allowed to differ from calculated macros (default: 12%)
+            </Text>
+            <TextInput
+              mode="outlined"
+              label="Tolerance %"
+              keyboardType="number-pad"
+              value={String(data.calorieTolerancePercent)}
+              onChangeText={(value) => {
+                const num = Number(value);
+                if (Number.isFinite(num) && num >= 0) {
+                  setData((prev) => ({ ...prev, calorieTolerancePercent: num }));
+                }
+              }}
+            />
+            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 12, marginBottom: 8 }}>
+              Graph Status Tolerance
+            </Text>
+            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
+              How close you need to be to your goal to show "On target" (default: 100 kcal)
+            </Text>
+            <TextInput
+              mode="outlined"
+              label="Graph Tolerance (kcal)"
+              keyboardType="number-pad"
+              value={String(data.graphToleranceCalories)}
+              onChangeText={(value) => {
+                const num = Number(value);
+                if (Number.isFinite(num) && num >= 0) {
+                  setData((prev) => ({ ...prev, graphToleranceCalories: num }));
+                }
+              }}
+            />
           </Card.Content>
         </Card>
       </ScrollView>

@@ -69,6 +69,8 @@ export type StoredData = {
   fatGoalGrams: number | null;
   carbsGoalGrams: number | null;
   fiberGoalGrams: number | null;
+  calorieTolerancePercent: number;
+  graphToleranceCalories: number;
 };
 
 export const STORAGE_KEY = 'calorie-tracker-storage-v1';
@@ -99,6 +101,8 @@ export const DEFAULT_DATA: StoredData = {
   fatGoalGrams: null,
   carbsGoalGrams: null,
   fiberGoalGrams: null,
+  calorieTolerancePercent: 12,
+  graphToleranceCalories: 100,
 };
 
 let cachedData: StoredData | null = null;

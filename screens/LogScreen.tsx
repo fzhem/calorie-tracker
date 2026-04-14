@@ -93,12 +93,14 @@ function getMacroCalories(item: {
 function getMacroCalorieMismatch(
   calories: number,
   item: { proteinGrams?: number | null; fatGrams?: number | null; carbsGrams?: number | null },
+  options?: { tolerancePercent?: number },
 ) {
   const macroCalories = getMacroCalories(item);
   if (macroCalories === null) return null;
   const roundedMacroCalories = Math.round(macroCalories);
   const delta = Math.round(calories - roundedMacroCalories);
-  const tolerance = Math.max(40, Math.round(calories * 0.12));
+  const tolerancePercent = options?.tolerancePercent ?? 12;
+  const tolerance = Math.round(calories * (tolerancePercent / 100));
   if (Math.abs(delta) <= tolerance) return null;
   return { macroCalories: roundedMacroCalories, delta };
 }
@@ -115,6 +117,7 @@ type QuickLogCardProps = {
   onAddMeal: (item: QuickAddItem) => void;
   onQuickAddMeal: (item: QuickAddItem) => void;
   onToggleFavoriteQuickAdd: (item: QuickAddItem) => void;
+  data: StoredData;
 };
 
 const QuickLogCard = memo(function QuickLogCard({
@@ -126,6 +129,7 @@ const QuickLogCard = memo(function QuickLogCard({
   onAddMeal,
   onQuickAddMeal,
   onToggleFavoriteQuickAdd,
+  data,
 }: QuickLogCardProps) {
   const theme = useTheme();
   const [mealTitle, setMealTitle] = useState('');
@@ -146,8 +150,10 @@ const QuickLogCard = memo(function QuickLogCard({
       proteinGrams: mealProtein.trim() ? parseNumberInput(mealProtein) : null,
       fatGrams: mealFat.trim() ? parseNumberInput(mealFat) : null,
       carbsGrams: mealCarbs.trim() ? parseNumberInput(mealCarbs) : null,
+    }, {
+      tolerancePercent: data.calorieTolerancePercent,
     });
-  }, [mealCalories, mealCarbs, mealFat, mealProtein]);
+  }, [mealCalories, mealCarbs, mealFat, mealProtein, data.calorieTolerancePercent]);
 
   const handleAddMeal = useCallback(() => {
     const multiplier = parseNumberInput(mealMultiplier);
@@ -472,8 +478,10 @@ export default function LogScreen() {
       proteinGrams: editDraft.protein.trim() ? parseNumberInput(editDraft.protein) : null,
       fatGrams: editDraft.fat.trim() ? parseNumberInput(editDraft.fat) : null,
       carbsGrams: editDraft.carbs.trim() ? parseNumberInput(editDraft.carbs) : null,
+    }, {
+      tolerancePercent: data.calorieTolerancePercent,
     });
-  }, [editDraft]);
+  }, [editDraft, data.calorieTolerancePercent]);
 
   const macroGoalModeIcon =
     data.proteinGoalGrams !== null || data.carbsGoalGrams !== null || data.fatGoalGrams !== null || data.fiberGoalGrams !== null
@@ -641,7 +649,9 @@ export default function LogScreen() {
 
   const renderedEntries = useMemo(() => {
     return visibleEntries.map((entry) => {
-      const mismatch = getMacroCalorieMismatch(entry.calories, entry);
+      const mismatch = getMacroCalorieMismatch(entry.calories, entry, {
+        tolerancePercent: data.calorieTolerancePercent,
+      });
       const entryAsQuickAdd: QuickAddItem = {
         title: entry.title,
         calories: entry.calories,
@@ -734,6 +744,7 @@ export default function LogScreen() {
     theme.colors.primary,
     toggleFavoriteQuickAdd,
     visibleEntries,
+    data.calorieTolerancePercent,
   ]);
 
   return (
@@ -826,6 +837,7 @@ export default function LogScreen() {
           onAddMeal={addMeal}
           onQuickAddMeal={quickAddMeal}
           onToggleFavoriteQuickAdd={toggleFavoriteQuickAdd}
+          data={data}
         />
 
         <Card style={styles.card} mode="elevated">

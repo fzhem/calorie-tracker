@@ -266,9 +266,9 @@ function buildTwoWeekCalorieSeries(entries: MealEntry[]) {
   };
 }
 
-function getCalorieStatus(todayCalories: number, targetCalories: number) {
-  const tolerance = 100;
-  if (Math.abs(todayCalories - targetCalories) <= tolerance) return 'On target';
+function getCalorieStatus(todayCalories: number, targetCalories: number, tolerance?: number) {
+  const safeTolerances = tolerance ?? 100;
+  if (Math.abs(todayCalories - targetCalories) <= safeTolerances) return 'On target';
   if (todayCalories > targetCalories) return 'Above target';
   return 'Under target';
 }
@@ -737,8 +737,8 @@ export default function GraphsScreen() {
       .reduce((sum, entry) => sum + entry.calories, 0);
   }, [data.entries]);
   const calorieStatus = useMemo(
-    () => getCalorieStatus(todayCalorieTotal, adjustedTarget),
-    [todayCalorieTotal, adjustedTarget],
+    () => getCalorieStatus(todayCalorieTotal, adjustedTarget, data.graphToleranceCalories),
+    [todayCalorieTotal, adjustedTarget, data.graphToleranceCalories],
   );
   const calorieWeeklyData = useMemo(() => getWeeklyCalorieData(data.entries), [data.entries]);
   const hasWeeklyCalorieData = useMemo(
