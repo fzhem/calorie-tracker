@@ -164,13 +164,15 @@ function calculateEMA(values: number[], smoothingFactor: number = 0.2): number[]
 }
 
 function calculateWeightTrend(history: WeightPoint[]): WeightTrend | null {
-  // Use EMA with a smoothing factor of 0.2 and a threshold of 0.1
-  return calculateTrendWithEMA(history, 0.2, 0.1);
+  // Use the first 5 most recent entries for trend calculation (oldest to newest)
+  const recent = history.slice(0, 5);
+  return calculateTrendWithEMA(recent, 0.2, 0.1);
 }
 
 function calculateBodyFatTrend(history: WeightPoint[]): WeightTrend | null {
-  // Use EMA with a smoothing factor of 0.2 and a threshold of 0.02
-  return calculateTrendWithEMA(history, 0.2, 0.02);
+  // Use the first 5 entries most recent entries for trend calculation (oldest to newest)
+  const recent = history.slice(0, 5);
+  return calculateTrendWithEMA(recent, 0.2, 0.02);
 }
 
 function getWeeklyData(history: WeightPoint[]): { values: Array<number | null>; dayLabels: string[]; todayIndex: number } {
