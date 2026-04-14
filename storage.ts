@@ -21,7 +21,7 @@ export type FavoriteQuickAdd = {
 };
 
 export type MetabolismSex = 'unspecified' | 'male' | 'female';
-export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'heavy' | 'athlete' | 'very-active' | 'extra-active' | 'active';
+export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'heavy' | 'athlete';
 export type GoalPhase = 'maintain' | 'cut' | 'bulk';
 export type GoalAdjustmentType = 'kcal' | 'percent';
 

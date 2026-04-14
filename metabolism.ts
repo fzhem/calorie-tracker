@@ -8,9 +8,6 @@ const ACTIVITY_FACTOR_BY_LEVEL: Record<ActivityLevel, number> = {
   moderate: 1.55,
   heavy: 1.725,
   athlete: 1.9,
-  'very-active': 1.725,
-  'extra-active': 1.9,
-  active: 1.725,
 };
 
 type MetabolismInput = {
