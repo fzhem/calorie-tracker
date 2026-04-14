@@ -134,6 +134,7 @@ const QuickLogCard = memo(function QuickLogCard({
   const [mealFat, setMealFat] = useState('');
   const [mealCarbs, setMealCarbs] = useState('');
   const [mealFiber, setMealFiber] = useState('');
+  const [mealMultiplier, setMealMultiplier] = useState('1'); // New state for multiplier
   const [quickAddTab, setQuickAddTab] = useState<QuickAddTab>('recent');
 
   const activeQuickAdds = quickAddTab === 'favorites' ? favoriteQuickAdds : recentQuickAdds;
@@ -149,6 +150,12 @@ const QuickLogCard = memo(function QuickLogCard({
   }, [mealCalories, mealCarbs, mealFat, mealProtein]);
 
   const handleAddMeal = useCallback(() => {
+    const multiplier = parseNumberInput(mealMultiplier);
+    if (!multiplier || multiplier <= 0) {
+      Alert.alert('Invalid multiplier', 'Multiplier must be a positive number.');
+      return;
+    }
+
     const calories = parseNumberInput(mealCalories);
     const protein = mealProtein.trim() ? parseNumberInput(mealProtein) : null;
     const fat = mealFat.trim() ? parseNumberInput(mealFat) : null;
@@ -164,11 +171,11 @@ const QuickLogCard = memo(function QuickLogCard({
 
     onAddMeal({
       title: mealTitle.trim(),
-      calories: Math.round(calories),
-      proteinGrams: protein !== null ? Math.round(protein * 10) / 10 : null,
-      fatGrams: fat !== null ? Math.round(fat * 10) / 10 : null,
-      carbsGrams: carbs !== null ? Math.round(carbs * 10) / 10 : null,
-      fiberGrams: fiber !== null ? Math.round(fiber * 10) / 10 : null,
+      calories: Math.round(calories * multiplier),
+      proteinGrams: protein !== null ? Math.round(protein * multiplier * 10) / 10 : null,
+      fatGrams: fat !== null ? Math.round(fat * multiplier * 10) / 10 : null,
+      carbsGrams: carbs !== null ? Math.round(carbs * multiplier * 10) / 10 : null,
+      fiberGrams: fiber !== null ? Math.round(fiber * multiplier * 10) / 10 : null,
     });
 
     setMealTitle('');
@@ -177,8 +184,9 @@ const QuickLogCard = memo(function QuickLogCard({
     setMealFat('');
     setMealCarbs('');
     setMealFiber('');
+    setMealMultiplier('1'); // Reset multiplier
     Vibration.vibrate(12);
-  }, [mealCalories, mealCarbs, mealFat, mealFiber, mealProtein, mealTitle, onAddMeal]);
+  }, [mealCalories, mealCarbs, mealFat, mealFiber, mealMultiplier, mealProtein, mealTitle, onAddMeal]);
 
   return (
     <Card style={styles.card} mode="elevated">
@@ -197,15 +205,28 @@ const QuickLogCard = memo(function QuickLogCard({
           mode="outlined"
           theme={QUICK_LOG_INPUT_THEME}
         />
-        <TextInput
-          label="Calories (kcal)"
-          value={mealCalories}
-          onChangeText={setMealCalories}
-          placeholder="620"
-          keyboardType="numeric"
-          mode="outlined"
-          theme={QUICK_LOG_INPUT_THEME}
-        />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <TextInput
+            label="Calories (kcal)"
+            value={mealCalories}
+            onChangeText={setMealCalories}
+            placeholder="620"
+            keyboardType="numeric"
+            mode="outlined"
+            theme={QUICK_LOG_INPUT_THEME}
+            style={{ flex: 1, marginRight: 8 }} // Adjusted width and spacing
+          />
+          <TextInput
+            label="Multiplier (×)"
+            value={mealMultiplier}
+            onChangeText={setMealMultiplier}
+            placeholder="1"
+            keyboardType="numeric"
+            mode="outlined"
+            theme={QUICK_LOG_INPUT_THEME}
+            style={{ flex: 1 }} // Adjusted width
+          />
+        </View>
         <Pressable
           onPress={() => onSetMacrosExpanded(!isMacrosExpanded)}
           style={[styles.macroSectionHeader, { backgroundColor: theme.colors.elevation.level1, borderColor: theme.colors.outlineVariant }]}
