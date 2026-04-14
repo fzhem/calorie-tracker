@@ -82,7 +82,7 @@ function getActivityLabel(activityLevel: StoredData['activityLevel']) {
   if (activityLevel === 'sedentary') return 'Sedentary';
   if (activityLevel === 'light') return 'Light';
   if (activityLevel === 'moderate') return 'Moderate';
-  if (activityLevel === 'athlete' || activityLevel === 'extra-active') return 'Athlete';
+  if (activityLevel === 'athlete') return 'Athlete';
   return 'Heavy';
 }
 
@@ -90,7 +90,7 @@ function getActivityIcon(activityLevel: StoredData['activityLevel']) {
   if (activityLevel === 'sedentary') return 'sofa';
   if (activityLevel === 'light') return 'walk';
   if (activityLevel === 'moderate') return 'run';
-  if (activityLevel === 'athlete' || activityLevel === 'extra-active') return 'arm-flex';
+  if (activityLevel === 'athlete') return 'arm-flex';
   return 'dumbbell';
 }
 
