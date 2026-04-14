@@ -320,6 +320,11 @@ export default function GoalsScreen() {
       setSelectedHeightCm(DEFAULT_HEIGHT_CM);
       setMetabolismHeightInput(formatHeightForUnit(DEFAULT_HEIGHT_CM, heightUnit));
     }
+    if (!heightPickerOpen) {
+      Vibration.vibrate(20); // Stronger vibration when opening
+    } else {
+      Vibration.vibrate(20); // Vibration when closing
+    }
     setHeightPickerOpen((v) => !v);
   };
 
@@ -459,6 +464,7 @@ export default function GoalsScreen() {
   };
 
   const clearManualWeight = () => {
+    Vibration.vibrate(40); // Vibrate for 40ms
     setManualWeightInput('');
     setData((prev) => ({
       ...prev,
@@ -729,7 +735,7 @@ export default function GoalsScreen() {
               placeholder={weightUnit === 'kg' ? '78.45' : '173.00'}
               mode="outlined"
               editable={weightUnlocked}
-              right={<TextInput.Icon icon={weightUnlocked ? 'lock-open-variant' : 'lock'} onPress={() => setWeightUnlocked(!weightUnlocked)} />}
+              right={<TextInput.Icon icon={weightUnlocked ? 'lock-open-variant' : 'lock'} onPress={() => { Vibration.vibrate(40); setWeightUnlocked(!weightUnlocked); }} />}
               theme={GOALS_PROFILE_INPUT_THEME}
             />
             <SegmentedButtons
