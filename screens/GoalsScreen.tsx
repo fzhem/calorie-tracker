@@ -610,6 +610,7 @@ export default function GoalsScreen() {
             >
               <Menu.Item
                 onPress={() => {
+                  Vibration.vibrate(20);
                   setData((prev) => ({ ...prev, metabolismSex: 'male' }));
                   setSexMenuVisible(false);
                 }}
@@ -618,6 +619,7 @@ export default function GoalsScreen() {
               />
               <Menu.Item
                 onPress={() => {
+                  Vibration.vibrate(20);
                   setData((prev) => ({ ...prev, metabolismSex: 'female' }));
                   setSexMenuVisible(false);
                 }}
@@ -643,6 +645,7 @@ export default function GoalsScreen() {
             >
               <Menu.Item
                 onPress={() => {
+                  Vibration.vibrate(20);
                   setData((prev) => ({ ...prev, activityLevel: 'sedentary' }));
                   setActivityMenuVisible(false);
                 }}
@@ -651,6 +654,7 @@ export default function GoalsScreen() {
               />
               <Menu.Item
                 onPress={() => {
+                  Vibration.vibrate(20);
                   setData((prev) => ({ ...prev, activityLevel: 'light' }));
                   setActivityMenuVisible(false);
                 }}
@@ -659,6 +663,7 @@ export default function GoalsScreen() {
               />
               <Menu.Item
                 onPress={() => {
+                  Vibration.vibrate(20);
                   setData((prev) => ({ ...prev, activityLevel: 'moderate' }));
                   setActivityMenuVisible(false);
                 }}
@@ -667,6 +672,7 @@ export default function GoalsScreen() {
               />
               <Menu.Item
                 onPress={() => {
+                  Vibration.vibrate(20);
                   setData((prev) => ({ ...prev, activityLevel: 'heavy' }));
                   setActivityMenuVisible(false);
                 }}
@@ -675,6 +681,7 @@ export default function GoalsScreen() {
               />
               <Menu.Item
                 onPress={() => {
+                  Vibration.vibrate(20);
                   setData((prev) => ({ ...prev, activityLevel: 'athlete' }));
                   setActivityMenuVisible(false);
                 }}
