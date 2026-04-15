@@ -1,10 +1,8 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultTheme, NavigationContainer } from '@react-navigation/native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useFonts } from 'expo-font';
-import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, useColorScheme, View } from 'react-native';
 import { enableFreeze, enableScreens } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,9 +20,6 @@ const Tab = createBottomTabNavigator();
 
 enableScreens(true);
 enableFreeze(true);
-SplashScreen.preventAutoHideAsync().catch(() => {
-  // Ignore: splash screen can already be controlled by the runtime.
-});
 
 const APP_LIGHT_THEME: MD3Theme = {
   ...MD3LightTheme,
@@ -144,30 +139,12 @@ function RippleTabBarButton({
 }
 
 export default function App() {
-  const [fontsLoaded] = useFonts(MaterialCommunityIcons.font);
-  const [isBootstrapped, setIsBootstrapped] = useState(false);
-
   useEffect(() => {
-    if (!fontsLoaded) return;
     loadStoredData()
       .catch(() => {
         // Screens already handle storage errors; keep app startup resilient.
-      })
-      .finally(() => {
-        setIsBootstrapped(true);
       });
-  }, [fontsLoaded]);
-
-  useEffect(() => {
-    if (!fontsLoaded || !isBootstrapped) return;
-    SplashScreen.hideAsync().catch(() => {
-      // No-op if splash is already hidden.
-    });
-  }, [fontsLoaded, isBootstrapped]);
-
-  if (!fontsLoaded || !isBootstrapped) {
-    return null;
-  }
+  }, []);
 
   return (
     <ThemeModeProvider>
