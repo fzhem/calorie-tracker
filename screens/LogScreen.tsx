@@ -1097,7 +1097,7 @@ const styles = StyleSheet.create({
   },
   macroSummaryContent: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 2,
     flex: 1,
     flexWrap: 'nowrap',
   },
