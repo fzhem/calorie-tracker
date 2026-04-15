@@ -3,7 +3,6 @@ import { DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultThem
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, useColorScheme, View } from 'react-native';
-import { enableFreeze, enableScreens } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider, type MD3Theme } from 'react-native-paper';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
@@ -16,9 +15,6 @@ import { loadStoredData } from './storage';
 import { ThemeModeProvider, useThemeMode } from './themeMode';
 
 const Tab = createBottomTabNavigator();
-
-enableScreens(true);
-enableFreeze(true);
 
 const APP_LIGHT_THEME: MD3Theme = {
   ...MD3LightTheme,
