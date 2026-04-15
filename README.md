@@ -4,7 +4,7 @@ Simple Expo Android app for logging calories, visualizing weekly trends, and adj
 
 ## Features
 
-- Local calorie log stored on-device with AsyncStorage
+- Local calorie log stored on-device with MMKV
 - Daily calorie target based on either:
   - fallback calorie goal
   - latest weight x calories-per-kg multiplier

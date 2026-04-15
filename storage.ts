@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { kvStore } from './kvStore';
 
 export type MealEntry = {
   id: string;
@@ -123,7 +123,7 @@ export function getCachedData() {
 }
 
 export async function loadStoredData() {
-  const stored = await AsyncStorage.getItem(STORAGE_KEY);
+  const stored = kvStore.getString(STORAGE_KEY) ?? null;
   const next = stored ? normalizeStoredData(JSON.parse(stored) as Partial<StoredData>) : DEFAULT_DATA;
   cachedData = next;
   return next;
@@ -131,5 +131,5 @@ export async function loadStoredData() {
 
 export async function saveStoredData(next: StoredData) {
   cachedData = next;
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  kvStore.set(STORAGE_KEY, JSON.stringify(next));
 }
