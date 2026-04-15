@@ -1,7 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultTheme, NavigationContainer } from '@react-navigation/native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, useColorScheme, View } from 'react-native';
 import { enableFreeze, enableScreens } from 'react-native-screens';
@@ -179,7 +178,7 @@ function AppWithTheme() {
 
   return (
     <PaperProvider theme={paperTheme}>
-      <AppTabs theme={paperTheme} navTheme={navTheme} statusBarStyle={resolvedMode === 'dark' ? 'light' : 'dark'} />
+      <AppTabs theme={paperTheme} navTheme={navTheme} />
     </PaperProvider>
   );
 }
@@ -187,17 +186,14 @@ function AppWithTheme() {
 function AppTabs({
   theme,
   navTheme,
-  statusBarStyle,
 }: {
   theme: MD3Theme;
   navTheme: typeof NavigationDefaultTheme;
-  statusBarStyle: 'light' | 'dark';
 }) {
   const insets = useSafeAreaInsets();
 
   return (
     <NavigationContainer theme={navTheme}>
-      <StatusBar style={statusBarStyle} />
       <Tab.Navigator
         detachInactiveScreens
         screenOptions={({ route }) => ({
