@@ -1,7 +1,9 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultTheme, NavigationContainer } from '@react-navigation/native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import * as SplashScreen from 'expo-splash-screen';
+import * as Font from 'expo-font';
 import { Animated, Easing, Pressable, StyleSheet, useColorScheme, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider, type MD3Theme } from 'react-native-paper';
@@ -133,13 +135,30 @@ function RippleTabBarButton({
   );
 }
 
+
 export default function App() {
+  const [assetsReady, setAssetsReady] = useState(false);
+
   useEffect(() => {
-    loadStoredData()
-      .catch(() => {
-        // Screens already handle storage errors; keep app startup resilient.
-      });
+    async function prepare() {
+      try {
+        await SplashScreen.preventAutoHideAsync();
+        // Preload fonts (MaterialCommunityIcons is used by react-native-paper and navigation)
+        await Font.loadAsync(MaterialCommunityIcons.font);
+        await loadStoredData();
+      } catch (e) {
+        // Ignore errors, app will still load
+      } finally {
+        setAssetsReady(true);
+        await SplashScreen.hideAsync();
+      }
+    }
+    prepare();
   }, []);
+
+  if (!assetsReady) {
+    return null;
+  }
 
   return (
     <ThemeModeProvider>
