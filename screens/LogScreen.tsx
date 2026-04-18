@@ -257,7 +257,6 @@ const QuickLogCard = memo(function QuickLogCard({
           value={mealTitle}
           onChangeText={setMealTitle}
           placeholder="Breakfast burrito"
-          multiline
           mode="outlined"
           theme={QUICK_LOG_INPUT_THEME}
         />
