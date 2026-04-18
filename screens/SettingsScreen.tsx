@@ -3,9 +3,24 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import type { Permission } from 'react-native-health-connect';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, Chip, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
+import {
+  Button,
+  Card,
+  Chip,
+  ProgressBar,
+  SegmentedButtons,
+  Text,
+  TextInput,
+  useTheme,
+} from 'react-native-paper';
+import { Directory, File, Paths } from 'expo-file-system';
 
-import { DEFAULT_DATA, getCachedData, loadStoredData as readStoredData, saveStoredData } from '../storage';
+import {
+  DEFAULT_DATA,
+  getCachedData,
+  loadStoredData as readStoredData,
+  saveStoredData,
+} from '../storage';
 import type { BodyFatPoint, StoredData, WeightPoint } from '../storage';
 import { useThemeMode, type ThemeMode } from '../themeMode';
 
@@ -14,6 +29,55 @@ const healthConnect: HealthConnectModule | null =
   Platform.OS === 'android' ? require('react-native-health-connect') : null;
 
 type HealthStatus = 'idle' | 'available' | 'syncing' | 'unavailable' | 'update-required' | 'error';
+
+type ModelCatalogItem = {
+  key: 'GEMMA_4_E2B_IT' | 'GEMMA_4_E4B_IT';
+  label: string;
+  sizeLabel: string;
+  url: string;
+  fileName: string;
+};
+
+type DownloadedModel = {
+  name: string;
+  uri: string;
+  size: number | null;
+  modifiedAt: number | null;
+};
+
+/**
+ * Download URL for the Gemma 4 E2B IT model (2.58 GB).
+ * Public - no HuggingFace account required.
+ */
+export const GEMMA_4_E2B_IT =
+  'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm';
+
+/**
+ * Download URL for the Gemma 4 E4B IT model (3.65 GB).
+ * Higher quality than E2B but requires more device memory.
+ * Public - no HuggingFace account required.
+ */
+export const GEMMA_4_E4B_IT =
+  'https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm';
+
+const BUILT_IN_MODELS: ModelCatalogItem[] = [
+  {
+    key: 'GEMMA_4_E2B_IT',
+    label: 'Gemma-4-E2B-it',
+    sizeLabel: '2.58 GB',
+    url: GEMMA_4_E2B_IT,
+    fileName: 'gemma-4-E2B-it.litertlm',
+  },
+  {
+    key: 'GEMMA_4_E4B_IT',
+    label: 'Gemma-4-E4B-it',
+    sizeLabel: '3.65 GB',
+    url: GEMMA_4_E4B_IT,
+    fileName: 'gemma-4-E4B-it.litertlm',
+  },
+];
+
+const MODEL_DIRECTORY = new Directory(Paths.document, 'models');
 
 function addDays(date: Date, days: number) {
   const next = new Date(date);
@@ -168,15 +232,72 @@ function extractHealthOrigin(record: unknown) {
   } as Pick<WeightPoint, 'originAppId' | 'originAppName' | 'originDevice'>;
 }
 
+function formatBytes(value: number | null) {
+  if (!value || value <= 0) return 'Unknown size';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
+}
+
+async function resolveRemoteFileSize(url: string) {
+  try {
+    const head = await fetch(url, { method: 'HEAD' });
+    const headLength = head.headers.get('content-length');
+    if (head.ok && headLength) {
+      const parsed = parseInt(headLength, 10);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+  } catch {
+    // Best effort only.
+  }
+
+  try {
+    const range = await fetch(url, { headers: { Range: 'bytes=0-0' } });
+    const contentRange = range.headers.get('content-range');
+    if (contentRange) {
+      const match = contentRange.match(/\/(\d+)$/);
+      if (match?.[1]) {
+        const parsed = parseInt(match[1], 10);
+        if (Number.isFinite(parsed) && parsed > 0) return parsed;
+      }
+    }
+    const rangeLength = range.headers.get('content-length');
+    if (range.ok && rangeLength) {
+      const parsed = parseInt(rangeLength, 10);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+  } catch {
+    // Best effort only.
+  }
+
+  return null;
+}
+
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const { mode, setMode } = useThemeMode();
+
   const [data, setData] = useState<StoredData>(() => getCachedData() ?? DEFAULT_DATA);
   const [isReady, setIsReady] = useState(false);
   const [healthStatus, setHealthStatus] = useState<HealthStatus>('idle');
   const [healthMessage, setHealthMessage] = useState('Health Connect sync is ready to configure.');
   const [isSyncingWeight, setIsSyncingWeight] = useState(false);
+
+  const [selectedModelKey, setSelectedModelKey] = useState<'GEMMA_4_E2B_IT' | 'GEMMA_4_E4B_IT' | 'custom'>('GEMMA_4_E2B_IT');
+  const [customModelUrl, setCustomModelUrl] = useState('');
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadedBytes, setDownloadedBytes] = useState(0);
+  const [totalBytes, setTotalBytes] = useState<number | null>(null);
+  const [downloadSpeed, setDownloadSpeed] = useState<number | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadedModels, setDownloadedModels] = useState<DownloadedModel[]>([]);
 
   const loadStoredData = useCallback(async () => {
     const next = await readStoredData();
@@ -184,18 +305,44 @@ export default function SettingsScreen() {
     return next;
   }, []);
 
+  const refreshDownloadedModels = useCallback(async () => {
+    if (!MODEL_DIRECTORY.exists) {
+      MODEL_DIRECTORY.create({ intermediates: true, idempotent: true });
+      setDownloadedModels([]);
+      return;
+    }
+
+    const details: DownloadedModel[] = MODEL_DIRECTORY
+      .list()
+      .filter((entry): entry is File => entry instanceof File)
+      .filter((file) => file.name.toLowerCase().endsWith('.litertlm'))
+      .map((file) => ({
+        name: file.name,
+        uri: file.uri,
+        size: file.exists ? file.size : null,
+        modifiedAt: file.exists ? file.modificationTime : null,
+      }));
+
+    details.sort((a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0));
+    setDownloadedModels(details);
+  }, []);
+
   useEffect(() => {
     loadStoredData()
+      .then(() => refreshDownloadedModels())
       .catch(() => Alert.alert('Storage error', 'Saved data could not be loaded.'))
       .finally(() => setIsReady(true));
-  }, [loadStoredData]);
+  }, [loadStoredData, refreshDownloadedModels]);
 
   useFocusEffect(
     useCallback(() => {
       loadStoredData().catch(() => {
         Alert.alert('Storage error', 'Saved data could not be loaded.');
       });
-    }, [loadStoredData]),
+      refreshDownloadedModels().catch(() => {
+        Alert.alert('File error', 'Downloaded model list could not be refreshed.');
+      });
+    }, [loadStoredData, refreshDownloadedModels]),
   );
 
   useEffect(() => {
@@ -250,6 +397,7 @@ export default function SettingsScreen() {
   const syncWeight = async () => {
     if (!healthConnect) { Alert.alert('Unavailable', 'Health Connect requires an Android development build.'); return; }
     setIsSyncingWeight(true);
+    setHealthStatus('syncing');
     setHealthMessage('Syncing weight and body fat data from Health Connect...');
 
     try {
@@ -390,8 +538,200 @@ export default function SettingsScreen() {
     void syncWeight();
   };
 
+  const resolveDownloadSource = () => {
+    if (selectedModelKey === 'custom') {
+      const trimmed = customModelUrl.trim();
+      if (!trimmed) return null;
+      const tail = trimmed.split('/').pop() || `model-${Date.now()}.litertlm`;
+      return { label: 'Custom model', url: trimmed, fileName: tail };
+    }
+
+    const selected = BUILT_IN_MODELS.find((item) => item.key === selectedModelKey);
+    if (!selected) return null;
+    return { label: selected.label, url: selected.url, fileName: selected.fileName };
+  };
+
+  const handleDownloadModel = async () => {
+    setDownloadError(null);
+
+    const source = resolveDownloadSource();
+    if (!source) {
+      setDownloadError('Select a model or enter a valid custom URL first.');
+      return;
+    }
+
+    try {
+      setIsDownloading(true);
+      setDownloadProgress(0);
+      setDownloadedBytes(0);
+      setTotalBytes(null);
+      setDownloadSpeed(null);
+
+      if (!MODEL_DIRECTORY.exists) {
+        MODEL_DIRECTORY.create({ intermediates: true, idempotent: true });
+      }
+
+      const destFile = new File(MODEL_DIRECTORY, source.fileName);
+      if (destFile.exists) destFile.delete();
+      destFile.create();
+      let knownTotalBytes: number | null = null;
+
+      knownTotalBytes = await resolveRemoteFileSize(source.url);
+      if (knownTotalBytes && knownTotalBytes > 0) {
+        setTotalBytes(knownTotalBytes);
+      }
+
+      let usedFallback = false;
+      try {
+        const response = await fetch(source.url);
+        if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
+
+        const contentLength = response.headers.get('content-length');
+        const total = contentLength ? parseInt(contentLength, 10) : null;
+        if (total && total > 0) {
+          knownTotalBytes = total;
+          setTotalBytes(total);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('Response body is not readable.');
+
+        const handle = destFile.open();
+        let written = 0;
+        let speedWindowStart = Date.now();
+        let speedWindowBytes = 0;
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            handle.writeBytes(value);
+            written += value.byteLength;
+            speedWindowBytes += value.byteLength;
+
+            const now = Date.now();
+            const elapsed = (now - speedWindowStart) / 1000;
+            if (elapsed >= 0.5) {
+              setDownloadSpeed(speedWindowBytes / elapsed);
+              speedWindowStart = now;
+              speedWindowBytes = 0;
+            }
+
+            setDownloadedBytes(written);
+            if (knownTotalBytes) setDownloadProgress(written / knownTotalBytes);
+          }
+        } finally {
+          handle.close();
+        }
+      } catch {
+        usedFallback = true;
+
+        if (destFile.exists) destFile.delete();
+        destFile.create();
+
+        let pollTimer: ReturnType<typeof setInterval> | null = null;
+        let lastBytes = 0;
+        let lastTime = Date.now();
+
+        try {
+          // Fallback: native downloader with periodic file-size polling for live progress/speed.
+          pollTimer = setInterval(() => {
+            if (!destFile.exists) return;
+            const currentBytes = destFile.size;
+            const now = Date.now();
+            const elapsed = (now - lastTime) / 1000;
+            if (elapsed > 0) {
+              setDownloadSpeed((currentBytes - lastBytes) / elapsed);
+            }
+            lastBytes = currentBytes;
+            lastTime = now;
+            setDownloadedBytes(currentBytes);
+            if (knownTotalBytes && knownTotalBytes > 0) {
+              setDownloadProgress(currentBytes / knownTotalBytes);
+            }
+          }, 700);
+
+          await File.downloadFileAsync(source.url, destFile, { idempotent: true });
+        } finally {
+          if (pollTimer) clearInterval(pollTimer);
+        }
+      }
+
+      if (destFile.exists) {
+        const finalBytes = destFile.size;
+        setDownloadedBytes(finalBytes);
+        if (knownTotalBytes && knownTotalBytes > 0) {
+          setDownloadProgress(1);
+        } else if (usedFallback) {
+          setTotalBytes(finalBytes);
+          setDownloadProgress(1);
+        }
+      }
+
+      if (!usedFallback && knownTotalBytes && knownTotalBytes > 0) {
+        setDownloadProgress(1);
+      }
+
+      setData((prev) => ({ ...prev, modelPath: destFile.uri }));
+      await refreshDownloadedModels();
+      Alert.alert('Download complete', `${source.label} is ready and selected for AI meal estimation.`);
+    } catch (error) {
+      setDownloadError(`Download failed: ${getErrorMessage(error)}`);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const setActiveModel = (uri: string) => {
+    setData((prev) => ({ ...prev, modelPath: uri }));
+  };
+
+  const handleDeleteModel = (model: DownloadedModel) => {
+    Alert.alert(
+      'Delete model?',
+      `Remove ${model.name} from local storage?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                const file = new File(model.uri);
+                if (file.exists) file.delete();
+                setData((prev) => ({
+                  ...prev,
+                  modelPath: prev.modelPath === model.uri ? null : prev.modelPath,
+                }));
+                await refreshDownloadedModels();
+              } catch (error) {
+                Alert.alert('Delete failed', getErrorMessage(error));
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
   const latestWeight = data.weightHistory[0]?.weightKg ?? data.manualWeightKg;
   const latestBodyFat = data.bodyFatHistory[0]?.bodyFatPercentage ?? null;
+
+  useEffect(() => {
+    if (!isReady || !data.modelPath) return;
+    const exists = downloadedModels.some((model) => model.uri === data.modelPath);
+    if (!exists) {
+      setData((prev) => (prev.modelPath === data.modelPath ? { ...prev, modelPath: null } : prev));
+    }
+  }, [data.modelPath, downloadedModels, isReady]);
+
+  const selectedModelDescription = useMemo(() => {
+    if (!data.modelPath) return 'No model selected.';
+    const active = downloadedModels.find((model) => model.uri === data.modelPath);
+    if (active) return `${active.name} (local)`;
+    return 'No model selected.';
+  }, [data.modelPath, downloadedModels]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
@@ -417,37 +757,164 @@ export default function SettingsScreen() {
         <Card style={styles.card} mode="elevated">
           <Card.Title title="Health Connect" titleVariant="titleLarge" />
           <Card.Content style={styles.formArea}>
-          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>{healthMessage}</Text>
-          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            Latest weight: {latestWeight ? `${latestWeight} kg` : 'None yet'}
-          </Text>
-          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            Latest body fat: {latestBodyFat !== null ? `${latestBodyFat}%` : 'None yet'}
-          </Text>
-          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            Last sync: {data.lastWeightSyncAt ? formatDisplayDate(data.lastWeightSyncAt) : 'Never'}
-          </Text>
-          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            Last body fat sync: {data.lastBodyFatSyncAt ? formatDisplayDate(data.lastBodyFatSyncAt) : 'Never'}
-          </Text>
-          <Chip icon={healthStatus === 'available' ? 'check-circle' : 'information-outline'}>
-            Status: {healthStatus}
-          </Chip>
-          <View style={styles.buttonColumn}>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>{healthMessage}</Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              Latest weight: {latestWeight ? `${latestWeight} kg` : 'None yet'}
+            </Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              Latest body fat: {latestBodyFat !== null ? `${latestBodyFat}%` : 'None yet'}
+            </Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              Last sync: {data.lastWeightSyncAt ? formatDisplayDate(data.lastWeightSyncAt) : 'Never'}
+            </Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              Last body fat sync: {data.lastBodyFatSyncAt ? formatDisplayDate(data.lastBodyFatSyncAt) : 'Never'}
+            </Text>
+            <Chip icon={healthStatus === 'available' ? 'check-circle' : 'information-outline'}>
+              Status: {healthStatus}
+            </Chip>
+            <View style={styles.buttonColumn}>
+              <Button
+                style={styles.button}
+                mode="contained"
+                icon="sync"
+                loading={isSyncingWeight}
+                disabled={isSyncingWeight}
+                onPress={onPressSyncWeight}
+              >
+                {isSyncingWeight ? 'Syncing...' : 'Sync body data'}
+              </Button>
+              <Button mode="outlined" icon="cog" onPress={openHealthSettings}>
+                Open settings
+              </Button>
+            </View>
+          </Card.Content>
+        </Card>
+
+        <Card style={styles.card} mode="elevated">
+          <Card.Title title="AI Models" titleVariant="titleLarge" />
+          <Card.Content style={styles.formArea}>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              Models are saved in the app sandbox.
+            </Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              Active model: {selectedModelDescription}
+            </Text>
+
+            <View style={styles.modelSelector}>
+              {BUILT_IN_MODELS.map((model) => (
+                <Button
+                  key={model.key}
+                  mode={selectedModelKey === model.key ? 'contained' : 'outlined'}
+                  onPress={() => setSelectedModelKey(model.key)}
+                >
+                  {model.label} ({model.sizeLabel})
+                </Button>
+              ))}
+              <Button
+                mode={selectedModelKey === 'custom' ? 'contained' : 'outlined'}
+                onPress={() => setSelectedModelKey('custom')}
+              >
+                Custom URL
+              </Button>
+            </View>
+
+            {selectedModelKey === 'custom' ? (
+              <TextInput
+                mode="outlined"
+                label="Model URL"
+                value={customModelUrl}
+                onChangeText={setCustomModelUrl}
+                placeholder="https://.../model.litertlm"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            ) : null}
+
             <Button
-              style={styles.button}
               mode="contained"
-              icon="sync"
-              loading={isSyncingWeight}
-              disabled={isSyncingWeight}
-              onPress={onPressSyncWeight}
+              icon="download"
+              onPress={handleDownloadModel}
+              loading={isDownloading}
+              disabled={isDownloading || (selectedModelKey === 'custom' && !customModelUrl.trim())}
             >
-              {isSyncingWeight ? 'Syncing...' : 'Sync body data'}
+              {isDownloading ? 'Downloading model...' : 'Download selected model'}
             </Button>
-            <Button mode="outlined" icon="cog" onPress={openHealthSettings}>
-              Open settings
-            </Button>
-          </View>
+
+            {isDownloading ? (
+              <View style={styles.downloadProgressArea}>
+                <ProgressBar
+                  progress={totalBytes ? downloadProgress : undefined}
+                  indeterminate={!totalBytes}
+                  style={styles.progressBar}
+                />
+                <View style={styles.downloadProgressRow}>
+                  <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {totalBytes
+                      ? `${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)} (${Math.round(downloadProgress * 100)}%)`
+                      : formatBytes(downloadedBytes)}
+                  </Text>
+                  {downloadSpeed !== null ? (
+                    <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                      {formatBytes(Math.round(downloadSpeed))}/s
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+
+            {downloadError ? (
+              <Text variant="bodyMedium" style={{ color: theme.colors.error }}>
+                {downloadError}
+              </Text>
+            ) : null}
+
+            <Text variant="titleMedium">Downloaded models</Text>
+            {downloadedModels.length ? (
+              <View style={styles.downloadedList}>
+                {downloadedModels.map((model) => {
+                  const isActive = data.modelPath === model.uri;
+                  return (
+                    <View
+                      key={model.uri}
+                      style={[
+                        styles.downloadedItem,
+                        {
+                          borderColor: isActive ? theme.colors.primary : theme.colors.outlineVariant,
+                          backgroundColor: theme.colors.elevation.level1,
+                        },
+                      ]}
+                    >
+                      <View style={styles.downloadedItemInfo}>
+                        <Text variant="bodyLarge">{model.name}</Text>
+                        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                          {formatBytes(model.size)}
+                        </Text>
+                      </View>
+                      <View style={styles.downloadedItemActions}>
+                        <Button
+                          mode={isActive ? 'contained' : 'outlined'}
+                          onPress={() => setActiveModel(model.uri)}
+                        >
+                          {isActive ? 'In use' : 'Use'}
+                        </Button>
+                        <Button
+                          mode="text"
+                          textColor={theme.colors.error}
+                          onPress={() => handleDeleteModel(model)}
+                        >
+                          Delete
+                        </Button>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                No models downloaded yet.
+              </Text>
+            )}
           </Card.Content>
         </Card>
 
@@ -455,7 +922,7 @@ export default function SettingsScreen() {
           <Card.Title title="Advanced" titleVariant="titleLarge" />
           <Card.Content style={styles.formArea}>
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
-              Macro Mismatch Tolerance
+              Macro mismatch tolerance
             </Text>
             <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
               Percentage of logged calories allowed to differ from calculated macros (default: 12%)
@@ -472,15 +939,16 @@ export default function SettingsScreen() {
                 }
               }}
             />
+
             <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 12, marginBottom: 8 }}>
-              Graph Status Tolerance
+              Graph status tolerance
             </Text>
             <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
-              How close you need to be to your goal to show "On target" (default: 100 kcal)
+              How close you need to be to your goal to show On target (default: 100 kcal)
             </Text>
             <TextInput
               mode="outlined"
-              label="Graph Tolerance (kcal)"
+              label="Graph tolerance (kcal)"
               keyboardType="number-pad"
               value={String(data.graphToleranceCalories)}
               onChangeText={(value) => {
@@ -504,4 +972,21 @@ const styles = StyleSheet.create({
   formArea: { gap: 10 },
   buttonColumn: { gap: 10 },
   button: { flex: 1 },
+  modelSelector: { gap: 8 },
+  downloadProgressArea: { gap: 6 },
+  downloadProgressRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  progressBar: { height: 10, borderRadius: 6 },
+  downloadedList: { gap: 8 },
+  downloadedItem: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    gap: 10,
+  },
+  downloadedItemInfo: { gap: 4 },
+  downloadedItemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
 });

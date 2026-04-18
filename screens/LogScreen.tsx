@@ -1,13 +1,47 @@
 import { useFocusEffect } from '@react-navigation/native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, View, Vibration } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, ToastAndroid, View, Vibration } from 'react-native';
 import { Button, Card, Chip, IconButton, ProgressBar, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+// Do not import useModel at the top level
 
 import { getAdjustedCalorieTarget, getAutoMacroTargets } from '../metabolism';
 import { DEFAULT_DATA, getCachedData, loadStoredData, saveStoredData } from '../storage';
 import type { MealEntry, StoredData } from '../storage';
+
+export type NutritionResult = {
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  fiber: number;
+  raw: string;
+};
+
+type AiEstimateItem = {
+  name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fibre: number;
+};
+
+type AiEstimatePayload = {
+  items: AiEstimateItem[];
+};
+
+type AiRunStage = 'idle' | 'loading-model' | 'estimating';
+
+// Utility to get model path and system prompt from storage (async)
+async function getModelConfig() {
+  const stored = await loadStoredData();
+  return {
+    modelPath: stored.modelPath,
+    systemPrompt: stored.systemPrompt,
+  };
+}
 
 type QuickAddItem = {
   title: string;
@@ -117,6 +151,7 @@ type QuickLogCardProps = {
   onAddMeal: (item: QuickAddItem) => void;
   onQuickAddMeal: (item: QuickAddItem) => void;
   onToggleFavoriteQuickAdd: (item: QuickAddItem) => void;
+  onOpenAiEstimator: () => void;
   data: StoredData;
 };
 
@@ -129,6 +164,7 @@ const QuickLogCard = memo(function QuickLogCard({
   onAddMeal,
   onQuickAddMeal,
   onToggleFavoriteQuickAdd,
+  onOpenAiEstimator,
   data,
 }: QuickLogCardProps) {
   const theme = useTheme();
@@ -201,6 +237,18 @@ const QuickLogCard = memo(function QuickLogCard({
         titleVariant="titleLarge"
         style={styles.quickLogHeader}
         titleStyle={styles.quickLogTitle}
+        right={() => (
+          <Button
+            mode="outlined"
+            compact
+            icon="robot"
+            onPress={onOpenAiEstimator}
+            style={styles.quickLogAiButton}
+            contentStyle={styles.quickLogAiButtonContent}
+          >
+            Estimate Meal
+          </Button>
+        )}
       />
       <Card.Content style={styles.formArea}>
         <TextInput
@@ -208,6 +256,7 @@ const QuickLogCard = memo(function QuickLogCard({
           value={mealTitle}
           onChangeText={setMealTitle}
           placeholder="Breakfast burrito"
+          multiline
           mode="outlined"
           theme={QUICK_LOG_INPUT_THEME}
         />
@@ -368,6 +417,119 @@ const QuickLogCard = memo(function QuickLogCard({
 });
 
 export default function LogScreen() {
+  // AI prompt state
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiResult, setAiResult] = useState<string | null>(null);
+  const [aiError, setAiError] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiStage, setAiStage] = useState<AiRunStage>('idle');
+  const [aiStageStartedAt, setAiStageStartedAt] = useState<number | null>(null);
+  const [aiStageElapsedSec, setAiStageElapsedSec] = useState(0);
+  const [modelPath, setModelPath] = useState<string | null>(null);
+  const [systemPrompt, setSystemPrompt] = useState<string>('');
+  const [loadedModelKey, setLoadedModelKey] = useState<string | null>(null);
+
+  // Load modelPath and systemPrompt from storage on mount
+  useEffect(() => {
+    getModelConfig().then(({ modelPath, systemPrompt }) => {
+      setModelPath(modelPath);
+      setSystemPrompt(systemPrompt);
+    });
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      getModelConfig().then(({ modelPath: nextModelPath, systemPrompt: nextSystemPrompt }) => {
+        if (!isActive) return;
+        const changed = nextModelPath !== modelPath || nextSystemPrompt !== systemPrompt;
+        setModelPath(nextModelPath);
+        setSystemPrompt(nextSystemPrompt);
+        if (changed) {
+          setModelInstance(null);
+          setLoadedModelKey(null);
+        }
+      }).catch(() => {
+        if (!isActive) return;
+        setAiError('Could not refresh AI model settings.');
+      });
+
+      return () => {
+        isActive = false;
+      };
+    }, [modelPath, systemPrompt]),
+  );
+
+  // Model instance cache (imperative API)
+  const [modelInstance, setModelInstance] = useState<any>(null);
+
+  useEffect(() => {
+    if (!aiLoading || !aiStageStartedAt) {
+      setAiStageElapsedSec(0);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setAiStageElapsedSec(Math.max(0, Math.floor((Date.now() - aiStageStartedAt) / 1000)));
+    }, 500);
+
+    return () => clearInterval(timer);
+  }, [aiLoading, aiStageStartedAt]);
+
+  const beginAiStage = (stage: AiRunStage) => {
+    setAiStage(stage);
+    setAiStageStartedAt(Date.now());
+    setAiStageElapsedSec(0);
+  };
+
+  const handleAIPrompt = async () => {
+    setAiLoading(true);
+    beginAiStage('estimating');
+    setAiError('');
+    setAiResult(null);
+    if (!modelPath) {
+      setAiError('No model file selected in settings.');
+      setAiLoading(false);
+      setAiStage('idle');
+      setAiStageStartedAt(null);
+      return;
+    }
+    // Remove 'file:///' prefix if present
+    let cleanedModelPath = modelPath.startsWith('file:///') ? modelPath.replace('file:///', '/') : modelPath;
+    const activeModelKey = `${cleanedModelPath}::${systemPrompt}`;
+    let model = modelInstance;
+    if (!model || loadedModelKey !== activeModelKey) {
+      try {
+        beginAiStage('loading-model');
+        const { createLLM } = await import('react-native-litert-lm');
+        model = createLLM();
+        await model.loadModel(cleanedModelPath, {
+          backend: 'cpu',
+          systemPrompt,
+          enableMemoryTracking: true,
+        });
+        setModelInstance(model);
+        setLoadedModelKey(activeModelKey);
+      } catch (err) {
+        setAiError('Failed to load model: ' + err);
+        setAiLoading(false);
+        setAiStage('idle');
+        setAiStageStartedAt(null);
+        return;
+      }
+    }
+    try {
+      beginAiStage('estimating');
+      const response = await model.sendMessage(aiPrompt);
+      setAiResult(response);
+    } catch (err) {
+      setAiError(`Failed to run model. ${err}`);
+    } finally {
+      setAiLoading(false);
+      setAiStage('idle');
+      setAiStageStartedAt(null);
+    }
+  };
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const [data, setData] = useState<StoredData>(() => getCachedData() ?? DEFAULT_DATA);
@@ -377,6 +539,7 @@ export default function LogScreen() {
   const [macroModalVisible, setMacroModalVisible] = useState(false);
   const [editDraft, setEditDraft] = useState<EditEntryDraft | null>(null);
   const [showEditMacros, setShowEditMacros] = useState(false);
+  const [aiModalVisible, setAiModalVisible] = useState(false);
 
   useEffect(() => {
     loadStoredData()
@@ -747,8 +910,44 @@ export default function LogScreen() {
     data.calorieTolerancePercent,
   ]);
 
+  // Parse AI result for use in rendering and button handler
+  const aiResultParsed = useMemo<AiEstimatePayload | null>(() => {
+    if (!aiResult) return null;
+    try {
+      const start = aiResult.indexOf('{');
+      if (start < 0) return null;
+      const end = aiResult.indexOf('```', start);
+      const jsonString = end !== -1 ? aiResult.slice(start, end) : aiResult.slice(start);
+      const parsed = JSON.parse(jsonString) as unknown;
+      if (!parsed || typeof parsed !== 'object') return null;
+      const items = (parsed as { items?: unknown }).items;
+      if (!Array.isArray(items)) return null;
+      return { items: items as AiEstimateItem[] };
+    } catch {
+      return null;
+    }
+  }, [aiResult]);
+
+  const isModelInMemory = useMemo(() => {
+    if (!modelPath || !modelInstance || !loadedModelKey) return false;
+    const cleanedModelPath = modelPath.startsWith('file:///') ? modelPath.replace('file:///', '/') : modelPath;
+    const activeModelKey = `${cleanedModelPath}::${systemPrompt}`;
+    return loadedModelKey === activeModelKey;
+  }, [loadedModelKey, modelInstance, modelPath, systemPrompt]);
+
+  const showModelStatusHint = useCallback(() => {
+    const message = isModelInMemory
+      ? 'Model is in memory and ready for faster responses.'
+      : 'Model is not in memory yet. Run one estimate to load it.';
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+      return;
+    }
+    Alert.alert('Model status', message);
+  }, [isModelInMemory]);
+
   return (
-    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
+    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}> 
       <ScrollView contentContainerStyle={styles.scroll}>
         <Surface style={[styles.heroCard, { backgroundColor: theme.colors.elevation.level2 }]} elevation={3}>
           <Text variant="labelLarge" style={[styles.eyebrow, { color: theme.colors.primary }]}>Calorie Logger</Text>
@@ -837,6 +1036,7 @@ export default function LogScreen() {
           onAddMeal={addMeal}
           onQuickAddMeal={quickAddMeal}
           onToggleFavoriteQuickAdd={toggleFavoriteQuickAdd}
+          onOpenAiEstimator={() => setAiModalVisible(true)}
           data={data}
         />
 
@@ -866,6 +1066,106 @@ export default function LogScreen() {
           </Card.Content>
         </Card>
       </ScrollView>
+
+      <Modal
+        visible={aiModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAiModalVisible(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setAiModalVisible(false)}
+        >
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: theme.colors.surface }]}
+            onPress={() => {}}
+          >
+            <Text variant="titleMedium" style={{ fontWeight: '700' }}>Meal Estimator</Text>
+            <TextInput
+              label="Describe your meal"
+              value={aiPrompt}
+              onChangeText={setAiPrompt}
+              placeholder="e.g. 2 eggs, 1 slice toast, 1 tbsp butter"
+              multiline
+              mode="outlined"
+              theme={QUICK_LOG_INPUT_THEME}
+              right={(
+                <TextInput.Icon
+                  icon={isModelInMemory ? 'memory' : 'circle-outline'}
+                  color={isModelInMemory ? (theme.dark ? '#7bd88f' : '#2e7d32') : theme.colors.error}
+                  onPress={showModelStatusHint}
+                  forceTextInputFocus={false}
+                />
+              )}
+            />
+            <Button mode="contained" icon="robot" loading={aiLoading} onPress={handleAIPrompt} disabled={aiLoading || !aiPrompt.trim()}>
+              Estimate Calories & Macros
+            </Button>
+            {aiLoading ? (
+              <View style={{ marginTop: 8, gap: 6 }}>
+                <ProgressBar indeterminate />
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  {aiStage === 'loading-model'
+                    ? `Loading model into memory... ${aiStageElapsedSec}s`
+                    : `Estimating nutrition... ${aiStageElapsedSec}s`}
+                </Text>
+              </View>
+            ) : null}
+            {aiError ? (
+              <Text variant="bodySmall" style={{ color: theme.colors.error, marginTop: 8 }}>{aiError}</Text>
+            ) : null}
+            {aiResult ? (
+              <View style={{ marginTop: 12 }}>
+                {!aiResultParsed ? (
+                  <Text variant="bodySmall" style={{ color: theme.colors.error }}>Could not parse AI response.</Text>
+                ) : !aiResultParsed.items || !Array.isArray(aiResultParsed.items) ? (
+                  <Text variant="bodySmall" style={{ color: theme.colors.error }}>No items found in AI response.</Text>
+                ) : (
+                  <View style={{ marginTop: 4 }}>
+                    {aiResultParsed.items.map((item: AiEstimateItem, idx: number) => (
+                      <View key={idx} style={{ marginBottom: 6, padding: 8, borderRadius: 8, backgroundColor: theme.colors.surfaceVariant }}>
+                        <Text variant="labelLarge" style={{ fontWeight: '700', color: theme.colors.primary }}>{item.name}</Text>
+                        <Text variant="bodySmall">Calories: {item.calories} kcal</Text>
+                        <Text variant="bodySmall">
+                          Protein: {item.protein}g | Carbs: {item.carbs}g | Fat: {item.fat}g | Fibre: {item.fibre}g
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                <Button
+                  mode="outlined"
+                  icon="plus"
+                  style={{ marginTop: 8 }}
+                  onPress={() => {
+                    if (!aiResultParsed || !Array.isArray(aiResultParsed.items)) return;
+                    aiResultParsed.items.forEach((item: AiEstimateItem) => {
+                      addMeal({
+                        title: item.name,
+                        calories: item.calories,
+                        proteinGrams: item.protein,
+                        fatGrams: item.fat,
+                        carbsGrams: item.carbs,
+                        fiberGrams: item.fibre,
+                      });
+                    });
+                    setAiPrompt('');
+                    setAiResult(null);
+                    setAiModalVisible(false);
+                  }}
+                  disabled={!aiResultParsed || !Array.isArray(aiResultParsed.items) || aiResultParsed.items.length === 0}
+                >
+                  Add to Log
+                </Button>
+              </View>
+            ) : null}
+            <Button mode="text" onPress={() => setAiModalVisible(false)}>
+              Close
+            </Button>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={editDraft !== null}
@@ -1158,6 +1458,8 @@ const styles = StyleSheet.create({
   quickAddItem: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   quickLogHeader: { minHeight: 56, paddingVertical: 6 },
   quickLogTitle: { marginLeft: -2 },
+  quickLogAiButton: { marginRight: 8 },
+  quickLogAiButtonContent: { paddingHorizontal: 4 },
   macroSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
