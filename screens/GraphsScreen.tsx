@@ -166,13 +166,13 @@ function calculateEMA(values: number[], smoothingFactor: number = 0.2): number[]
 function calculateWeightTrend(history: WeightPoint[]): WeightTrend | null {
   // Use the first 5 most recent entries for trend calculation (oldest to newest)
   const recent = history.slice(0, 5);
-  return calculateTrendWithEMA(recent, 0.2, 0.2);
+  return calculateTrendWithEMA(recent, 0.4, 0.2);
 }
 
 function calculateBodyFatTrend(history: WeightPoint[]): WeightTrend | null {
   // Use the first 5 entries most recent entries for trend calculation (oldest to newest)
   const recent = history.slice(0, 5);
-  return calculateTrendWithEMA(recent, 0.2, 0.2);
+  return calculateTrendWithEMA(recent, 0.4, 0.2);
 }
 
 function getWeeklyData(history: WeightPoint[]): { values: Array<number | null>; dayLabels: string[]; todayIndex: number } {
