@@ -81,7 +81,23 @@ export const DEFAULT_DATA: StoredData = {
   entries: [],
   favoriteQuickAdds: [],
   modelPath: null,
-  systemPrompt: '',
+  systemPrompt: `You are a nutrition assistant.
+
+Return JSON only.
+
+Format:
+{
+  "items": [
+    {
+      "name": "food item",
+      "calories": number,
+      "protein": number,
+      "carbs": number,
+      "fat": number,
+      "fibre": number
+    }
+  ]
+}`,
   quickLogMacrosExpanded: false,
   baseTarget: 2100,
   caloriesPerKg: 30,
