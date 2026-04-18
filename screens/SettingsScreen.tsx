@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { Permission } from 'react-native-health-connect';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -803,7 +804,7 @@ export default function SettingsScreen() {
         </Card>
 
         <Card style={styles.card} mode="elevated">
-          <Card.Title title="AI Models" titleVariant="titleLarge" />
+          <Card.Title title="LiteRT Models" titleVariant="titleLarge" />
           <Card.Content style={styles.formArea}>
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
               Models are saved in the app sandbox.
@@ -880,23 +881,29 @@ export default function SettingsScreen() {
               </Text>
             ) : null}
 
-            <Text variant="titleMedium">Downloaded models</Text>
-            {downloadedModels.length ? (
-              <View style={styles.downloadedList}>
-                {downloadedModels.map((model) => {
-                  const isActive = data.modelPath === model.uri;
-                  const inMemory = isInMemory(model.uri);
-                  return (
-                    <View
-                      key={model.uri}
-                      style={[
-                        styles.downloadedItem,
-                        {
-                          borderColor: isActive ? theme.colors.primary : theme.colors.outlineVariant,
-                          backgroundColor: theme.colors.elevation.level1,
-                        },
-                      ]}
-                    >
+            <View style={[styles.downloadedModelsContainer, { backgroundColor: theme.colors.elevation.level1, borderColor: theme.colors.primary }]}>
+              <View style={styles.downloadedModelsHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <MaterialCommunityIcons name="package-down" size={24} color={theme.colors.primary} />
+                  <Text variant="headlineSmall" style={{ fontWeight: '700', color: theme.colors.primary }}>Offline Models</Text>
+                </View>
+              </View>
+              {downloadedModels.length ? (
+                <View style={styles.downloadedList}>
+                  {downloadedModels.map((model) => {
+                    const isActive = data.modelPath === model.uri;
+                    const inMemory = isInMemory(model.uri);
+                    return (
+                      <View
+                        key={model.uri}
+                        style={[
+                          styles.downloadedItem,
+                          {
+                            borderColor: isActive ? theme.colors.primary : theme.colors.outlineVariant,
+                            backgroundColor: theme.colors.elevation.level2,
+                          },
+                        ]}
+                      >
                       <View style={styles.downloadedItemInfo}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                           <Text variant="bodyLarge">{model.name}</Text>
@@ -936,12 +943,13 @@ export default function SettingsScreen() {
                     </View>
                   );
                 })}
-              </View>
-            ) : (
-              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                No models downloaded yet.
-              </Text>
-            )}
+                </View>
+              ) : (
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                  No models downloaded yet.
+                </Text>
+              )}
+            </View>
           </Card.Content>
         </Card>
 
@@ -1003,11 +1011,22 @@ const styles = StyleSheet.create({
   downloadProgressArea: { gap: 6 },
   downloadProgressRow: { flexDirection: 'row', justifyContent: 'space-between' },
   progressBar: { height: 10, borderRadius: 6 },
+  downloadedModelsContainer: {
+    borderRadius: 12,
+    borderWidth: 2,
+    padding: 16,
+    gap: 12,
+    marginVertical: 4,
+    marginHorizontal: 0,
+  },
+  downloadedModelsHeader: { 
+    marginBottom: 8,
+  },
   downloadedList: { gap: 8 },
   downloadedItem: {
-    borderWidth: 1,
+    borderWidth: 2,
     borderRadius: 12,
-    padding: 10,
+    padding: 12,
     gap: 10,
   },
   downloadedItemInfo: { gap: 4 },
