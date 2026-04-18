@@ -1,5 +1,7 @@
 import { exportUserData } from '../exportData';
 import * as Sharing from 'expo-sharing';
+import { getDocumentAsync } from 'expo-document-picker';
+import { importUserData } from '../exportData';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
@@ -10,6 +12,7 @@ import {
   Button,
   Card,
   Chip,
+  Icon,
   ProgressBar,
   SegmentedButtons,
   Text,
@@ -286,16 +289,27 @@ export default function SettingsScreen() {
   const [isExporting, setIsExporting] = useState(false);
   // Import data from JSON file
   const handleImportData = async () => {
-    Alert.alert('Import not implemented', 'Import functionality will let you select a JSON file and restore your data.');
-    // TODO: Implement file picker and import logic
+    try {
+      const result = await getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const fileUri = result.assets[0].uri;
+      const file = new File(fileUri);
+      if (!file.exists) {
+        Alert.alert('Import failed', 'Selected file does not exist.');
+        return;
+      }
+      const json = await file.text();
+      await importUserData(json);
+      Alert.alert('Import successful', 'Your data has been imported.');
+    } catch (error) {
+      Alert.alert('Import failed', error instanceof Error ? error.message : String(error));
+    }
   };
   // Export data as JSON and share
   const handleExportData = async () => {
-      // Import data from JSON file
-      const handleImportData = async () => {
-        Alert.alert('Import not implemented', 'Import functionality will let you select a JSON file and restore your data.');
-        // TODO: Implement file picker and import logic
-      };
     try {
       setIsExporting(true);
       const json = exportUserData();
@@ -939,12 +953,10 @@ export default function SettingsScreen() {
                         ]}
                       >
                       <View style={styles.downloadedItemInfo}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                           <Text variant="bodyLarge">{model.name}</Text>
                           {inMemory ? (
-                            <Chip compact icon="memory" style={{ backgroundColor: theme.colors.secondaryContainer }}>
-                              In memory
-                            </Chip>
+                            <Icon source="memory" color={(theme.dark ? '#7bd88f' : '#2e7d32')} size={22}/>
                           ) : null}
                         </View>
                         <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
