@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import type { Permission } from 'react-native-health-connect';
@@ -15,6 +15,7 @@ import {
 } from 'react-native-paper';
 import { Directory, File, Paths } from 'expo-file-system';
 
+import { clearModelCache, getModelKeySnapshot, subscribeModelCache } from '../modelCache';
 import {
   DEFAULT_DATA,
   getCachedData,
@@ -282,6 +283,14 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const { mode, setMode } = useThemeMode();
+
+  const loadedModelKey = useSyncExternalStore(subscribeModelCache, getModelKeySnapshot);
+
+  function isInMemory(modelUri: string) {
+    if (!loadedModelKey) return false;
+    const cleaned = modelUri.startsWith('file:///') ? modelUri.replace('file:///', '/') : modelUri;
+    return loadedModelKey.startsWith(cleaned + '::');
+  }
 
   const [data, setData] = useState<StoredData>(() => getCachedData() ?? DEFAULT_DATA);
   const [isReady, setIsReady] = useState(false);
@@ -683,6 +692,7 @@ export default function SettingsScreen() {
   };
 
   const setActiveModel = (uri: string) => {
+    if (data.modelPath !== uri) clearModelCache();
     setData((prev) => ({ ...prev, modelPath: uri }));
   };
 
@@ -698,6 +708,7 @@ export default function SettingsScreen() {
           onPress: () => {
             void (async () => {
               try {
+                if (isInMemory(model.uri)) clearModelCache();
                 const file = new File(model.uri);
                 if (file.exists) file.delete();
                 setData((prev) => ({
@@ -874,6 +885,7 @@ export default function SettingsScreen() {
               <View style={styles.downloadedList}>
                 {downloadedModels.map((model) => {
                   const isActive = data.modelPath === model.uri;
+                  const inMemory = isInMemory(model.uri);
                   return (
                     <View
                       key={model.uri}
@@ -886,7 +898,14 @@ export default function SettingsScreen() {
                       ]}
                     >
                       <View style={styles.downloadedItemInfo}>
-                        <Text variant="bodyLarge">{model.name}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <Text variant="bodyLarge">{model.name}</Text>
+                          {inMemory ? (
+                            <Chip compact icon="memory" style={{ backgroundColor: theme.colors.secondaryContainer }}>
+                              In memory
+                            </Chip>
+                          ) : null}
+                        </View>
                         <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                           {formatBytes(model.size)}
                         </Text>
@@ -898,6 +917,14 @@ export default function SettingsScreen() {
                         >
                           {isActive ? 'In use' : 'Use'}
                         </Button>
+                        {inMemory ? (
+                          <Button
+                            mode="outlined"
+                            onPress={() => clearModelCache()}
+                          >
+                            Unload
+                          </Button>
+                        ) : null}
                         <Button
                           mode="text"
                           textColor={theme.colors.error}

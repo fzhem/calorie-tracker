@@ -1,12 +1,13 @@
 import { useFocusEffect } from '@react-navigation/native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, ToastAndroid, View, Vibration } from 'react-native';
 import { Button, Card, Chip, IconButton, ProgressBar, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // Do not import useModel at the top level
 
 import { getAdjustedCalorieTarget, getAutoMacroTargets } from '../metabolism';
+import { clearModelCache, getModelInstance, setModelCache, subscribeModelCache, getModelKeySnapshot } from '../modelCache';
 import { DEFAULT_DATA, getCachedData, loadStoredData, saveStoredData } from '../storage';
 import type { MealEntry, StoredData } from '../storage';
 
@@ -427,7 +428,6 @@ export default function LogScreen() {
   const [aiStageElapsedSec, setAiStageElapsedSec] = useState(0);
   const [modelPath, setModelPath] = useState<string | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string>('');
-  const [loadedModelKey, setLoadedModelKey] = useState<string | null>(null);
 
   // Load modelPath and systemPrompt from storage on mount
   useEffect(() => {
@@ -446,8 +446,7 @@ export default function LogScreen() {
         setModelPath(nextModelPath);
         setSystemPrompt(nextSystemPrompt);
         if (changed) {
-          setModelInstance(null);
-          setLoadedModelKey(null);
+          clearModelCache();
         }
       }).catch(() => {
         if (!isActive) return;
@@ -460,8 +459,8 @@ export default function LogScreen() {
     }, [modelPath, systemPrompt]),
   );
 
-  // Model instance cache (imperative API)
-  const [modelInstance, setModelInstance] = useState<any>(null);
+  // Model instance cache — backed by module-level singleton so Settings can observe it
+  const loadedModelKey = useSyncExternalStore(subscribeModelCache, getModelKeySnapshot);
 
   useEffect(() => {
     if (!aiLoading || !aiStageStartedAt) {
@@ -497,7 +496,7 @@ export default function LogScreen() {
     // Remove 'file:///' prefix if present
     let cleanedModelPath = modelPath.startsWith('file:///') ? modelPath.replace('file:///', '/') : modelPath;
     const activeModelKey = `${cleanedModelPath}::${systemPrompt}`;
-    let model = modelInstance;
+    let model = getModelInstance();
     if (!model || loadedModelKey !== activeModelKey) {
       try {
         beginAiStage('loading-model');
@@ -508,8 +507,7 @@ export default function LogScreen() {
           systemPrompt,
           enableMemoryTracking: true,
         });
-        setModelInstance(model);
-        setLoadedModelKey(activeModelKey);
+        setModelCache(model, activeModelKey);
       } catch (err) {
         setAiError('Failed to load model: ' + err);
         setAiLoading(false);
@@ -910,30 +908,53 @@ export default function LogScreen() {
     data.calorieTolerancePercent,
   ]);
 
-  // Parse AI result for use in rendering and button handler
+  // Parse AI result for use in rendering and button handler.
+  // Handles three output formats:
+  //   1. Markdown code block:  ```json\n{...}\n```
+  //   2. Raw JSON string:      {"items":[...]}
+  //   3. JSON embedded in text: some prose... {"items":[...]} ...more prose
   const aiResultParsed = useMemo<AiEstimatePayload | null>(() => {
     if (!aiResult) return null;
-    try {
-      const start = aiResult.indexOf('{');
-      if (start < 0) return null;
-      const end = aiResult.indexOf('```', start);
-      const jsonString = end !== -1 ? aiResult.slice(start, end) : aiResult.slice(start);
-      const parsed = JSON.parse(jsonString) as unknown;
-      if (!parsed || typeof parsed !== 'object') return null;
-      const items = (parsed as { items?: unknown }).items;
-      if (!Array.isArray(items)) return null;
-      return { items: items as AiEstimateItem[] };
-    } catch {
-      return null;
+
+    function tryParse(jsonString: string): AiEstimatePayload | null {
+      try {
+        const parsed = JSON.parse(jsonString) as unknown;
+        if (!parsed || typeof parsed !== 'object') return null;
+        const items = (parsed as { items?: unknown }).items;
+        if (!Array.isArray(items)) return null;
+        return { items: items as AiEstimateItem[] };
+      } catch {
+        return null;
+      }
     }
+
+    // Case 1: markdown code block (```json or plain ```)
+    const codeBlockMatch = aiResult.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      const result = tryParse(codeBlockMatch[1].trim());
+      if (result) return result;
+    }
+
+    // Case 2: the whole string is already JSON
+    const direct = tryParse(aiResult.trim());
+    if (direct) return direct;
+
+    // Case 3: JSON object embedded somewhere in the text
+    const start = aiResult.indexOf('{');
+    const end = aiResult.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      return tryParse(aiResult.slice(start, end + 1));
+    }
+
+    return null;
   }, [aiResult]);
 
   const isModelInMemory = useMemo(() => {
-    if (!modelPath || !modelInstance || !loadedModelKey) return false;
+    if (!modelPath || !loadedModelKey) return false;
     const cleanedModelPath = modelPath.startsWith('file:///') ? modelPath.replace('file:///', '/') : modelPath;
     const activeModelKey = `${cleanedModelPath}::${systemPrompt}`;
     return loadedModelKey === activeModelKey;
-  }, [loadedModelKey, modelInstance, modelPath, systemPrompt]);
+  }, [loadedModelKey, modelPath, systemPrompt]);
 
   const showModelStatusHint = useCallback(() => {
     const message = isModelInMemory
