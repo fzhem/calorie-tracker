@@ -1,3 +1,5 @@
+import { exportUserData } from '../exportData';
+import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
@@ -281,6 +283,38 @@ async function resolveRemoteFileSize(url: string) {
 }
 
 export default function SettingsScreen() {
+  const [isExporting, setIsExporting] = useState(false);
+  // Import data from JSON file
+  const handleImportData = async () => {
+    Alert.alert('Import not implemented', 'Import functionality will let you select a JSON file and restore your data.');
+    // TODO: Implement file picker and import logic
+  };
+  // Export data as JSON and share
+  const handleExportData = async () => {
+      // Import data from JSON file
+      const handleImportData = async () => {
+        Alert.alert('Import not implemented', 'Import functionality will let you select a JSON file and restore your data.');
+        // TODO: Implement file picker and import logic
+      };
+    try {
+      setIsExporting(true);
+      const json = exportUserData();
+      const now = new Date();
+      const timestamp = now.toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+      const filename = `calorie-tracker-export_${timestamp}.json`;
+      const file = new File(Paths.document, filename);
+      file.create({ overwrite: true });
+      file.write(json);
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/json',
+        dialogTitle: 'Export Calorie Tracker Data',
+      });
+    } catch (error) {
+      Alert.alert('Export failed', error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsExporting(false);
+    }
+  };
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const { mode, setMode } = useThemeMode();
@@ -956,6 +990,24 @@ export default function SettingsScreen() {
         <Card style={styles.card} mode="elevated">
           <Card.Title title="Advanced" titleVariant="titleLarge" />
           <Card.Content style={styles.formArea}>
+            <Button
+              mode="contained"
+              icon="export"
+              onPress={handleExportData}
+              loading={isExporting}
+              disabled={isExporting}
+              style={{ marginBottom: 8 }}
+            >
+              {isExporting ? 'Exporting...' : 'Export data'}
+            </Button>
+            <Button
+              mode="outlined"
+              icon="import"
+              onPress={handleImportData}
+              style={{ marginBottom: 16 }}
+            >
+              Import data
+            </Button>
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
               Macro mismatch tolerance
             </Text>
