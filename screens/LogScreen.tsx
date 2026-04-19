@@ -1161,7 +1161,7 @@ export default function LogScreen() {
                   icon={isModelInMemory ? 'memory' : 'circle-outline'}
                   color={isModelInMemory ? (theme.dark ? '#7bd88f' : '#2e7d32') : theme.colors.error}
                   onPress={showModelStatusHint}
-                  forceTextInputFocus={false}
+                  style={{ alignSelf: 'center' }}
                 />
               )}
             />
@@ -1184,9 +1184,9 @@ export default function LogScreen() {
             {aiResult ? (
               <View style={{ marginTop: 12 }}>
                 {!aiResultParsed ? (
-                  <Text variant="bodySmall" style={{ color: theme.colors.error }}>Could not parse AI response.</Text>
+                  <Text variant="bodySmall" style={{ color: theme.colors.error }}>Could not parse LLM response.</Text>
                 ) : !aiResultParsed.items || !Array.isArray(aiResultParsed.items) ? (
-                  <Text variant="bodySmall" style={{ color: theme.colors.error }}>No items found in AI response.</Text>
+                  <Text variant="bodySmall" style={{ color: theme.colors.error }}>No items found in LLM response.</Text>
                 ) : (
                   <View style={{ marginTop: 4 }}>
                     {aiResultParsed.items.map((item: AiEstimateItem, idx: number) => (
