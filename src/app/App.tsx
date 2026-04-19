@@ -9,12 +9,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider, type MD3Theme } from 'react-native-paper';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 
-import GoalsScreen from './screens/GoalsScreen';
-import GraphsScreen from './screens/GraphsScreen';
-import LogScreen from './screens/LogScreen';
-import SettingsScreen from './screens/SettingsScreen';
-import { loadStoredData } from './storage';
-import { ThemeModeProvider, useThemeMode } from './themeMode';
+import GoalsScreen from '../screens/GoalsScreen';
+import GraphsScreen from '../screens/GraphsScreen';
+import LogScreen from '../screens/LogScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import { loadStoredData } from '../data/storage';
+import { ThemeModeProvider, useThemeMode } from '../ui/themeMode';
 
 const Tab = createBottomTabNavigator();
 

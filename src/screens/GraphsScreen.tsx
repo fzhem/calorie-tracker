@@ -6,9 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, SegmentedButtons, Text, Button, useTheme } from 'react-native-paper';
 import Svg, { G, Line, Rect, Text as SvgText, Circle } from 'react-native-svg';
 
-import { getAdjustedCalorieTarget } from '../metabolism';
-import { DEFAULT_DATA, getCachedData, loadStoredData as readStoredData } from '../storage';
-import type { BodyFatPoint, MealEntry, StoredData, WeightPoint } from '../storage';
+import { getAdjustedCalorieTarget } from '../domain/metabolism';
+import { DEFAULT_DATA, getCachedData, loadStoredData as readStoredData } from '../data/storage';
+import type { BodyFatPoint, MealEntry, StoredData, WeightPoint } from '../data/storage';
 
 const WEIGHT_CHART_HEIGHT = 220;
 const WEIGHT_GUIDE_BOTTOM = WEIGHT_CHART_HEIGHT - 40;

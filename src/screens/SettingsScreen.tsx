@@ -1,7 +1,7 @@
-import { exportUserData } from '../exportData';
+import { exportUserData } from '../data/exportData';
 import * as Sharing from 'expo-sharing';
 import { getDocumentAsync } from 'expo-document-picker';
-import { importUserData } from '../exportData';
+import { importUserData } from '../data/exportData';
 import { memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -23,15 +23,15 @@ import {
 } from 'react-native-paper';
 import { Directory, File, Paths } from 'expo-file-system';
 
-import { clearModelCache, getModelKeySnapshot, subscribeModelCache } from '../modelCache';
+import { clearModelCache, getModelKeySnapshot, subscribeModelCache } from '../lib/modelCache';
 import {
   DEFAULT_DATA,
   getCachedData,
   loadStoredData as readStoredData,
   saveStoredData,
-} from '../storage';
-import type { BodyFatPoint, ModelConfig, StoredData, WeightPoint } from '../storage';
-import { useThemeMode, type ThemeMode } from '../themeMode';
+} from '../data/storage';
+import type { BodyFatPoint, ModelConfig, StoredData, WeightPoint } from '../data/storage';
+import { useThemeMode, type ThemeMode } from '../ui/themeMode';
 
 const DEFAULT_MODEL_CONFIG: ModelConfig = {
   temperature: 0.2,

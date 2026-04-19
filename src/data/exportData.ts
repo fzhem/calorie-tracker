@@ -1,4 +1,4 @@
-import { getCachedData, saveStoredData } from './storage';
+import { getCachedData, saveStoredData } from '../data/storage';
 
 export function exportUserData() {
   const data = getCachedData();

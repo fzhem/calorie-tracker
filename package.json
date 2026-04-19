@@ -1,6 +1,6 @@
 {
   "name": "calorie-tracker",
-  "main": "index.tsx",
+  "main": "src/app/index.tsx",
   "scripts": {
     "start": "expo start --dev-client",
     "android": "npm run android:sync && expo run:android",

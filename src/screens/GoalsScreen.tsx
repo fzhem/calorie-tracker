@@ -5,9 +5,9 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, Menu, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 
-import { DEFAULT_DATA, getCachedData, loadStoredData, saveStoredData } from '../storage';
-import type { GoalAdjustmentType, GoalPhase, StoredData, WeightPoint } from '../storage';
-import { estimateMetabolism, getActivityFactor, getGoalCalorieDelta } from '../metabolism';
+import { DEFAULT_DATA, getCachedData, loadStoredData, saveStoredData } from '../data/storage';
+import type { GoalAdjustmentType, GoalPhase, StoredData, WeightPoint } from '../data/storage';
+import { estimateMetabolism, getActivityFactor, getGoalCalorieDelta } from '../domain/metabolism';
 
 const KG_PER_LB = 0.45359237;
 const CM_PER_IN = 2.54;

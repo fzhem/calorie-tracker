@@ -1,4 +1,4 @@
-import type { ActivityLevel, GoalAdjustmentType, GoalPhase, MetabolismSex, StoredData } from './storage';
+import type { ActivityLevel, GoalAdjustmentType, GoalPhase, MetabolismSex, StoredData } from '../data/storage';
 
 const KCAL_PER_KG_BODY_WEIGHT = 7700;
 

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { kvStore } from './kvStore';
+import { kvStore } from '../lib/kvStore';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 

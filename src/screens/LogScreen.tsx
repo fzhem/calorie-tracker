@@ -5,10 +5,10 @@ import { Alert, AppState, Modal, Platform, Pressable, ScrollView, StyleSheet, To
 import { Button, Card, Chip, IconButton, ProgressBar, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { getAdjustedCalorieTarget, getAutoMacroTargets } from '../metabolism';
-import { clearModelCache, getModelInstance, setModelCache, subscribeModelCache, getModelKeySnapshot } from '../modelCache';
-import { DEFAULT_DATA, getCachedData, loadStoredData, saveStoredData } from '../storage';
-import type { MealEntry, StoredData } from '../storage';
+import { getAdjustedCalorieTarget, getAutoMacroTargets } from '../domain/metabolism';
+import { clearModelCache, getModelInstance, setModelCache, subscribeModelCache, getModelKeySnapshot } from '../lib/modelCache';
+import { DEFAULT_DATA, getCachedData, loadStoredData, saveStoredData } from '../data/storage';
+import type { MealEntry, StoredData } from '../data/storage';
 
 export type NutritionResult = {
   calories: number;

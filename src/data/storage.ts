@@ -1,4 +1,4 @@
-import { kvStore } from './kvStore';
+import { kvStore } from '../lib/kvStore';
 
 export type MealEntry = {
   id: string;
