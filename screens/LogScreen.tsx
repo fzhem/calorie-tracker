@@ -1,7 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, ToastAndroid, View, Vibration } from 'react-native';
+import { Alert, AppState, Modal, Platform, Pressable, ScrollView, StyleSheet, ToastAndroid, View, Vibration } from 'react-native';
 import { Button, Card, Chip, IconButton, ProgressBar, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -467,6 +467,17 @@ export default function LogScreen() {
   // Model instance cache — backed by module-level singleton so Settings can observe it
   const loadedModelKey = useSyncExternalStore(subscribeModelCache, getModelKeySnapshot);
 
+  // Evict model from JS cache when app goes to background so a stale native reference
+  // can't crash the app on resume. The model will be re-loaded on the next run.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') {
+        clearModelCache();
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     if (!aiLoading || !aiStageStartedAt) {
       setAiStageElapsedSec(0);
@@ -515,7 +526,6 @@ export default function LogScreen() {
                       temperature: modelConfig.temperature,
                       topK: modelConfig.topK,
                       topP: modelConfig.topP,
-                      enableMemoryTracking: true,
                     });
             setModelCache(model, activeModelKey);
           } catch (err) {
@@ -527,16 +537,40 @@ export default function LogScreen() {
           }
         }
     try {
-      beginAiStage('estimating');
-      const response = await model.sendMessage(aiPrompt);
-      setAiResult(response);
-    } catch (err) {
-      setAiError(`Failed to run model. ${err}`);
-    } finally {
-      setAiLoading(false);
-      setAiStage('idle');
-      setAiStageStartedAt(null);
-    }
+          beginAiStage('estimating');
+          let response: string;
+          try {
+            response = await model.sendMessage(aiPrompt);
+          } catch (err: any) {
+            // Model was unloaded (e.g. app went to background) — reload and retry once.
+            if (err?.message?.includes('No model loaded') || err?.message?.includes('LiteRTLM')) {
+              beginAiStage('loading-model');
+              const { createLLM } = await import('react-native-litert-lm');
+              const freshModel = createLLM();
+              await freshModel.loadModel(cleanedModelPath, {
+                systemPrompt: systemPrompt,
+                backend: 'cpu',
+                maxTokens: modelConfig.maxTokens,
+                temperature: modelConfig.temperature,
+                topK: modelConfig.topK,
+                topP: modelConfig.topP,
+              });
+              setModelCache(freshModel, activeModelKey);
+              model = freshModel;
+              beginAiStage('estimating');
+              response = await model.sendMessage(aiPrompt);
+            } else {
+              throw err;
+            }
+          }
+          setAiResult(response);
+        } catch (err) {
+          setAiError(`Failed to run model. ${err}`);
+        } finally {
+          setAiLoading(false);
+          setAiStage('idle');
+          setAiStageStartedAt(null);
+        }
   };
   const insets = useSafeAreaInsets();
   const theme = useTheme();
