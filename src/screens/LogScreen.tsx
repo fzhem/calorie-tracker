@@ -1184,9 +1184,13 @@ export default function LogScreen() {
             {llmResult ? (
               <View style={{ marginTop: 12 }}>
                 {!llmResultParsed ? (
-                  <Text variant="bodySmall" style={{ color: theme.colors.error }}>Could not parse LLM response.</Text>
-                ) : !llmResultParsed.items || !Array.isArray(llmResultParsed.items) ? (
-                  <Text variant="bodySmall" style={{ color: theme.colors.error }}>No items found in LLM response.</Text>
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    Couldn't understand the model output. Try rephrasing your meal.
+                  </Text>
+                ) : !llmResultParsed.items || !Array.isArray(llmResultParsed.items) || llmResultParsed.items.every((item: LLMEstimateItem) => item.calories === 0) ? (
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    No food items identified in the model output.
+                  </Text>
                 ) : (
                   <View style={{ marginTop: 4 }}>
                     {llmResultParsed.items.map((item: LLMEstimateItem, idx: number) => (
@@ -1198,8 +1202,6 @@ export default function LogScreen() {
                         </Text>
                       </View>
                     ))}
-                  </View>
-                )}
                 <Button
                   mode="outlined"
                   icon="plus"
@@ -1220,10 +1222,11 @@ export default function LogScreen() {
                     setLlmResult(null);
                     setLlmModalVisible(false);
                   }}
-                  disabled={!llmResultParsed || !Array.isArray(llmResultParsed.items) || llmResultParsed.items.length === 0}
                 >
                   Add to Log
                 </Button>
+                  </View>
+              )}
               </View>
             ) : null}
             <Button mode="text" onPress={() => setLlmModalVisible(false)}>
