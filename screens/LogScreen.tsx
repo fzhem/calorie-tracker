@@ -19,7 +19,7 @@ export type NutritionResult = {
   raw: string;
 };
 
-type AiEstimateItem = {
+type LLMEstimateItem = {
   name: string;
   calories: number;
   protein: number;
@@ -28,11 +28,11 @@ type AiEstimateItem = {
   fibre: number;
 };
 
-type AiEstimatePayload = {
-  items: AiEstimateItem[];
+type LLMEstimatePayload = {
+  items: LLMEstimateItem[];
 };
 
-type AiRunStage = 'idle' | 'loading-model' | 'estimating';
+type LLMRunStage = 'idle' | 'loading-model' | 'estimating';
 
 // Utility to get model path and system prompt from storage (async)
 async function getModelConfig() {
@@ -158,7 +158,7 @@ type QuickLogCardProps = {
   onAddMeal: (item: QuickAddItem) => void;
   onQuickAddMeal: (item: QuickAddItem) => void;
   onToggleFavoriteQuickAdd: (item: QuickAddItem) => void;
-  onOpenAiEstimator: () => void;
+  onOpenLlmEstimator: () => void;
   data: StoredData;
 };
 
@@ -171,7 +171,7 @@ const QuickLogCard = memo(function QuickLogCard({
   onAddMeal,
   onQuickAddMeal,
   onToggleFavoriteQuickAdd,
-  onOpenAiEstimator,
+  onOpenLlmEstimator,
   data,
 }: QuickLogCardProps) {
   const theme = useTheme();
@@ -249,9 +249,9 @@ const QuickLogCard = memo(function QuickLogCard({
             mode="outlined"
             compact
             icon="robot"
-            onPress={onOpenAiEstimator}
-            style={styles.quickLogAiButton}
-            contentStyle={styles.quickLogAiButtonContent}
+            onPress={onOpenLlmEstimator}
+            style={styles.quickLogLlmButton}
+            contentStyle={styles.quickLogLlmButtonContent}
           >
             Estimate Meal
           </Button>
@@ -423,14 +423,14 @@ const QuickLogCard = memo(function QuickLogCard({
 });
 
 export default function LogScreen() {
-  // AI prompt state
-  const [aiPrompt, setAiPrompt] = useState('');
-    const [aiResult, setAiResult] = useState<string | null>(null);
-    const [aiError, setAiError] = useState('');
-    const [aiLoading, setAiLoading] = useState(false);
-    const [aiStage, setAiStage] = useState<AiRunStage>('idle');
-    const [aiStageStartedAt, setAiStageStartedAt] = useState<number | null>(null);
-    const [aiStageElapsedSec, setAiStageElapsedSec] = useState(0);
+  // LLM prompt state
+  const [llmPrompt, setLlmPrompt] = useState('');
+    const [llmResult, setLlmResult] = useState<string | null>(null);
+    const [llmError, setLlmError] = useState('');
+    const [llmLoading, setLlmLoading] = useState(false);
+    const [llmStage, setLlmStage] = useState<LLMRunStage>('idle');
+    const [llmStageStartedAt, setLlmStageStartedAt] = useState<number | null>(null);
+    const [llmStageElapsedSec, setLlmStageElapsedSec] = useState(0);
     const [modelPath, setModelPath] = useState<string | null>(null);
       const [systemPrompt, setSystemPrompt] = useState<string>('');
 
@@ -455,7 +455,7 @@ export default function LogScreen() {
             }
           }).catch(() => {
             if (!isActive) return;
-            setAiError('Could not refresh AI model settings.');
+            setLlmError('Could not refresh LLM model settings.');
           });
 
           return () => {
@@ -479,34 +479,34 @@ export default function LogScreen() {
   }, []);
 
   useEffect(() => {
-    if (!aiLoading || !aiStageStartedAt) {
-      setAiStageElapsedSec(0);
+    if (!llmLoading || !llmStageStartedAt) {
+      setLlmStageElapsedSec(0);
       return;
     }
 
     const timer = setInterval(() => {
-      setAiStageElapsedSec(Math.max(0, Math.floor((Date.now() - aiStageStartedAt) / 1000)));
+      setLlmStageElapsedSec(Math.max(0, Math.floor((Date.now() - llmStageStartedAt) / 1000)));
     }, 500);
 
     return () => clearInterval(timer);
-  }, [aiLoading, aiStageStartedAt]);
+  }, [llmLoading, llmStageStartedAt]);
 
-  const beginAiStage = (stage: AiRunStage) => {
-    setAiStage(stage);
-    setAiStageStartedAt(Date.now());
-    setAiStageElapsedSec(0);
+  const beginLlmStage = (stage: LLMRunStage) => {
+    setLlmStage(stage);
+    setLlmStageStartedAt(Date.now());
+    setLlmStageElapsedSec(0);
   };
 
-  const handleAIPrompt = async () => {
-    setAiLoading(true);
-    beginAiStage('estimating');
-    setAiError('');
-    setAiResult(null);
+  const handleLlmPrompt = async () => {
+    setLlmLoading(true);
+    beginLlmStage('estimating');
+    setLlmError('');
+    setLlmResult(null);
     if (!modelPath) {
-      setAiError('No model file selected in settings.');
-      setAiLoading(false);
-      setAiStage('idle');
-      setAiStageStartedAt(null);
+      setLlmError('No model file selected in settings.');
+      setLlmLoading(false);
+      setLlmStage('idle');
+      setLlmStageStartedAt(null);
       return;
     }
     // Remove 'file:///' prefix if present
@@ -516,7 +516,7 @@ export default function LogScreen() {
         let model = getModelInstance();
         if (!model || loadedModelKey !== activeModelKey) {
           try {
-            beginAiStage('loading-model');
+            beginLlmStage('loading-model');
             const { createLLM } = await import('react-native-litert-lm');
             model = createLLM();
             await model.loadModel(cleanedModelPath, {
@@ -529,22 +529,22 @@ export default function LogScreen() {
                     });
             setModelCache(model, activeModelKey);
           } catch (err) {
-            setAiError('Failed to load model: ' + err);
-            setAiLoading(false);
-            setAiStage('idle');
-            setAiStageStartedAt(null);
+            setLlmError('Failed to load model: ' + err);
+            setLlmLoading(false);
+            setLlmStage('idle');
+            setLlmStageStartedAt(null);
             return;
           }
         }
     try {
-          beginAiStage('estimating');
+          beginLlmStage('estimating');
           let response: string;
           try {
-            response = await model.sendMessage(aiPrompt);
+            response = await model.sendMessage(llmPrompt);
           } catch (err: any) {
             // Model was unloaded (e.g. app went to background) — reload and retry once.
             if (err?.message?.includes('No model loaded') || err?.message?.includes('LiteRTLM')) {
-              beginAiStage('loading-model');
+              beginLlmStage('loading-model');
               const { createLLM } = await import('react-native-litert-lm');
               const freshModel = createLLM();
               await freshModel.loadModel(cleanedModelPath, {
@@ -557,19 +557,19 @@ export default function LogScreen() {
               });
               setModelCache(freshModel, activeModelKey);
               model = freshModel;
-              beginAiStage('estimating');
-              response = await model.sendMessage(aiPrompt);
+              beginLlmStage('estimating');
+              response = await model.sendMessage(llmPrompt);
             } else {
               throw err;
             }
           }
-          setAiResult(response);
+          setLlmResult(response);
         } catch (err) {
-          setAiError(`Failed to run model. ${err}`);
+          setLlmError(`Failed to run model. ${err}`);
         } finally {
-          setAiLoading(false);
-          setAiStage('idle');
-          setAiStageStartedAt(null);
+          setLlmLoading(false);
+          setLlmStage('idle');
+          setLlmStageStartedAt(null);
         }
   };
   const insets = useSafeAreaInsets();
@@ -581,7 +581,7 @@ export default function LogScreen() {
   const [macroModalVisible, setMacroModalVisible] = useState(false);
   const [editDraft, setEditDraft] = useState<EditEntryDraft | null>(null);
   const [showEditMacros, setShowEditMacros] = useState(false);
-  const [aiModalVisible, setAiModalVisible] = useState(false);
+  const [llmModalVisible, setLlmModalVisible] = useState(false);
 
   useEffect(() => {
     loadStoredData()
@@ -952,46 +952,46 @@ export default function LogScreen() {
     data.calorieTolerancePercent,
   ]);
 
-  // Parse AI result for use in rendering and button handler.
+  // Parse LLM result for use in rendering and button handler.
   // Handles three output formats:
   //   1. Markdown code block:  ```json\n{...}\n```
   //   2. Raw JSON string:      {"items":[...]}
   //   3. JSON embedded in text: some prose... {"items":[...]} ...more prose
-  const aiResultParsed = useMemo<AiEstimatePayload | null>(() => {
-    if (!aiResult) return null;
+  const llmResultParsed = useMemo<LLMEstimatePayload | null>(() => {
+    if (!llmResult) return null;
 
-    function tryParse(jsonString: string): AiEstimatePayload | null {
+    function tryParse(jsonString: string): LLMEstimatePayload | null {
       try {
         const parsed = JSON.parse(jsonString) as unknown;
         if (!parsed || typeof parsed !== 'object') return null;
         const items = (parsed as { items?: unknown }).items;
         if (!Array.isArray(items)) return null;
-        return { items: items as AiEstimateItem[] };
+        return { items: items as LLMEstimateItem[] };
       } catch {
         return null;
       }
     }
 
     // Case 1: markdown code block (```json or plain ```)
-    const codeBlockMatch = aiResult.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+    const codeBlockMatch = llmResult.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
     if (codeBlockMatch) {
       const result = tryParse(codeBlockMatch[1].trim());
       if (result) return result;
     }
 
     // Case 2: the whole string is already JSON
-    const direct = tryParse(aiResult.trim());
+    const direct = tryParse(llmResult.trim());
     if (direct) return direct;
 
     // Case 3: JSON object embedded somewhere in the text
-    const start = aiResult.indexOf('{');
-    const end = aiResult.lastIndexOf('}');
+    const start = llmResult.indexOf('{');
+    const end = llmResult.lastIndexOf('}');
     if (start >= 0 && end > start) {
-      return tryParse(aiResult.slice(start, end + 1));
+      return tryParse(llmResult.slice(start, end + 1));
     }
 
     return null;
-  }, [aiResult]);
+  }, [llmResult]);
 
   const isModelInMemory = useMemo(() => {
       if (!modelPath || !loadedModelKey) return false;
@@ -1102,7 +1102,7 @@ export default function LogScreen() {
           onAddMeal={addMeal}
           onQuickAddMeal={quickAddMeal}
           onToggleFavoriteQuickAdd={toggleFavoriteQuickAdd}
-          onOpenAiEstimator={() => setAiModalVisible(true)}
+          onOpenLlmEstimator={() => setLlmModalVisible(true)}
           data={data}
         />
 
@@ -1134,14 +1134,14 @@ export default function LogScreen() {
       </ScrollView>
 
       <Modal
-        visible={aiModalVisible}
+        visible={llmModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setAiModalVisible(false)}
+        onRequestClose={() => setLlmModalVisible(false)}
       >
         <Pressable
           style={styles.modalBackdrop}
-          onPress={() => setAiModalVisible(false)}
+          onPress={() => setLlmModalVisible(false)}
         >
           <Pressable
             style={[styles.modalCard, { backgroundColor: theme.colors.surface }]}
@@ -1150,8 +1150,8 @@ export default function LogScreen() {
             <Text variant="titleMedium" style={{ fontWeight: '700' }}>Meal Estimator</Text>
             <TextInput
               label="Describe your meal"
-              value={aiPrompt}
-              onChangeText={setAiPrompt}
+              value={llmPrompt}
+              onChangeText={setLlmPrompt}
               placeholder="e.g. 2 eggs, 1 slice toast, 1 tbsp butter"
               multiline
               mode="outlined"
@@ -1165,31 +1165,31 @@ export default function LogScreen() {
                 />
               )}
             />
-            <Button mode="contained" icon="robot" loading={aiLoading} onPress={handleAIPrompt} disabled={aiLoading || !aiPrompt.trim()}>
+            <Button mode="contained" icon="robot" loading={llmLoading} onPress={handleLlmPrompt} disabled={llmLoading || !llmPrompt.trim()}>
               Estimate Calories & Macros
             </Button>
-            {aiLoading ? (
+            {llmLoading ? (
               <View style={{ marginTop: 8, gap: 6 }}>
                 <ProgressBar indeterminate />
                 <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  {aiStage === 'loading-model'
-                    ? `Loading model into memory... ${aiStageElapsedSec}s`
-                    : `Estimating nutrition... ${aiStageElapsedSec}s`}
+                  {llmStage === 'loading-model'
+                    ? `Loading model into memory... ${llmStageElapsedSec}s`
+                    : `Estimating nutrition... ${llmStageElapsedSec}s`}
                 </Text>
               </View>
             ) : null}
-            {aiError ? (
-              <Text variant="bodySmall" style={{ color: theme.colors.error, marginTop: 8 }}>{aiError}</Text>
+            {llmError ? (
+              <Text variant="bodySmall" style={{ color: theme.colors.error, marginTop: 8 }}>{llmError}</Text>
             ) : null}
-            {aiResult ? (
+            {llmResult ? (
               <View style={{ marginTop: 12 }}>
-                {!aiResultParsed ? (
+                {!llmResultParsed ? (
                   <Text variant="bodySmall" style={{ color: theme.colors.error }}>Could not parse LLM response.</Text>
-                ) : !aiResultParsed.items || !Array.isArray(aiResultParsed.items) ? (
+                ) : !llmResultParsed.items || !Array.isArray(llmResultParsed.items) ? (
                   <Text variant="bodySmall" style={{ color: theme.colors.error }}>No items found in LLM response.</Text>
                 ) : (
                   <View style={{ marginTop: 4 }}>
-                    {aiResultParsed.items.map((item: AiEstimateItem, idx: number) => (
+                    {llmResultParsed.items.map((item: LLMEstimateItem, idx: number) => (
                       <View key={idx} style={{ marginBottom: 6, padding: 8, borderRadius: 8, backgroundColor: theme.colors.surfaceVariant }}>
                         <Text variant="labelLarge" style={{ fontWeight: '700', color: theme.colors.primary }}>{item.name}</Text>
                         <Text variant="bodySmall">Calories: {item.calories} kcal</Text>
@@ -1205,8 +1205,8 @@ export default function LogScreen() {
                   icon="plus"
                   style={{ marginTop: 8 }}
                   onPress={() => {
-                    if (!aiResultParsed || !Array.isArray(aiResultParsed.items)) return;
-                    aiResultParsed.items.forEach((item: AiEstimateItem) => {
+                    if (!llmResultParsed || !Array.isArray(llmResultParsed.items)) return;
+                    llmResultParsed.items.forEach((item: LLMEstimateItem) => {
                       addMeal({
                         title: item.name,
                         calories: item.calories,
@@ -1216,17 +1216,17 @@ export default function LogScreen() {
                         fiberGrams: item.fibre,
                       });
                     });
-                    setAiPrompt('');
-                    setAiResult(null);
-                    setAiModalVisible(false);
+                    setLlmPrompt('');
+                    setLlmResult(null);
+                    setLlmModalVisible(false);
                   }}
-                  disabled={!aiResultParsed || !Array.isArray(aiResultParsed.items) || aiResultParsed.items.length === 0}
+                  disabled={!llmResultParsed || !Array.isArray(llmResultParsed.items) || llmResultParsed.items.length === 0}
                 >
                   Add to Log
                 </Button>
               </View>
             ) : null}
-            <Button mode="text" onPress={() => setAiModalVisible(false)}>
+            <Button mode="text" onPress={() => setLlmModalVisible(false)}>
               Close
             </Button>
           </Pressable>
@@ -1524,8 +1524,8 @@ const styles = StyleSheet.create({
   quickAddItem: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   quickLogHeader: { minHeight: 56, paddingVertical: 6 },
   quickLogTitle: { marginLeft: -2 },
-  quickLogAiButton: { marginRight: 8 },
-  quickLogAiButtonContent: { paddingHorizontal: 4 },
+  quickLogLlmButton: { marginRight: 8 },
+  quickLogLlmButtonContent: { paddingHorizontal: 4 },
   macroSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
