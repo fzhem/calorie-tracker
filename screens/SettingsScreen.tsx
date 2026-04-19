@@ -2,9 +2,9 @@ import { exportUserData } from '../exportData';
 import * as Sharing from 'expo-sharing';
 import { getDocumentAsync } from 'expo-document-picker';
 import { importUserData } from '../exportData';
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { Permission } from 'react-native-health-connect';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,11 +13,13 @@ import {
   Card,
   Chip,
   Icon,
+  IconButton,
   ProgressBar,
   SegmentedButtons,
   Text,
   TextInput,
   useTheme,
+  type MD3Theme,
 } from 'react-native-paper';
 import { Directory, File, Paths } from 'expo-file-system';
 
@@ -28,8 +30,15 @@ import {
   loadStoredData as readStoredData,
   saveStoredData,
 } from '../storage';
-import type { BodyFatPoint, StoredData, WeightPoint } from '../storage';
+import type { BodyFatPoint, ModelConfig, StoredData, WeightPoint } from '../storage';
 import { useThemeMode, type ThemeMode } from '../themeMode';
+
+const DEFAULT_MODEL_CONFIG: ModelConfig = {
+  temperature: 0.2,
+  maxTokens: 1024,
+  topK: 40,
+  topP: 0.95,
+};
 
 type HealthConnectModule = typeof import('react-native-health-connect');
 const healthConnect: HealthConnectModule | null =
@@ -85,6 +94,123 @@ const BUILT_IN_MODELS: ModelCatalogItem[] = [
 ];
 
 const MODEL_DIRECTORY = new Directory(Paths.document, 'models');
+
+type ModelConfigModalProps = {
+  modelUri: string | null;
+  modelName: string;
+  config: ModelConfig | null;
+  theme: MD3Theme;
+  onSave: (config: ModelConfig) => void;
+  onClose: () => void;
+};
+
+const ModelConfigModal = memo(function ModelConfigModal({
+  modelUri,
+  modelName,
+  config,
+  theme,
+  onSave,
+  onClose,
+}: ModelConfigModalProps) {
+  const [draft, setDraft] = useState<ModelConfig>(() => config ?? DEFAULT_MODEL_CONFIG);
+
+  useEffect(() => {
+    if (config) setDraft(config);
+  }, [config]);
+
+  return (
+    <Modal
+      visible={!!modelUri}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable
+        style={styles.modalBackdrop}
+        onPress={onClose}
+      >
+        <Pressable
+          style={[styles.modalCard, { backgroundColor: theme.colors.surface }]}
+          onPress={() => {}}
+        >
+          <Text variant="titleMedium" style={{ fontWeight: '700' }}>
+            {modelName} Settings
+          </Text>
+          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
+            Inference parameters
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TextInput
+              mode="outlined"
+              label="Temperature"
+              keyboardType="numeric"
+              value={String(draft.temperature)}
+              onChangeText={(value) => {
+                const num = Number(value);
+                if (Number.isFinite(num) && num >= 0 && num <= 2) {
+                  setDraft((prev) => ({ ...prev, temperature: num }));
+                }
+              }}
+              style={{ flex: 1 }}
+            />
+            <TextInput
+              mode="outlined"
+              label="Max Tokens"
+              keyboardType="number-pad"
+              value={String(draft.maxTokens)}
+              onChangeText={(value) => {
+                const num = Number(value);
+                if (Number.isFinite(num) && num > 0) {
+                  setDraft((prev) => ({ ...prev, maxTokens: Math.round(num) }));
+                }
+              }}
+              style={{ flex: 1 }}
+            />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TextInput
+              mode="outlined"
+              label="Top K"
+              keyboardType="number-pad"
+              value={String(draft.topK)}
+              onChangeText={(value) => {
+                const num = Number(value);
+                if (Number.isFinite(num) && num >= 0) {
+                  setDraft((prev) => ({ ...prev, topK: Math.round(num) }));
+                }
+              }}
+              style={{ flex: 1 }}
+            />
+            <TextInput
+              mode="outlined"
+              label="Top P"
+              keyboardType="numeric"
+              value={String(draft.topP)}
+              onChangeText={(value) => {
+                const num = Number(value);
+                if (Number.isFinite(num) && num >= 0 && num <= 1) {
+                  setDraft((prev) => ({ ...prev, topP: num }));
+                }
+              }}
+              style={{ flex: 1 }}
+            />
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+                      <Button mode="text" onPress={() => setDraft(DEFAULT_MODEL_CONFIG)}>
+                        Reset
+                      </Button>
+                      <Button mode="text" onPress={onClose}>
+                        Cancel
+                      </Button>
+                      <Button mode="contained" onPress={() => onSave(draft)}>
+                        Save
+                      </Button>
+                    </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+});
 
 function addDays(date: Date, days: number) {
   const next = new Date(date);
@@ -356,12 +482,27 @@ export default function SettingsScreen() {
   const [downloadSpeed, setDownloadSpeed] = useState<number | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadedModels, setDownloadedModels] = useState<DownloadedModel[]>([]);
+    const [activeModelConfigUri, setActiveModelConfigUri] = useState<string | null>(null);
 
-  const loadStoredData = useCallback(async () => {
-    const next = await readStoredData();
-    setData(next);
-    return next;
-  }, []);
+    const activeModelConfig = activeModelConfigUri ? (data.perModelConfig?.[activeModelConfigUri] ?? DEFAULT_MODEL_CONFIG) : null;
+
+    const handleSaveModelConfig = (config: ModelConfig) => {
+      if (!activeModelConfigUri) return;
+      setData((prev) => ({
+        ...prev,
+        perModelConfig: {
+          ...prev.perModelConfig,
+          [activeModelConfigUri]: config,
+        },
+      }));
+      setActiveModelConfigUri(null);
+    };
+
+    const loadStoredData = useCallback(async () => {
+      const next = await readStoredData();
+      setData(next);
+      return next;
+    }, []);
 
   const refreshDownloadedModels = useCallback(async () => {
     if (!MODEL_DIRECTORY.exists) {
@@ -741,11 +882,11 @@ export default function SettingsScreen() {
   };
 
   const setActiveModel = (uri: string) => {
-    if (data.modelPath !== uri) clearModelCache();
-    setData((prev) => ({ ...prev, modelPath: uri }));
-  };
+      if (data.modelPath !== uri) clearModelCache();
+      setData((prev) => ({ ...prev, modelPath: uri }));
+    };
 
-  const handleDeleteModel = (model: DownloadedModel) => {
+    const handleDeleteModel = (model: DownloadedModel) => {
     Alert.alert(
       'Delete model?',
       `Remove ${model.name} from local storage?`,
@@ -939,56 +1080,68 @@ export default function SettingsScreen() {
               {downloadedModels.length ? (
                 <View style={styles.downloadedList}>
                   {downloadedModels.map((model) => {
-                    const isActive = data.modelPath === model.uri;
-                    const inMemory = isInMemory(model.uri);
-                    return (
-                      <View
-                        key={model.uri}
-                        style={[
-                          styles.downloadedItem,
-                          {
-                            borderColor: isActive ? theme.colors.primary : theme.colors.outlineVariant,
-                            backgroundColor: theme.colors.elevation.level2,
-                          },
-                        ]}
-                      >
-                      <View style={styles.downloadedItemInfo}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <Text variant="bodyLarge">{model.name}</Text>
-                          {inMemory ? (
-                            <Icon source="memory" color={(theme.dark ? '#7bd88f' : '#2e7d32')} size={22}/>
-                          ) : null}
-                        </View>
-                        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                          {formatBytes(model.size)}
-                        </Text>
-                      </View>
-                      <View style={styles.downloadedItemActions}>
-                        <Button
-                          mode={isActive ? 'contained' : 'outlined'}
-                          onPress={() => setActiveModel(model.uri)}
-                        >
-                          {isActive ? 'In use' : 'Use'}
-                        </Button>
-                        {inMemory ? (
-                          <Button
-                            mode="outlined"
-                            onPress={() => clearModelCache()}
-                          >
-                            Unload
-                          </Button>
-                        ) : null}
-                        <Button
-                          mode="text"
-                          textColor={theme.colors.error}
-                          onPress={() => handleDeleteModel(model)}
-                        >
-                          Delete
-                        </Button>
-                      </View>
-                    </View>
-                  );
-                })}
+                                                        const isActive = data.modelPath === model.uri;
+                                                        const inMemory = isInMemory(model.uri);
+                                                        const hasCustomConfig = !!data.perModelConfig?.[model.uri] &&
+                                        JSON.stringify(data.perModelConfig[model.uri]) !== JSON.stringify(DEFAULT_MODEL_CONFIG);
+                                                        return (
+                                                          <View
+                                                            key={model.uri}
+                                                            style={[
+                                                              styles.downloadedItem,
+                                                              {
+                                                                borderColor: isActive ? theme.colors.primary : theme.colors.outlineVariant,
+                                                                backgroundColor: theme.colors.elevation.level2,
+                                                              },
+                                                            ]}
+                                                          >
+                                                            <View style={styles.downloadedItemTopRow}>
+                                                              <View style={styles.downloadedItemNameRow}>
+                                                                <Text variant="bodyLarge" numberOfLines={1} style={styles.downloadedItemName}>{model.name}</Text>
+                                                                {inMemory ? (
+                                                                  <Icon source="memory" color={(theme.dark ? '#7bd88f' : '#2e7d32')} size={20} />
+                                                                ) : null}
+                                                                {hasCustomConfig ? (
+                                                                  <Icon source="tune" color={theme.colors.primary} size={16} />
+                                                                ) : null}
+                                                              </View>
+                                                              <IconButton
+                                                                                                                              icon="cog-outline"
+                                                                                                                              size={22}
+                                                                                                                              onPress={() => setActiveModelConfigUri(model.uri)}
+                                                                                                                              style={{ marginVertical: -8 }}
+                                                                                                                            />
+                                                            </View>
+                                                            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                                                              {formatBytes(model.size)}
+                                                            </Text>
+                                                            <View style={styles.downloadedItemActions}>
+                                                              <Button
+                                                                mode={isActive ? 'contained' : 'outlined'}
+                                                                onPress={() => setActiveModel(model.uri)}
+                                                              >
+                                                                {isActive ? 'In use' : 'Use'}
+                                                              </Button>
+                                                              {inMemory ? (
+                                                                <Button
+                                                                  mode="outlined"
+                                                                  onPress={() => clearModelCache()}
+                                                                >
+                                                                  Unload
+                                                                </Button>
+                                                              ) : null}
+                                                              <Button
+                                                                mode="text"
+                                                                compact
+                                                                textColor={theme.colors.error}
+                                                                onPress={() => handleDeleteModel(model)}
+                                                              >
+                                                                Delete
+                                                              </Button>
+                                                            </View>
+                                                          </View>
+                                                        );
+                                                      })}
                 </View>
               ) : (
                 <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
@@ -1040,29 +1193,38 @@ export default function SettingsScreen() {
             />
 
             <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 12, marginBottom: 8 }}>
-              Graph status tolerance
-            </Text>
-            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
-              How close you need to be to your goal to show On target (default: 100 kcal)
-            </Text>
-            <TextInput
-              mode="outlined"
-              label="Graph tolerance (kcal)"
-              keyboardType="number-pad"
-              value={String(data.graphToleranceCalories)}
-              onChangeText={(value) => {
-                const num = Number(value);
-                if (Number.isFinite(num) && num >= 0) {
-                  setData((prev) => ({ ...prev, graphToleranceCalories: num }));
-                }
-              }}
-            />
-          </Card.Content>
-        </Card>
-      </ScrollView>
-    </View>
-  );
-}
+                          Graph status tolerance
+                        </Text>
+                        <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
+                          How close you need to be to your goal to show On target (default: 100 kcal)
+                        </Text>
+                        <TextInput
+                          mode="outlined"
+                          label="Graph tolerance (kcal)"
+                          keyboardType="number-pad"
+                          value={String(data.graphToleranceCalories)}
+                          onChangeText={(value) => {
+                            const num = Number(value);
+                            if (Number.isFinite(num) && num >= 0) {
+                              setData((prev) => ({ ...prev, graphToleranceCalories: num }));
+                            }
+                          }}
+                        />
+                      </Card.Content>
+                    </Card>
+                  </ScrollView>
+
+                        <ModelConfigModal
+                                                  modelUri={activeModelConfigUri}
+                                                  modelName={downloadedModels.find((m) => m.uri === activeModelConfigUri)?.name ?? 'Model'}
+                                                  config={activeModelConfig ?? DEFAULT_MODEL_CONFIG}
+                                                  theme={theme}
+                                                  onSave={handleSaveModelConfig}
+                                                  onClose={() => setActiveModelConfigUri(null)}
+                                                />
+                      </View>
+                    );
+                  }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
@@ -1084,19 +1246,47 @@ const styles = StyleSheet.create({
     marginHorizontal: 0,
   },
   downloadedModelsHeader: { 
-    marginBottom: 8,
+    marginBottom: 3,
   },
   downloadedList: { gap: 8 },
   downloadedItem: {
-    borderWidth: 2,
-    borderRadius: 12,
-    padding: 12,
-    gap: 10,
-  },
-  downloadedItemInfo: { gap: 4 },
+      borderWidth: 2,
+      borderRadius: 12,
+      padding: 12,
+      gap: 8,
+    },
+  downloadedItemTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      },
+      downloadedItemNameRow: {
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  height: 24,
+                },
+            downloadedItemName: {
+              flexShrink: 1,
+            },
   downloadedItemActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-});
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 12,
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 16,
+    },
+    modalCard: {
+      borderRadius: 20,
+      padding: 20,
+      gap: 12,
+      maxWidth: 500,
+      width: '100%',
+    },
+  });

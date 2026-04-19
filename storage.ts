@@ -73,59 +73,68 @@ export type StoredData = {
   fiberGoalGrams: number | null;
   calorieTolerancePercent: number;
   graphToleranceCalories: number;
-};
+  perModelConfig: Record<string, ModelConfig>;
+  };
 
-export const STORAGE_KEY = 'calorie-tracker-storage-v1';
+  export type ModelConfig = {
+    temperature: number;
+    maxTokens: number;
+    topK: number;
+    topP: number;
+  };
 
-export const DEFAULT_DATA: StoredData = {
-  entries: [],
-  favoriteQuickAdds: [],
-  modelPath: null,
-  systemPrompt: `You are a nutrition assistant.
+  export const STORAGE_KEY = 'calorie-tracker-storage-v1';
 
-Return JSON only.
+  export const DEFAULT_DATA: StoredData = {
+    entries: [],
+    favoriteQuickAdds: [],
+    modelPath: null,
+    systemPrompt: `You are a nutrition assistant.
 
-Format:
-{
-  "items": [
-    {
-      "name": "food item",
-      "calories": number,
-      "protein": number,
-      "carbs": number,
-      "fat": number,
-      "fibre": number
-    }
-  ]
-}`,
-  quickLogMacrosExpanded: false,
-  baseTarget: 2100,
-  caloriesPerKg: 30,
-  goalPhase: 'maintain',
-  cutAdjustmentType: 'kcal',
-  cutCalorieAdjustment: 500,
-  cutPercentPerWeek: 1,
-  bulkAdjustmentType: 'kcal',
-  bulkCalorieAdjustment: 500,
-  bulkPercentPerWeek: 1,
-  metabolismSex: 'male',
-  metabolismAgeYears: null,
-  metabolismHeightCm: null,
-  activityLevel: 'moderate',
-  manualWeightKg: null,
-  weightHistory: [],
-  bodyFatHistory: [],
-  lastWeightSyncAt: null,
-  lastBodyFatSyncAt: null,
-  proteinGoalGrams: null,
-  fatGoalGrams: null,
-  carbsGoalGrams: null,
-  fiberGoalGrams: null,
-  calorieTolerancePercent: 12,
-  graphToleranceCalories: 100,
-};
+  Return JSON only.
 
-let cachedData: StoredData | null = null;
+  Format:
+  {
+    "items": [
+      {
+        "name": "food item",
+        "calories": number,
+        "protein": number,
+        "carbs": number,
+        "fat": number,
+        "fibre": number
+      }
+    ]
+  }`,
+    quickLogMacrosExpanded: false,
+    baseTarget: 2100,
+    caloriesPerKg: 30,
+    goalPhase: 'maintain',
+    cutAdjustmentType: 'kcal',
+    cutCalorieAdjustment: 500,
+    cutPercentPerWeek: 1,
+    bulkAdjustmentType: 'kcal',
+    bulkCalorieAdjustment: 500,
+    bulkPercentPerWeek: 1,
+    metabolismSex: 'male',
+    metabolismAgeYears: null,
+    metabolismHeightCm: null,
+    activityLevel: 'moderate',
+    manualWeightKg: null,
+    weightHistory: [],
+    bodyFatHistory: [],
+    lastWeightSyncAt: null,
+    lastBodyFatSyncAt: null,
+    proteinGoalGrams: null,
+    fatGoalGrams: null,
+    carbsGoalGrams: null,
+    fiberGoalGrams: null,
+    calorieTolerancePercent: 12,
+    graphToleranceCalories: 100,
+    perModelConfig: {},
+  };
+
+  let cachedData: StoredData | null = null;
 
 function normalizeStoredData(parsed: Partial<StoredData>): StoredData {
   return {

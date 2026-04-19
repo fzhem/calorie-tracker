@@ -4,7 +4,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExterna
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, ToastAndroid, View, Vibration } from 'react-native';
 import { Button, Card, Chip, IconButton, ProgressBar, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-// Do not import useModel at the top level
 
 import { getAdjustedCalorieTarget, getAutoMacroTargets } from '../metabolism';
 import { clearModelCache, getModelInstance, setModelCache, subscribeModelCache, getModelKeySnapshot } from '../modelCache';
@@ -43,6 +42,13 @@ async function getModelConfig() {
     systemPrompt: stored.systemPrompt,
   };
 }
+
+const DEFAULT_MODEL_CONFIG = {
+  temperature: 0.2,
+  maxTokens: 1024,
+  topK: 40,
+  topP: 0.95,
+};
 
 type QuickAddItem = {
   title: string;
@@ -419,44 +425,44 @@ const QuickLogCard = memo(function QuickLogCard({
 export default function LogScreen() {
   // AI prompt state
   const [aiPrompt, setAiPrompt] = useState('');
-  const [aiResult, setAiResult] = useState<string | null>(null);
-  const [aiError, setAiError] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiStage, setAiStage] = useState<AiRunStage>('idle');
-  const [aiStageStartedAt, setAiStageStartedAt] = useState<number | null>(null);
-  const [aiStageElapsedSec, setAiStageElapsedSec] = useState(0);
-  const [modelPath, setModelPath] = useState<string | null>(null);
-  const [systemPrompt, setSystemPrompt] = useState<string>('');
+    const [aiResult, setAiResult] = useState<string | null>(null);
+    const [aiError, setAiError] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiStage, setAiStage] = useState<AiRunStage>('idle');
+    const [aiStageStartedAt, setAiStageStartedAt] = useState<number | null>(null);
+    const [aiStageElapsedSec, setAiStageElapsedSec] = useState(0);
+    const [modelPath, setModelPath] = useState<string | null>(null);
+      const [systemPrompt, setSystemPrompt] = useState<string>('');
 
-  // Load modelPath and systemPrompt from storage on mount
-  useEffect(() => {
-    getModelConfig().then(({ modelPath, systemPrompt }) => {
-      setModelPath(modelPath);
-      setSystemPrompt(systemPrompt);
-    });
-  }, []);
+      // Load modelPath and systemPrompt from storage on mount
+      useEffect(() => {
+        getModelConfig().then(({ modelPath, systemPrompt }) => {
+          setModelPath(modelPath);
+          setSystemPrompt(systemPrompt);
+        });
+      }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      let isActive = true;
-      getModelConfig().then(({ modelPath: nextModelPath, systemPrompt: nextSystemPrompt }) => {
-        if (!isActive) return;
-        const changed = nextModelPath !== modelPath || nextSystemPrompt !== systemPrompt;
-        setModelPath(nextModelPath);
-        setSystemPrompt(nextSystemPrompt);
-        if (changed) {
-          clearModelCache();
-        }
-      }).catch(() => {
-        if (!isActive) return;
-        setAiError('Could not refresh AI model settings.');
-      });
+      useFocusEffect(
+        useCallback(() => {
+          let isActive = true;
+          getModelConfig().then(({ modelPath: nextModelPath, systemPrompt: nextSystemPrompt }) => {
+            if (!isActive) return;
+            const changed = nextModelPath !== modelPath || nextSystemPrompt !== systemPrompt;
+            setModelPath(nextModelPath);
+            setSystemPrompt(nextSystemPrompt);
+            if (changed) {
+              clearModelCache();
+            }
+          }).catch(() => {
+            if (!isActive) return;
+            setAiError('Could not refresh AI model settings.');
+          });
 
-      return () => {
-        isActive = false;
-      };
-    }, [modelPath, systemPrompt]),
-  );
+          return () => {
+            isActive = false;
+          };
+        }, [modelPath, systemPrompt]),
+      );
 
   // Model instance cache — backed by module-level singleton so Settings can observe it
   const loadedModelKey = useSyncExternalStore(subscribeModelCache, getModelKeySnapshot);
@@ -494,27 +500,32 @@ export default function LogScreen() {
     }
     // Remove 'file:///' prefix if present
     let cleanedModelPath = modelPath.startsWith('file:///') ? modelPath.replace('file:///', '/') : modelPath;
-    const activeModelKey = `${cleanedModelPath}::${systemPrompt}`;
-    let model = getModelInstance();
-    if (!model || loadedModelKey !== activeModelKey) {
-      try {
-        beginAiStage('loading-model');
-        const { createLLM } = await import('react-native-litert-lm');
-        model = createLLM();
-        await model.loadModel(cleanedModelPath, {
-          backend: 'cpu',
-          systemPrompt,
-          enableMemoryTracking: true,
-        });
-        setModelCache(model, activeModelKey);
-      } catch (err) {
-        setAiError('Failed to load model: ' + err);
-        setAiLoading(false);
-        setAiStage('idle');
-        setAiStageStartedAt(null);
-        return;
-      }
-    }
+    const modelConfig = data.perModelConfig?.[cleanedModelPath] ?? DEFAULT_MODEL_CONFIG;
+        const activeModelKey = `${cleanedModelPath}::${systemPrompt}::${JSON.stringify(modelConfig)}`;
+        let model = getModelInstance();
+        if (!model || loadedModelKey !== activeModelKey) {
+          try {
+            beginAiStage('loading-model');
+            const { createLLM } = await import('react-native-litert-lm');
+            model = createLLM();
+            await model.loadModel(cleanedModelPath, {
+                      systemPrompt: systemPrompt,
+                      backend: 'cpu',
+                      maxTokens: modelConfig.maxTokens,
+                      temperature: modelConfig.temperature,
+                      topK: modelConfig.topK,
+                      topP: modelConfig.topP,
+                      enableMemoryTracking: true,
+                    });
+            setModelCache(model, activeModelKey);
+          } catch (err) {
+            setAiError('Failed to load model: ' + err);
+            setAiLoading(false);
+            setAiStage('idle');
+            setAiStageStartedAt(null);
+            return;
+          }
+        }
     try {
       beginAiStage('estimating');
       const response = await model.sendMessage(aiPrompt);
@@ -949,11 +960,12 @@ export default function LogScreen() {
   }, [aiResult]);
 
   const isModelInMemory = useMemo(() => {
-    if (!modelPath || !loadedModelKey) return false;
-    const cleanedModelPath = modelPath.startsWith('file:///') ? modelPath.replace('file:///', '/') : modelPath;
-    const activeModelKey = `${cleanedModelPath}::${systemPrompt}`;
-    return loadedModelKey === activeModelKey;
-  }, [loadedModelKey, modelPath, systemPrompt]);
+      if (!modelPath || !loadedModelKey) return false;
+      const cleanedModelPath = modelPath.startsWith('file:///') ? modelPath.replace('file:///', '/') : modelPath;
+      const modelConfig = data.perModelConfig?.[cleanedModelPath] ?? DEFAULT_MODEL_CONFIG;
+      const activeModelKey = `${cleanedModelPath}::${systemPrompt}::${JSON.stringify(modelConfig)}`;
+      return loadedModelKey === activeModelKey;
+    }, [loadedModelKey, modelPath, systemPrompt, data.perModelConfig]);
 
   const showModelStatusHint = useCallback(() => {
     const message = isModelInMemory
