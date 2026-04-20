@@ -1,4 +1,34 @@
 /**
+ * Get the full memory usage object from the loaded model, if available.
+ * Returns null if not available or not enabled.
+ */
+export function getModelMemoryUsageDetails(): {
+  residentBytes: number;
+  nativeHeapBytes: number;
+  availableMemoryBytes: number;
+  isLowMemory: boolean;
+} | null {
+  if (!_instance) return null;
+  try {
+    if (typeof _instance.getMemoryUsage === "function") {
+      const usage = _instance.getMemoryUsage();
+      if (
+        usage &&
+        typeof usage === "object" &&
+        typeof usage.residentBytes === "number" &&
+        typeof usage.nativeHeapBytes === "number" &&
+        typeof usage.availableMemoryBytes === "number" &&
+        typeof usage.isLowMemory === "boolean"
+      ) {
+        return usage;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+/**
  * Module-level singleton for the active LLM instance.
  *
  * Keeps at most one model loaded at a time. Calling setModelCache when

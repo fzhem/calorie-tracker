@@ -42,6 +42,7 @@ import {
   clearModelCache,
   getModelKeySnapshot,
   getModelMemoryUsageBytes,
+  getModelMemoryUsageDetails,
   subscribeModelCache,
 } from "../lib/modelCache";
 import {
@@ -546,17 +547,26 @@ export default function SettingsScreen() {
 
   // Memory usage tracking
   const [memoryUsageBytes, setMemoryUsageBytes] = useState<number | null>(null);
+  const [memoryUsageDetails, setMemoryUsageDetails] = useState<{
+    residentBytes: number;
+    nativeHeapBytes: number;
+    availableMemoryBytes: number;
+  } | null>(null);
+  const [showMemoryModal, setShowMemoryModal] = useState(false);
 
   // Poll memory usage when a model is loaded
   useEffect(() => {
     if (!loadedModelKey) {
       setMemoryUsageBytes(null);
+      setMemoryUsageDetails(null);
       return;
     }
 
     const updateMemoryUsage = () => {
       const bytes = getModelMemoryUsageBytes();
       setMemoryUsageBytes(bytes);
+      const details = getModelMemoryUsageDetails();
+      setMemoryUsageDetails(details);
     };
 
     updateMemoryUsage();
@@ -1240,7 +1250,19 @@ export default function SettingsScreen() {
         </Card>
 
         <Card style={styles.card} mode="elevated">
-          <Card.Title title="LiteRT Models" titleVariant="titleLarge" />
+          <Card.Title
+            title="LiteRT Models"
+            titleVariant="titleLarge"
+            right={() =>
+              loadedModelKey ? (
+                <IconButton
+                  icon="chart-donut"
+                  accessibilityLabel="Show memory usage"
+                  onPress={() => setShowMemoryModal(true)}
+                />
+              ) : null
+            }
+          />
           <Card.Content style={styles.formArea}>
             <Text
               variant="bodyMedium"
@@ -1248,30 +1270,114 @@ export default function SettingsScreen() {
             >
               Active model: {selectedModelDescription}
             </Text>
-            {memoryUsageBytes !== null ? (
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+
+            {/* Memory Usage Modal */}
+            <Modal
+              visible={!!showMemoryModal}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setShowMemoryModal(false)}
+            >
+              <Pressable
+                style={styles.modalBackdrop}
+                onPress={() => setShowMemoryModal(false)}
               >
-                <MaterialCommunityIcons
-                  name="memory"
-                  size={16}
-                  color={theme.dark ? "#7bd88f" : "#2e7d32"}
-                />
-                <Text
-                  variant="bodySmall"
-                  style={{ color: theme.dark ? "#7bd88f" : "#2e7d32" }}
+                <Pressable
+                  style={[
+                    styles.modalCard,
+                    { backgroundColor: theme.colors.surface, minWidth: 280 },
+                  ]}
+                  onPress={() => {}}
                 >
-                  Memory: {(memoryUsageBytes / 1024 / 1024).toFixed(1)} MB
-                </Text>
-              </View>
-            ) : loadedModelKey ? (
-              <Text
-                variant="bodySmall"
-                style={{ color: theme.colors.onSurfaceVariant }}
-              >
-                Memory usage available when tracking enabled
-              </Text>
-            ) : null}
+                  <Text
+                    variant="titleMedium"
+                    style={{ fontWeight: "700", marginBottom: 8 }}
+                  >
+                    Model Memory Usage
+                  </Text>
+                  {memoryUsageDetails ? (
+                    <View style={{ gap: 10 }}>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <MaterialCommunityIcons
+                          name="memory"
+                          size={22}
+                          color={theme.colors.primary}
+                        />
+                        <Text variant="bodyLarge">
+                          RSS:{" "}
+                          {(
+                            memoryUsageDetails.residentBytes /
+                            1024 /
+                            1024
+                          ).toFixed(1)}{" "}
+                          MB
+                        </Text>
+                      </View>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <MaterialCommunityIcons
+                          name="chip"
+                          size={22}
+                          color={theme.colors.primary}
+                        />
+                        <Text variant="bodyLarge">
+                          Native heap:{" "}
+                          {(
+                            memoryUsageDetails.nativeHeapBytes /
+                            1024 /
+                            1024
+                          ).toFixed(1)}{" "}
+                          MB
+                        </Text>
+                      </View>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <MaterialCommunityIcons
+                          name="database"
+                          size={22}
+                          color={theme.colors.primary}
+                        />
+                        <Text variant="bodyLarge">
+                          Available:{" "}
+                          {(
+                            memoryUsageDetails.availableMemoryBytes /
+                            1024 /
+                            1024
+                          ).toFixed(1)}{" "}
+                          MB
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <Text variant="bodyMedium">
+                      No memory usage details available.
+                    </Text>
+                  )}
+                  <Button
+                    style={{ marginTop: 18 }}
+                    onPress={() => setShowMemoryModal(false)}
+                  >
+                    Close
+                  </Button>
+                </Pressable>
+              </Pressable>
+            </Modal>
 
             <View style={styles.modelSelector}>
               {BUILT_IN_MODELS.map((model) => (
