@@ -31,6 +31,7 @@ import {
   IconButton,
   ProgressBar,
   SegmentedButtons,
+  Switch,
   Text,
   TextInput,
   useTheme,
@@ -589,6 +590,27 @@ export default function SettingsScreen() {
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("idle");
 
   const [isSyncingWeight, setIsSyncingWeight] = useState(false);
+
+  // Auto-sync Health Connect data every 15 minutes when enabled
+  useEffect(() => {
+    if (!data.healthConnectAutoSync) return;
+
+    const doAutoSync = () => {
+      if (healthConnect && !isSyncingWeight) {
+        void syncWeight();
+      }
+    };
+
+    const initialTimer = setTimeout(doAutoSync, 1);
+    // Periodic sync every hour
+    const interval = setInterval(doAutoSync, 60 * 60 * 1000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.healthConnectAutoSync]);
 
   const [selectedModelKey, setSelectedModelKey] = useState<
     "GEMMA_4_E2B_IT" | "GEMMA_4_E4B_IT" | "custom"
@@ -1300,6 +1322,26 @@ export default function SettingsScreen() {
                 Settings
               </Button>
             </View>
+            <View style={styles.autoSyncRow}>
+              <View style={{ flex: 1 }}>
+                <Text variant="bodyMedium">Auto-sync</Text>
+                <Text
+                  variant="labelSmall"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  Automatically sync weight data every hour
+                </Text>
+              </View>
+              <Switch
+                value={data.healthConnectAutoSync}
+                onValueChange={(value) =>
+                  setData((prev) => ({
+                    ...prev,
+                    healthConnectAutoSync: value,
+                  }))
+                }
+              />
+            </View>
           </Card.Content>
         </Card>
 
@@ -1744,6 +1786,15 @@ const styles = StyleSheet.create({
   formArea: { gap: 10 },
   buttonRow: { flexDirection: "row", gap: 10, marginTop: 4 },
   button: { flex: 1 },
+  autoSyncRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 4,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.08)",
+    marginTop: 8,
+  },
   healthConnectStats: {
     flexDirection: "row",
     justifyContent: "space-around",

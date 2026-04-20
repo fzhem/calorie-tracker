@@ -79,6 +79,7 @@ export type StoredData = {
   calorieTolerancePercent: number;
   graphToleranceCalories: number;
   perModelConfig: Record<string, ModelConfig>;
+  healthConnectAutoSync: boolean;
 };
 
 export type ModelConfig = {
@@ -137,6 +138,7 @@ export const DEFAULT_DATA: StoredData = {
   calorieTolerancePercent: 12,
   graphToleranceCalories: 100,
   perModelConfig: {},
+  healthConnectAutoSync: false,
 };
 
 let cachedData: StoredData | null = null;
