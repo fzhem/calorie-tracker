@@ -587,9 +587,7 @@ export default function SettingsScreen() {
   );
   const [isReady, setIsReady] = useState(false);
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("idle");
-  const [healthMessage, setHealthMessage] = useState(
-    "Health Connect sync is ready to configure.",
-  );
+
   const [isSyncingWeight, setIsSyncingWeight] = useState(false);
 
   const [selectedModelKey, setSelectedModelKey] = useState<
@@ -678,9 +676,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (!healthConnect) {
       setHealthStatus("unavailable");
-      setHealthMessage(
-        "Health Connect is only available on Android development builds.",
-      );
+
       return;
     }
     healthConnect
@@ -688,28 +684,18 @@ export default function SettingsScreen() {
       .then((status) => {
         if (status === healthConnect.SdkAvailabilityStatus.SDK_AVAILABLE) {
           setHealthStatus("available");
-          setHealthMessage(
-            "Health Connect is available. Sync body data to import weight and body fat records.",
-          );
         } else if (
           status ===
           healthConnect.SdkAvailabilityStatus
             .SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED
         ) {
           setHealthStatus("update-required");
-          setHealthMessage(
-            "Install or update Health Connect before syncing body data.",
-          );
         } else {
           setHealthStatus("unavailable");
-          setHealthMessage(
-            "Health Connect is not available on this device yet.",
-          );
         }
       })
       .catch(() => {
         setHealthStatus("error");
-        setHealthMessage("Health Connect status could not be checked.");
       });
   }, []);
 
@@ -736,11 +722,7 @@ export default function SettingsScreen() {
         healthConnect.SdkAvailabilityStatus
           .SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED;
       setHealthStatus(isUpdate ? "update-required" : "unavailable");
-      setHealthMessage(
-        isUpdate
-          ? "Install or update Health Connect and try again."
-          : "Health Connect is unavailable on this device.",
-      );
+
       return false;
     }
 
@@ -759,7 +741,6 @@ export default function SettingsScreen() {
     }
     setIsSyncingWeight(true);
     setHealthStatus("syncing");
-    setHealthMessage("Syncing weight and body fat data from Health Connect...");
 
     try {
       const available = await ensureHealthConnectAvailable();
@@ -778,9 +759,7 @@ export default function SettingsScreen() {
       const hasBodyFatPermission = hasPermission(granted, "read", "BodyFat");
       if (!hasWeightPermission && !hasBodyFatPermission) {
         setHealthStatus("error");
-        setHealthMessage(
-          "Weight/Body Fat permissions are off. Open Health Connect settings and allow this app to read Weight or Body Fat records, then sync again.",
-        );
+
         Alert.alert(
           "Body Data Permission Needed",
           "This app needs Health Connect permission to read Weight and Body Fat data. In Health Connect, enable Weight and Body Fat under app permissions, then tap Sync body data again.",
@@ -891,15 +870,10 @@ export default function SettingsScreen() {
       }));
 
       setHealthStatus("available");
-      setHealthMessage(
-        synced.length || syncedBodyFat.length
-          ? `Synced ${synced.length} weight and ${syncedBodyFat.length} body fat record${synced.length + syncedBodyFat.length === 1 ? "" : "s"}.`
-          : "No recent body metric records found in Health Connect.",
-      );
     } catch (error) {
       const reason = getErrorMessage(error);
       setHealthStatus("error");
-      setHealthMessage(`Body sync failed: ${reason}`);
+
       Alert.alert("Sync Failed", `Could not sync body data. ${reason}`);
     } finally {
       setIsSyncingWeight(false);
@@ -1189,12 +1163,6 @@ export default function SettingsScreen() {
               variant="bodyMedium"
               style={{ color: theme.colors.onSurfaceVariant }}
             >
-              {healthMessage}
-            </Text>
-            <Text
-              variant="bodyMedium"
-              style={{ color: theme.colors.onSurfaceVariant }}
-            >
               Latest weight: {latestWeight ? `${latestWeight} kg` : "None yet"}
             </Text>
             <Text
@@ -1263,7 +1231,7 @@ export default function SettingsScreen() {
               ) : null
             }
           />
-          <Card.Content style={styles.formArea}>
+          <Card.Content style={[styles.formArea, { marginTop: -18 }]}>
             <Text
               variant="bodyMedium"
               style={{ color: theme.colors.onSurfaceVariant }}
