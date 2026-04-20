@@ -957,6 +957,24 @@ export default function SettingsScreen() {
     };
   };
 
+  const isSelectedModelDownloaded = useMemo(() => {
+    if (selectedModelKey === "custom") {
+      // For custom models, check if any downloaded model matches the URL
+      const trimmed = customModelUrl.trim();
+      if (!trimmed) return false;
+      return downloadedModels.some((m) => {
+        // Check by filename (last segment of URL)
+        const urlFileName = trimmed.split("/").pop();
+        return m.name === urlFileName || m.name === trimmed.split("/").pop();
+      });
+    }
+
+    // For built-in models, check by filename
+    const builtIn = BUILT_IN_MODELS.find((m) => m.key === selectedModelKey);
+    if (!builtIn) return false;
+    return downloadedModels.some((m) => m.name === builtIn.fileName);
+  }, [selectedModelKey, customModelUrl, downloadedModels]);
+
   const handleDownloadModel = async () => {
     setDownloadError(null);
 
@@ -1509,17 +1527,20 @@ export default function SettingsScreen() {
 
             <Button
               mode="contained"
-              icon="download"
+              icon={isSelectedModelDownloaded ? "check" : "download"}
               onPress={handleDownloadModel}
               loading={isDownloading}
               disabled={
                 isDownloading ||
-                (selectedModelKey === "custom" && !customModelUrl.trim())
+                (selectedModelKey === "custom" && !customModelUrl.trim()) ||
+                isSelectedModelDownloaded
               }
             >
               {isDownloading
                 ? "Downloading model..."
-                : "Download selected model"}
+                : isSelectedModelDownloaded
+                  ? "Already downloaded"
+                  : "Download selected model"}
             </Button>
 
             {isDownloading ? (
