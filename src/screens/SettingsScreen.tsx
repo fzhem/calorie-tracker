@@ -449,31 +449,40 @@ function formatBytes(value: number | null) {
   return `${size.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
 }
 
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit & { timeout?: number } = {},
+): Promise<Response> {
+  const { timeout = 30000, ...fetchOptions } = options;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...fetchOptions,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeout / 1000} seconds`);
+    }
+    throw error;
+  }
+}
+
 async function resolveRemoteFileSize(url: string) {
   try {
-    const head = await fetch(url, { method: "HEAD" });
+    const head = await fetchWithTimeout(url, {
+      method: "HEAD",
+      timeout: 15000,
+    });
     const headLength = head.headers.get("content-length");
     if (head.ok && headLength) {
       const parsed = parseInt(headLength, 10);
-      if (Number.isFinite(parsed) && parsed > 0) return parsed;
-    }
-  } catch {
-    // Best effort only.
-  }
-
-  try {
-    const range = await fetch(url, { headers: { Range: "bytes=0-0" } });
-    const contentRange = range.headers.get("content-range");
-    if (contentRange) {
-      const match = contentRange.match(/\/(\d+)$/);
-      if (match?.[1]) {
-        const parsed = parseInt(match[1], 10);
-        if (Number.isFinite(parsed) && parsed > 0) return parsed;
-      }
-    }
-    const rangeLength = range.headers.get("content-length");
-    if (range.ok && rangeLength) {
-      const parsed = parseInt(rangeLength, 10);
       if (Number.isFinite(parsed) && parsed > 0) return parsed;
     }
   } catch {
@@ -1000,88 +1009,39 @@ export default function SettingsScreen() {
       destFile.create();
       let knownTotalBytes: number | null = null;
 
+      // Try to get file size with a short timeout first
       knownTotalBytes = await resolveRemoteFileSize(source.url);
       if (knownTotalBytes && knownTotalBytes > 0) {
         setTotalBytes(knownTotalBytes);
       }
 
-      let usedFallback = false;
+      // Use File.downloadFileAsync directly - it handles large files better on mobile
+      let pollTimer: ReturnType<typeof setInterval> | null = null;
+      let lastBytes = 0;
+      let lastTime = Date.now();
+
+      pollTimer = setInterval(() => {
+        if (!destFile.exists) return;
+        const currentBytes = destFile.size;
+        const now = Date.now();
+        const elapsed = (now - lastTime) / 1000;
+        if (elapsed > 0) {
+          setDownloadSpeed((currentBytes - lastBytes) / elapsed);
+        }
+        lastBytes = currentBytes;
+        lastTime = now;
+        setDownloadedBytes(currentBytes);
+        if (knownTotalBytes && knownTotalBytes > 0) {
+          setDownloadProgress(currentBytes / knownTotalBytes);
+        }
+      }, 500);
+
       try {
-        const response = await fetch(source.url);
-        if (!response.ok)
-          throw new Error(`Server returned HTTP ${response.status}`);
-
-        const contentLength = response.headers.get("content-length");
-        const total = contentLength ? parseInt(contentLength, 10) : null;
-        if (total && total > 0) {
-          knownTotalBytes = total;
-          setTotalBytes(total);
-        }
-
-        const reader = response.body?.getReader();
-        if (!reader) throw new Error("Response body is not readable.");
-
-        const handle = destFile.open();
-        let written = 0;
-        let speedWindowStart = Date.now();
-        let speedWindowBytes = 0;
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            handle.writeBytes(value);
-            written += value.byteLength;
-            speedWindowBytes += value.byteLength;
-
-            const now = Date.now();
-            const elapsed = (now - speedWindowStart) / 1000;
-            if (elapsed >= 0.5) {
-              setDownloadSpeed(speedWindowBytes / elapsed);
-              speedWindowStart = now;
-              speedWindowBytes = 0;
-            }
-
-            setDownloadedBytes(written);
-            if (knownTotalBytes) setDownloadProgress(written / knownTotalBytes);
-          }
-        } finally {
-          handle.close();
-        }
-      } catch {
-        usedFallback = true;
-
-        if (destFile.exists) destFile.delete();
-        destFile.create();
-
-        let pollTimer: ReturnType<typeof setInterval> | null = null;
-        let lastBytes = 0;
-        let lastTime = Date.now();
-
-        try {
-          // Fallback: native downloader with periodic file-size polling for live progress/speed.
-          pollTimer = setInterval(() => {
-            if (!destFile.exists) return;
-            const currentBytes = destFile.size;
-            const now = Date.now();
-            const elapsed = (now - lastTime) / 1000;
-            if (elapsed > 0) {
-              setDownloadSpeed((currentBytes - lastBytes) / elapsed);
-            }
-            lastBytes = currentBytes;
-            lastTime = now;
-            setDownloadedBytes(currentBytes);
-            if (knownTotalBytes && knownTotalBytes > 0) {
-              setDownloadProgress(currentBytes / knownTotalBytes);
-            }
-          }, 700);
-
-          await File.downloadFileAsync(source.url, destFile, {
-            idempotent: true,
-          });
-        } finally {
-          if (pollTimer) clearInterval(pollTimer);
-        }
+        await File.downloadFileAsync(source.url, destFile, {
+          idempotent: true,
+        });
+      } finally {
+        if (pollTimer) clearInterval(pollTimer);
       }
 
       if (destFile.exists) {
@@ -1089,14 +1049,10 @@ export default function SettingsScreen() {
         setDownloadedBytes(finalBytes);
         if (knownTotalBytes && knownTotalBytes > 0) {
           setDownloadProgress(1);
-        } else if (usedFallback) {
+        } else {
           setTotalBytes(finalBytes);
           setDownloadProgress(1);
         }
-      }
-
-      if (!usedFallback && knownTotalBytes && knownTotalBytes > 0) {
-        setDownloadProgress(1);
       }
 
       setData((prev) => ({ ...prev, modelPath: destFile.uri }));
