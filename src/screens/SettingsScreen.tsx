@@ -1157,49 +1157,135 @@ export default function SettingsScreen() {
         </Card>
 
         <Card style={styles.card} mode="elevated">
-          <Card.Title title="Health Connect" titleVariant="titleLarge" />
+          <Card.Title
+            title="Health Connect"
+            titleVariant="titleLarge"
+            rightStyle={{ paddingRight: 8 }}
+            right={() => (
+              <Chip
+                icon={
+                  healthStatus === "available"
+                    ? "check-circle"
+                    : healthStatus === "syncing"
+                      ? "sync"
+                      : "alert-circle-outline"
+                }
+                compact
+              >
+                {healthStatus === "available"
+                  ? "Connected"
+                  : healthStatus === "idle"
+                    ? "Ready"
+                    : healthStatus === "syncing"
+                      ? "Syncing"
+                      : healthStatus === "update-required"
+                        ? "Update needed"
+                        : healthStatus === "error"
+                          ? "Error"
+                          : "Offline"}
+              </Chip>
+            )}
+          />
           <Card.Content style={styles.formArea}>
-            <Text
-              variant="bodyMedium"
-              style={{ color: theme.colors.onSurfaceVariant }}
+            <View
+              style={[
+                styles.healthConnectStats,
+                { backgroundColor: theme.colors.elevation.level1 },
+              ]}
             >
-              Latest weight: {latestWeight ? `${latestWeight} kg` : "None yet"}
-            </Text>
-            <Text
-              variant="bodyMedium"
-              style={{ color: theme.colors.onSurfaceVariant }}
-            >
-              Latest body fat:{" "}
-              {latestBodyFat !== null ? `${latestBodyFat}%` : "None yet"}
-            </Text>
-            <Text
-              variant="bodyMedium"
-              style={{ color: theme.colors.onSurfaceVariant }}
-            >
-              Last sync:{" "}
-              {data.lastWeightSyncAt
-                ? formatDisplayDate(data.lastWeightSyncAt)
-                : "Never"}
-            </Text>
-            <Text
-              variant="bodyMedium"
-              style={{ color: theme.colors.onSurfaceVariant }}
-            >
-              Last body fat sync:{" "}
-              {data.lastBodyFatSyncAt
-                ? formatDisplayDate(data.lastBodyFatSyncAt)
-                : "Never"}
-            </Text>
-            <Chip
-              icon={
-                healthStatus === "available"
-                  ? "check-circle"
-                  : "information-outline"
-              }
-            >
-              Status: {healthStatus}
-            </Chip>
-            <View style={styles.buttonColumn}>
+              <View style={styles.healthStat}>
+                <MaterialCommunityIcons
+                  name="scale-bathroom"
+                  size={28}
+                  color={theme.colors.primary}
+                />
+                <View>
+                  <Text
+                    variant="labelSmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    Weight
+                  </Text>
+                  <Text variant="titleMedium">
+                    {latestWeight ? `${latestWeight} kg` : "—"}
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={[
+                  styles.healthStatDivider,
+                  { backgroundColor: theme.colors.outlineVariant },
+                ]}
+              />
+              <View style={styles.healthStat}>
+                <MaterialCommunityIcons
+                  name="percent"
+                  size={28}
+                  color={theme.colors.primary}
+                />
+                <View>
+                  <Text
+                    variant="labelSmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    Body Fat
+                  </Text>
+                  <Text variant="titleMedium">
+                    {latestBodyFat !== null ? `${latestBodyFat}%` : "—"}
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={[
+                  styles.healthStatDivider,
+                  { backgroundColor: theme.colors.outlineVariant },
+                ]}
+              />
+              <View style={styles.healthStat}>
+                <MaterialCommunityIcons
+                  name="clock-outline"
+                  size={28}
+                  color={theme.colors.onSurfaceVariant}
+                />
+                <View>
+                  <Text
+                    variant="labelSmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    Last Sync
+                  </Text>
+                  <Text variant="titleMedium">
+                    {data.lastWeightSyncAt
+                      ? (() => {
+                          const syncDate = new Date(data.lastWeightSyncAt!);
+                          const today = new Date();
+                          const yesterday = new Date(today);
+                          yesterday.setDate(yesterday.getDate() - 1);
+                          if (
+                            syncDate.getDate() === today.getDate() &&
+                            syncDate.getMonth() === today.getMonth() &&
+                            syncDate.getFullYear() === today.getFullYear()
+                          ) {
+                            return "Today";
+                          }
+                          if (
+                            syncDate.getDate() === yesterday.getDate() &&
+                            syncDate.getMonth() === yesterday.getMonth() &&
+                            syncDate.getFullYear() === yesterday.getFullYear()
+                          ) {
+                            return "Yesterday";
+                          }
+                          return syncDate.toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                          });
+                        })()
+                      : "Never"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.buttonRow}>
               <Button
                 style={styles.button}
                 mode="contained"
@@ -1208,10 +1294,10 @@ export default function SettingsScreen() {
                 disabled={isSyncingWeight}
                 onPress={onPressSyncWeight}
               >
-                {isSyncingWeight ? "Syncing..." : "Sync body data"}
+                {isSyncingWeight ? "Syncing..." : "Sync"}
               </Button>
               <Button mode="outlined" icon="cog" onPress={openHealthSettings}>
-                Open settings
+                Settings
               </Button>
             </View>
           </Card.Content>
@@ -1656,8 +1742,27 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, gap: 16 },
   card: { borderRadius: 24 },
   formArea: { gap: 10 },
-  buttonColumn: { gap: 10 },
+  buttonRow: { flexDirection: "row", gap: 10, marginTop: 4 },
   button: { flex: 1 },
+  healthConnectStats: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    borderRadius: 16,
+    padding: 12,
+    marginVertical: 4,
+  },
+  healthStat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    justifyContent: "center",
+  },
+  healthStatDivider: {
+    width: 1,
+    height: 40,
+  },
   modelSelector: { gap: 8 },
   downloadProgressArea: { gap: 6 },
   downloadProgressRow: {
