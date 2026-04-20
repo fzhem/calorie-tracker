@@ -1,9 +1,17 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { kvStore } from '../lib/kvStore';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { kvStore } from "../lib/kvStore";
 
-export type ThemeMode = 'system' | 'light' | 'dark';
+export type ThemeMode = "system" | "light" | "dark";
 
-const THEME_MODE_STORAGE_KEY = 'calorie-tracker-theme-mode-v1';
+const THEME_MODE_STORAGE_KEY = "calorie-tracker-theme-mode-v1";
 
 type ThemeModeContextValue = {
   mode: ThemeMode;
@@ -13,12 +21,12 @@ type ThemeModeContextValue = {
 const ThemeModeContext = createContext<ThemeModeContextValue | null>(null);
 
 export function ThemeModeProvider({ children }: { children: ReactNode }) {
-  const [mode, setModeState] = useState<ThemeMode>('system');
+  const [mode, setModeState] = useState<ThemeMode>("system");
 
   useEffect(() => {
     try {
       const stored = kvStore.getString(THEME_MODE_STORAGE_KEY);
-      if (stored === 'light' || stored === 'dark' || stored === 'system') {
+      if (stored === "light" || stored === "dark" || stored === "system") {
         setModeState(stored);
       }
     } catch {
@@ -37,13 +45,17 @@ export function ThemeModeProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ mode, setMode }), [mode, setMode]);
 
-  return <ThemeModeContext.Provider value={value}>{children}</ThemeModeContext.Provider>;
+  return (
+    <ThemeModeContext.Provider value={value}>
+      {children}
+    </ThemeModeContext.Provider>
+  );
 }
 
 export function useThemeMode() {
   const context = useContext(ThemeModeContext);
   if (!context) {
-    throw new Error('useThemeMode must be used within ThemeModeProvider');
+    throw new Error("useThemeMode must be used within ThemeModeProvider");
   }
   return context;
 }

@@ -33,10 +33,14 @@ export function getLoadedModelKey(): string | null {
 export function getModelMemoryUsageBytes(): number | null {
   if (!_instance) return null;
   try {
-    if (typeof _instance.getMemoryUsage === 'function') {
+    if (typeof _instance.getMemoryUsage === "function") {
       const usage = _instance.getMemoryUsage();
       // usage is an object like { residentBytes, nativeHeapBytes, availableMemoryBytes, isLowMemory }
-      if (usage && typeof usage === 'object' && typeof usage.residentBytes === 'number') {
+      if (
+        usage &&
+        typeof usage === "object" &&
+        typeof usage.residentBytes === "number"
+      ) {
         return usage.residentBytes;
       }
       return null;
@@ -50,16 +54,22 @@ export function getModelMemoryUsageBytes(): number | null {
 /** Store a freshly loaded model. Closes any previously cached instance. */
 export function setModelCache(instance: any, key: string) {
   if (_instance && _instance !== instance) {
-    try { _instance.close(); } catch {}
+    try {
+      _instance.close();
+    } catch {}
   }
   _instance = instance;
   _loadedKey = key;
   _memoryUsageRSS = null;
   // Try to get initial memory usage
-  if (instance && typeof instance.getMemoryUsage === 'function') {
+  if (instance && typeof instance.getMemoryUsage === "function") {
     try {
       const usage = instance.getMemoryUsage();
-      if (usage && typeof usage === 'object' && typeof usage.residentBytes === 'number') {
+      if (
+        usage &&
+        typeof usage === "object" &&
+        typeof usage.residentBytes === "number"
+      ) {
         _memoryUsageRSS = usage.residentBytes;
       }
     } catch {}
@@ -70,7 +80,9 @@ export function setModelCache(instance: any, key: string) {
 /** Evict the cached model and release native resources. */
 export function clearModelCache() {
   if (_instance) {
-    try { _instance.close(); } catch {}
+    try {
+      _instance.close();
+    } catch {}
   }
   _instance = null;
   _loadedKey = null;
@@ -81,7 +93,9 @@ export function clearModelCache() {
 /** Subscribe function for useSyncExternalStore. */
 export function subscribeModelCache(listener: Listener) {
   listeners.add(listener);
-  return () => { listeners.delete(listener); };
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 /** Snapshot function for useSyncExternalStore — returns the loaded key. */

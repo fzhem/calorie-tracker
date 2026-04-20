@@ -1,5 +1,5 @@
-import { createMMKV } from 'react-native-mmkv';
+import { createMMKV } from "react-native-mmkv";
 
 export const kvStore = createMMKV({
-  id: 'calorie-tracker-mmkv-v1',
+  id: "calorie-tracker-mmkv-v1",
 });

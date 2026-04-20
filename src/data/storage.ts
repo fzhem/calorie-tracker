@@ -1,4 +1,4 @@
-import { kvStore } from '../lib/kvStore';
+import { kvStore } from "../lib/kvStore";
 
 export type MealEntry = {
   id: string;
@@ -20,15 +20,20 @@ export type FavoriteQuickAdd = {
   fiberGrams?: number | null;
 };
 
-export type MetabolismSex = 'unspecified' | 'male' | 'female';
-export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'heavy' | 'athlete';
-export type GoalPhase = 'maintain' | 'cut' | 'bulk';
-export type GoalAdjustmentType = 'kcal' | 'percent';
+export type MetabolismSex = "unspecified" | "male" | "female";
+export type ActivityLevel =
+  | "sedentary"
+  | "light"
+  | "moderate"
+  | "heavy"
+  | "athlete";
+export type GoalPhase = "maintain" | "cut" | "bulk";
+export type GoalAdjustmentType = "kcal" | "percent";
 
 export type WeightPoint = {
   recordedAt: string;
   weightKg: number;
-  source: 'manual' | 'health-connect';
+  source: "manual" | "health-connect";
   originAppId?: string;
   originAppName?: string;
   originDevice?: string;
@@ -37,7 +42,7 @@ export type WeightPoint = {
 export type BodyFatPoint = {
   recordedAt: string;
   bodyFatPercentage: number;
-  source: 'health-connect';
+  source: "health-connect";
   originAppId?: string;
   originAppName?: string;
   originDevice?: string;
@@ -74,22 +79,22 @@ export type StoredData = {
   calorieTolerancePercent: number;
   graphToleranceCalories: number;
   perModelConfig: Record<string, ModelConfig>;
-  };
+};
 
-  export type ModelConfig = {
-    temperature: number;
-    maxTokens: number;
-    topK: number;
-    topP: number;
-  };
+export type ModelConfig = {
+  temperature: number;
+  maxTokens: number;
+  topK: number;
+  topP: number;
+};
 
-  export const STORAGE_KEY = 'calorie-tracker-storage-v1';
+export const STORAGE_KEY = "calorie-tracker-storage-v1";
 
-  export const DEFAULT_DATA: StoredData = {
-    entries: [],
-    favoriteQuickAdds: [],
-    modelPath: null,
-    systemPrompt: `You are a nutrition assistant.
+export const DEFAULT_DATA: StoredData = {
+  entries: [],
+  favoriteQuickAdds: [],
+  modelPath: null,
+  systemPrompt: `You are a nutrition assistant.
 
   Return JSON only.
 
@@ -106,35 +111,35 @@ export type StoredData = {
       }
     ]
   }`,
-    quickLogMacrosExpanded: false,
-    baseTarget: 2100,
-    caloriesPerKg: 30,
-    goalPhase: 'maintain',
-    cutAdjustmentType: 'kcal',
-    cutCalorieAdjustment: 500,
-    cutPercentPerWeek: 1,
-    bulkAdjustmentType: 'kcal',
-    bulkCalorieAdjustment: 500,
-    bulkPercentPerWeek: 1,
-    metabolismSex: 'male',
-    metabolismAgeYears: null,
-    metabolismHeightCm: null,
-    activityLevel: 'moderate',
-    manualWeightKg: null,
-    weightHistory: [],
-    bodyFatHistory: [],
-    lastWeightSyncAt: null,
-    lastBodyFatSyncAt: null,
-    proteinGoalGrams: null,
-    fatGoalGrams: null,
-    carbsGoalGrams: null,
-    fiberGoalGrams: null,
-    calorieTolerancePercent: 12,
-    graphToleranceCalories: 100,
-    perModelConfig: {},
-  };
+  quickLogMacrosExpanded: false,
+  baseTarget: 2100,
+  caloriesPerKg: 30,
+  goalPhase: "maintain",
+  cutAdjustmentType: "kcal",
+  cutCalorieAdjustment: 500,
+  cutPercentPerWeek: 1,
+  bulkAdjustmentType: "kcal",
+  bulkCalorieAdjustment: 500,
+  bulkPercentPerWeek: 1,
+  metabolismSex: "male",
+  metabolismAgeYears: null,
+  metabolismHeightCm: null,
+  activityLevel: "moderate",
+  manualWeightKg: null,
+  weightHistory: [],
+  bodyFatHistory: [],
+  lastWeightSyncAt: null,
+  lastBodyFatSyncAt: null,
+  proteinGoalGrams: null,
+  fatGoalGrams: null,
+  carbsGoalGrams: null,
+  fiberGoalGrams: null,
+  calorieTolerancePercent: 12,
+  graphToleranceCalories: 100,
+  perModelConfig: {},
+};
 
-  let cachedData: StoredData | null = null;
+let cachedData: StoredData | null = null;
 
 function normalizeStoredData(parsed: Partial<StoredData>): StoredData {
   return {
@@ -153,7 +158,9 @@ export function getCachedData() {
 
 export async function loadStoredData() {
   const stored = kvStore.getString(STORAGE_KEY) ?? null;
-  const next = stored ? normalizeStoredData(JSON.parse(stored) as Partial<StoredData>) : DEFAULT_DATA;
+  const next = stored
+    ? normalizeStoredData(JSON.parse(stored) as Partial<StoredData>)
+    : DEFAULT_DATA;
   cachedData = next;
   return next;
 }

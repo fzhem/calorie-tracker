@@ -1,20 +1,36 @@
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultTheme, NavigationContainer } from '@react-navigation/native';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import * as SplashScreen from 'expo-splash-screen';
-import * as Font from 'expo-font';
-import { Animated, Easing, Pressable, StyleSheet, useColorScheme, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MD3DarkTheme, MD3LightTheme, PaperProvider, type MD3Theme } from 'react-native-paper';
-import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import {
+  DarkTheme as NavigationDarkTheme,
+  DefaultTheme as NavigationDefaultTheme,
+  NavigationContainer,
+} from "@react-navigation/native";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { useEffect, useMemo, useRef, useState } from "react";
+import * as SplashScreen from "expo-splash-screen";
+import * as Font from "expo-font";
+import {
+  Animated,
+  Easing,
+  Pressable,
+  StyleSheet,
+  useColorScheme,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  MD3DarkTheme,
+  MD3LightTheme,
+  PaperProvider,
+  type MD3Theme,
+} from "react-native-paper";
+import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
 
-import GoalsScreen from '../screens/GoalsScreen';
-import GraphsScreen from '../screens/GraphsScreen';
-import LogScreen from '../screens/LogScreen';
-import SettingsScreen from '../screens/SettingsScreen';
-import { loadStoredData } from '../data/storage';
-import { ThemeModeProvider, useThemeMode } from '../ui/themeMode';
+import GoalsScreen from "../screens/GoalsScreen";
+import GraphsScreen from "../screens/GraphsScreen";
+import LogScreen from "../screens/LogScreen";
+import SettingsScreen from "../screens/SettingsScreen";
+import { loadStoredData } from "../data/storage";
+import { ThemeModeProvider, useThemeMode } from "../ui/themeMode";
 
 const Tab = createBottomTabNavigator();
 
@@ -23,17 +39,17 @@ const APP_LIGHT_THEME: MD3Theme = {
   roundness: 5,
   colors: {
     ...MD3LightTheme.colors,
-    primary: '#146c43',
-    onPrimary: '#ffffff',
-    secondary: '#5b5f97',
-    onSecondary: '#ffffff',
-    tertiary: '#9a3d2e',
-    background: '#f8f9f3',
-    surface: '#f8f9f3',
-    surfaceVariant: '#dbe7dc',
-    onSurfaceVariant: '#344f40',
-    outline: '#6f8475',
-    error: '#ba1a1a',
+    primary: "#146c43",
+    onPrimary: "#ffffff",
+    secondary: "#5b5f97",
+    onSecondary: "#ffffff",
+    tertiary: "#9a3d2e",
+    background: "#f8f9f3",
+    surface: "#f8f9f3",
+    surfaceVariant: "#dbe7dc",
+    onSurfaceVariant: "#344f40",
+    outline: "#6f8475",
+    error: "#ba1a1a",
   },
 };
 
@@ -42,24 +58,24 @@ const APP_DARK_THEME: MD3Theme = {
   roundness: 5,
   colors: {
     ...MD3DarkTheme.colors,
-    primary: '#7fd8a5',
-    onPrimary: '#003822',
-    secondary: '#c2c5ff',
-    onSecondary: '#2c2f64',
-    tertiary: '#ffb4a8',
-    background: '#000000',
-    surface: '#000000',
-    surfaceVariant: '#1c1f1d',
-    onSurfaceVariant: '#c3c9c4',
-    outline: '#7b837d',
-    error: '#ffb4ab',
+    primary: "#7fd8a5",
+    onPrimary: "#003822",
+    secondary: "#c2c5ff",
+    onSecondary: "#2c2f64",
+    tertiary: "#ffb4a8",
+    background: "#000000",
+    surface: "#000000",
+    surfaceVariant: "#1c1f1d",
+    onSurfaceVariant: "#c3c9c4",
+    outline: "#7b837d",
+    error: "#ffb4ab",
     elevation: {
-      level0: '#000000',
-      level1: '#0d0f0e',
-      level2: '#111412',
-      level3: '#161a18',
-      level4: '#181d1a',
-      level5: '#1c221e',
+      level0: "#000000",
+      level1: "#0d0f0e",
+      level2: "#111412",
+      level3: "#161a18",
+      level4: "#181d1a",
+      level5: "#1c221e",
     },
   },
 };
@@ -67,10 +83,10 @@ const APP_DARK_THEME: MD3Theme = {
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 const TAB_ICONS: Record<string, IconName> = {
-  Log: 'food-apple-outline',
-  Graphs: 'chart-bar',
-  Goals: 'bullseye',
-  Settings: 'cog-outline',
+  Log: "food-apple-outline",
+  Graphs: "chart-bar",
+  Goals: "bullseye",
+  Settings: "cog-outline",
 };
 
 function RippleTabBarButton({
@@ -135,7 +151,6 @@ function RippleTabBarButton({
   );
 }
 
-
 export default function App() {
   const [assetsReady, setAssetsReady] = useState(false);
 
@@ -170,14 +185,16 @@ export default function App() {
 function AppWithTheme() {
   const { mode } = useThemeMode();
   const systemScheme = useColorScheme();
-  const resolvedMode = mode === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : mode;
+  const resolvedMode =
+    mode === "system" ? (systemScheme === "dark" ? "dark" : "light") : mode;
   const paperTheme = useMemo(
-    () => (resolvedMode === 'dark' ? APP_DARK_THEME : APP_LIGHT_THEME),
+    () => (resolvedMode === "dark" ? APP_DARK_THEME : APP_LIGHT_THEME),
     [resolvedMode],
   );
 
   const navTheme = useMemo(() => {
-    const baseNav = resolvedMode === 'dark' ? NavigationDarkTheme : NavigationDefaultTheme;
+    const baseNav =
+      resolvedMode === "dark" ? NavigationDarkTheme : NavigationDefaultTheme;
     return {
       ...baseNav,
       colors: {
@@ -225,11 +242,17 @@ function AppTabs({
           },
           tabBarActiveTintColor: theme.colors.primary,
           tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
-          tabBarLabelStyle: { fontSize: 12, fontWeight: '700', paddingBottom: 3 },
-          tabBarButton: (props) => <RippleTabBarButton {...props} rippleColor={theme.colors.primary} />,
+          tabBarLabelStyle: {
+            fontSize: 12,
+            fontWeight: "700",
+            paddingBottom: 3,
+          },
+          tabBarButton: (props) => (
+            <RippleTabBarButton {...props} rippleColor={theme.colors.primary} />
+          ),
           tabBarIcon: ({ focused, color }) => (
             <MaterialCommunityIcons
-              name={TAB_ICONS[route.name] ?? 'circle-outline'}
+              name={TAB_ICONS[route.name] ?? "circle-outline"}
               color={color}
               size={focused ? 24 : 22}
             />
@@ -248,9 +271,9 @@ function AppTabs({
 const styles = StyleSheet.create({
   tabRippleContainer: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
   },
   tabRipple: {
     width: 140,

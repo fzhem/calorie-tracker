@@ -1,8 +1,8 @@
-import { getCachedData, saveStoredData } from '../data/storage';
+import { getCachedData, saveStoredData } from "../data/storage";
 
 export function exportUserData() {
   const data = getCachedData();
-  if (!data) throw new Error('No data to export.');
+  if (!data) throw new Error("No data to export.");
   // Export as JSON string
   return JSON.stringify(data, null, 2);
 }
@@ -16,7 +16,7 @@ export async function importUserData(json: string) {
   try {
     parsed = JSON.parse(json);
   } catch (e) {
-    throw new Error('Invalid JSON format.');
+    throw new Error("Invalid JSON format.");
   }
   // Optionally, add validation for required fields here
   await saveStoredData(parsed);
