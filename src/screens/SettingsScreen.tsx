@@ -23,7 +23,7 @@ import {
 } from 'react-native-paper';
 import { Directory, File, Paths } from 'expo-file-system';
 
-import { clearModelCache, getModelKeySnapshot, subscribeModelCache } from '../lib/modelCache';
+import { clearModelCache, getModelKeySnapshot, getModelMemoryUsageBytes, subscribeModelCache } from '../lib/modelCache';
 import {
   DEFAULT_DATA,
   getCachedData,
@@ -460,6 +460,26 @@ export default function SettingsScreen() {
   const { mode, setMode } = useThemeMode();
 
   const loadedModelKey = useSyncExternalStore(subscribeModelCache, getModelKeySnapshot);
+
+  // Memory usage tracking
+  const [memoryUsageBytes, setMemoryUsageBytes] = useState<number | null>(null);
+
+  // Poll memory usage when a model is loaded
+  useEffect(() => {
+    if (!loadedModelKey) {
+      setMemoryUsageBytes(null);
+      return;
+    }
+
+    const updateMemoryUsage = () => {
+      const bytes = getModelMemoryUsageBytes();
+      setMemoryUsageBytes(bytes);
+    };
+
+    updateMemoryUsage();
+    const interval = setInterval(updateMemoryUsage, 2000);
+    return () => clearInterval(interval);
+  }, [loadedModelKey]);
 
   function isInMemory(modelUri: string) {
     if (!loadedModelKey) return false;
@@ -996,11 +1016,20 @@ export default function SettingsScreen() {
           <Card.Title title="LiteRT Models" titleVariant="titleLarge" />
           <Card.Content style={styles.formArea}>
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-              Models are saved in the app sandbox.
-            </Text>
-            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
               Active model: {selectedModelDescription}
             </Text>
+              {memoryUsageBytes !== null ? (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                          <MaterialCommunityIcons name="memory" size={16} color={theme.dark ? '#7bd88f' : '#2e7d32'} />
+                                          <Text variant="bodySmall" style={{ color: theme.dark ? '#7bd88f' : '#2e7d32' }}>
+                                            Memory: {(memoryUsageBytes / 1024 / 1024).toFixed(1)} MB
+                                          </Text>
+                                        </View>
+                                      ) : loadedModelKey ? (
+                                        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                                          Memory usage available when tracking enabled
+                                        </Text>
+                                      ) : null}
 
             <View style={styles.modelSelector}>
               {BUILT_IN_MODELS.map((model) => (

@@ -12,6 +12,7 @@ const listeners = new Set<Listener>();
 
 let _instance: any = null;
 let _loadedKey: string | null = null;
+let _memoryUsageRSS: number | null = null;
 
 function notify() {
   listeners.forEach((fn) => fn());
@@ -25,6 +26,27 @@ export function getLoadedModelKey(): string | null {
   return _loadedKey;
 }
 
+/**
+ * Get the current memory usage (RSS) of the loaded model in bytes.
+ * Returns null if memory tracking is not enabled or no model is loaded.
+ */
+export function getModelMemoryUsageBytes(): number | null {
+  if (!_instance) return null;
+  try {
+    if (typeof _instance.getMemoryUsage === 'function') {
+      const usage = _instance.getMemoryUsage();
+      // usage is an object like { residentBytes, nativeHeapBytes, availableMemoryBytes, isLowMemory }
+      if (usage && typeof usage === 'object' && typeof usage.residentBytes === 'number') {
+        return usage.residentBytes;
+      }
+      return null;
+    }
+    return _memoryUsageRSS;
+  } catch {
+    return null;
+  }
+}
+
 /** Store a freshly loaded model. Closes any previously cached instance. */
 export function setModelCache(instance: any, key: string) {
   if (_instance && _instance !== instance) {
@@ -32,6 +54,16 @@ export function setModelCache(instance: any, key: string) {
   }
   _instance = instance;
   _loadedKey = key;
+  _memoryUsageRSS = null;
+  // Try to get initial memory usage
+  if (instance && typeof instance.getMemoryUsage === 'function') {
+    try {
+      const usage = instance.getMemoryUsage();
+      if (usage && typeof usage === 'object' && typeof usage.residentBytes === 'number') {
+        _memoryUsageRSS = usage.residentBytes;
+      }
+    } catch {}
+  }
   notify();
 }
 
@@ -42,6 +74,7 @@ export function clearModelCache() {
   }
   _instance = null;
   _loadedKey = null;
+  _memoryUsageRSS = null;
   notify();
 }
 

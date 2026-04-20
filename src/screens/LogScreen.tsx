@@ -518,7 +518,7 @@ export default function LogScreen() {
           try {
             beginLlmStage('loading-model');
             const { createLLM } = await import('react-native-litert-lm');
-            model = createLLM();
+            model = createLLM({ enableMemoryTracking: true });
             await model.loadModel(cleanedModelPath, {
                       systemPrompt: systemPrompt,
                       backend: 'cpu',
@@ -546,7 +546,7 @@ export default function LogScreen() {
             if (err?.message?.includes('No model loaded') || err?.message?.includes('LiteRTLM')) {
               beginLlmStage('loading-model');
               const { createLLM } = await import('react-native-litert-lm');
-              const freshModel = createLLM();
+              const freshModel = createLLM({ enableMemoryTracking: true });
               await freshModel.loadModel(cleanedModelPath, {
                 systemPrompt: systemPrompt,
                 backend: 'cpu',
