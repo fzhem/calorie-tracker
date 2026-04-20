@@ -12,6 +12,7 @@ import {
   Animated,
   Easing,
   Pressable,
+  StatusBar,
   StyleSheet,
   useColorScheme,
   View,
@@ -210,6 +211,10 @@ function AppWithTheme() {
 
   return (
     <PaperProvider theme={paperTheme}>
+      <StatusBar
+        barStyle={resolvedMode === "dark" ? "light-content" : "dark-content"}
+        backgroundColor={paperTheme.colors.background}
+      />
       <AppTabs theme={paperTheme} navTheme={navTheme} />
     </PaperProvider>
   );
