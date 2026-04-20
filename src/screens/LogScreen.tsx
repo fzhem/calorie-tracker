@@ -537,40 +537,16 @@ export default function LogScreen() {
           }
         }
     try {
-          beginLlmStage('estimating');
-          let response: string;
-          try {
-            response = await model.sendMessage(llmPrompt);
-          } catch (err: any) {
-            // Model was unloaded (e.g. app went to background) — reload and retry once.
-            if (err?.message?.includes('No model loaded') || err?.message?.includes('LiteRTLM')) {
-              beginLlmStage('loading-model');
-              const { createLLM } = await import('react-native-litert-lm');
-              const freshModel = createLLM({ enableMemoryTracking: true });
-              await freshModel.loadModel(cleanedModelPath, {
-                systemPrompt: systemPrompt,
-                backend: 'cpu',
-                maxTokens: modelConfig.maxTokens,
-                temperature: modelConfig.temperature,
-                topK: modelConfig.topK,
-                topP: modelConfig.topP,
-              });
-              setModelCache(freshModel, activeModelKey);
-              model = freshModel;
-              beginLlmStage('estimating');
-              response = await model.sendMessage(llmPrompt);
-            } else {
-              throw err;
-            }
-          }
-          setLlmResult(response);
-        } catch (err) {
-          setLlmError(`Failed to run model. ${err}`);
-        } finally {
-          setLlmLoading(false);
-          setLlmStage('idle');
-          setLlmStageStartedAt(null);
-        }
+      const response = await model.sendMessage(llmPrompt);
+      beginLlmStage('estimating');
+      setLlmResult(response);
+    } catch (err) {
+      setLlmError(`Failed to run model. ${err}`);
+    } finally {
+      setLlmLoading(false);
+      setLlmStage('idle');
+      setLlmStageStartedAt(null);
+    }
   };
   const insets = useSafeAreaInsets();
   const theme = useTheme();
