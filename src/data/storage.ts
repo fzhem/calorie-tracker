@@ -93,7 +93,7 @@ export type ModelConfig = {
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   temperature: 0.2,
   maxTokens: 1024,
-  topK: 40,
+  topK: 64,
   topP: 0.95,
   backend: "cpu",
 };
