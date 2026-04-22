@@ -1583,34 +1583,43 @@ export default function SettingsScreen() {
                       >
                         <View style={styles.downloadedItemTopRow}>
                           <View style={styles.downloadedItemNameRow}>
-                            <Text
-                              variant="bodyLarge"
-                              numberOfLines={1}
-                              style={styles.downloadedItemName}
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                flex: 1,
+                                minWidth: 0,
+                              }}
                             >
-                              {model.name}
-                            </Text>
-                            {inMemory ? (
-                              <Icon
-                                source="memory"
-                                color={theme.dark ? "#7bd88f" : "#2e7d32"}
-                                size={20}
-                              />
-                            ) : null}
-                            {hasCustomConfig ? (
-                              <Icon
-                                source="tune"
-                                color={theme.colors.primary}
-                                size={16}
-                              />
-                            ) : null}
+                              <Text
+                                variant="bodyLarge"
+                                numberOfLines={1}
+                                style={styles.downloadedItemName}
+                              >
+                                {model.name}
+                              </Text>
+                              {inMemory ? (
+                                <Icon
+                                  source="memory"
+                                  color={theme.dark ? "#7bd88f" : "#2e7d32"}
+                                  size={20}
+                                />
+                              ) : null}
+                              {hasCustomConfig ? (
+                                <Icon
+                                  source="tune"
+                                  color={theme.colors.primary}
+                                  size={16}
+                                />
+                              ) : null}
+                            </View>
+                            <IconButton
+                              icon="cog-outline"
+                              size={22}
+                              onPress={() => setActiveModelConfigUri(model.uri)}
+                              style={{ marginVertical: -8, marginLeft: 4 }}
+                            />
                           </View>
-                          <IconButton
-                            icon="cog-outline"
-                            size={22}
-                            onPress={() => setActiveModelConfigUri(model.uri)}
-                            style={{ marginVertical: -8 }}
-                          />
                         </View>
                         <Text
                           variant="bodySmall"
@@ -1826,9 +1835,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     height: 24,
+    minWidth: 0,
+    flex: 1,
   },
   downloadedItemName: {
     flexShrink: 1,
+    flexGrow: 1,
+    minWidth: 0,
+    maxWidth: "100%",
   },
   downloadedItemActions: {
     flexDirection: "row",
