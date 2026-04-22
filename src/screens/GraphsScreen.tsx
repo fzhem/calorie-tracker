@@ -277,39 +277,36 @@ function getWeeklyCalorieData(entries: MealEntry[]): {
   todayIndex: number;
 } {
   const now = new Date();
-  const today = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-
-  const startOfWeek = new Date(now);
-  const day = startOfWeek.getDay();
-  const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
-  startOfWeek.setDate(diff);
-  startOfWeek.setHours(0, 0, 0, 0);
-
-  const dayLabels = ["M", "T", "W", "T", "F", "S", "S"];
+  const latestDate = toStartOfDay(now);
+  const dayLabels: string[] = [];
   const weekData = Array(7).fill(null) as Array<number | null>;
 
-  for (const entry of entries) {
-    const when = new Date(entry.loggedAt);
-    const pointDate = new Date(
-      when.getFullYear(),
-      when.getMonth(),
-      when.getDate(),
+  // Build the 7-day window and a map for quick lookup
+  const dateToIndex = new Map<string, number>();
+  let currentDate = new Date(latestDate);
+  for (let steps = 0; steps < 7; steps++) {
+    const dateKey = getLocalDateKey(currentDate);
+    dayLabels.unshift(
+      currentDate.toLocaleDateString(undefined, { weekday: "short" }).charAt(0),
     );
-    if (
-      pointDate < startOfWeek ||
-      pointDate >= new Date(startOfWeek.getTime() + 7 * 86_400_000)
-    )
-      continue;
-
-    const dayIndex = Math.floor(
-      (pointDate.getTime() - startOfWeek.getTime()) / 86_400_000,
-    );
-    if (dayIndex < 0 || dayIndex > 6) continue;
-    weekData[dayIndex] = (weekData[dayIndex] ?? 0) + entry.calories;
+    weekData.unshift(null);
+    dateToIndex.set(dateKey, 6 - steps); // Index after unshifts: [0,1,2,3,4,5,6]
+    currentDate.setDate(currentDate.getDate() - 1);
   }
 
-  const todayWeekIndex = today === 0 ? 6 : today - 1;
-  return { values: weekData, dayLabels, todayIndex: todayWeekIndex };
+  // Aggregate entries by their date
+  for (const entry of entries) {
+    const when = toStartOfDay(new Date(entry.loggedAt));
+    const dateKey = getLocalDateKey(when);
+    const index = dateToIndex.get(dateKey);
+    if (index !== undefined) {
+      weekData[index] = (weekData[index] ?? 0) + entry.calories;
+    }
+  }
+
+  // Today's index is always the last position (right side)
+  const todayIndex = 6;
+  return { values: weekData, dayLabels, todayIndex };
 }
 
 function buildTwoWeekCalorieSeries(entries: MealEntry[]) {
@@ -706,7 +703,10 @@ export default function GraphsScreen() {
   );
   const calorieChartWidth = useMemo(() => {
     const columnWidth = 32;
-    return Math.max(chartWidth, calorieSeries.values.length * columnWidth);
+    return Math.max(
+      chartWidth,
+      calorieSeries.values.length * columnWidth + 100,
+    );
   }, [calorieSeries.values.length, chartWidth]);
 
   const allWeightSeries = useMemo(
