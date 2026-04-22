@@ -37,6 +37,7 @@ import {
   useTheme,
   type MD3Theme,
 } from "react-native-paper";
+import Slider from "@react-native-community/slider";
 import { Directory, File, Paths } from "expo-file-system";
 
 import {
@@ -65,6 +66,7 @@ const DEFAULT_MODEL_CONFIG: ModelConfig = {
   maxTokens: 1024,
   topK: 40,
   topP: 0.95,
+  backend: "cpu",
 };
 
 type HealthConnectModule = typeof import("react-native-health-connect");
@@ -138,6 +140,8 @@ type ModelConfigModalProps = {
   onClose: () => void;
 };
 
+type Accelerator = "cpu" | "gpu" | "npu";
+
 const flex1Style = { flex: 1 };
 
 // Use StyleSheet for row styles to avoid type errors and ensure compatibility
@@ -152,6 +156,125 @@ const modalRowEnd = {
   marginTop: 4,
 };
 
+const SliderRow = memo(function SliderRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  formatValue,
+  onValueChange,
+  theme,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  formatValue: (v: number) => string;
+  onValueChange: (v: number) => void;
+  theme: MD3Theme;
+}) {
+  const [valueStr, setValueStr] = useState(() => formatValue(value));
+  const [isEditing, setIsEditing] = useState(false);
+
+
+  // Update text when slider value changes externally (only if not currently editing)
+  useEffect(() => {
+    if (!isEditing) {
+      setValueStr(formatValue(value));
+    }
+  }, [value, formatValue, isEditing]);
+
+  const handleTextChangeStart = useCallback(() => {
+    setIsEditing(true);
+  }, []);
+
+
+  const handleValueChange = useCallback(
+      (text: string) => {
+        setValueStr(text);
+        const num = Number(text);
+        // Only update slider if value is valid and in range
+        if (Number.isFinite(num) && num >= min && num <= max) {
+          onValueChange(num);
+        }
+      },
+      [min, max, onValueChange],
+    );
+
+    const handleBlur = useCallback(() => {
+      const num = Number(valueStr);
+      if (!Number.isFinite(num) || num < min) {
+        setValueStr(formatValue(min));
+        onValueChange(min);
+      } else if (num > max) {
+        setValueStr(formatValue(max));
+        onValueChange(max);
+      } else {
+        const rounded = Math.round(num * 100) / 100;
+        setValueStr(formatValue(rounded));
+        if (rounded !== num) {
+          onValueChange(rounded);
+        }
+      }
+    }, [valueStr, min, max, onValueChange, formatValue]);
+
+  return (
+    <View style={sliderRowStyles.container}>
+      <Text variant="bodyMedium">{label}</Text>
+      <View style={sliderRowStyles.sliderRow}>
+        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+          {formatValue(min)}
+        </Text>
+        <Slider
+          style={{ flex: 1 }}
+          value={value}
+          minimumValue={min}
+          maximumValue={max}
+          step={step}
+          onValueChange={onValueChange}
+          minimumTrackTintColor={theme.colors.primary}
+          maximumTrackTintColor={theme.colors.surfaceVariant}
+          thumbTintColor={theme.colors.primary}
+        />
+        <TextInput
+                          mode="outlined"
+                          keyboardType="decimal-pad"
+                          value={valueStr}
+                          onChangeText={handleValueChange}
+                          onFocus={handleTextChangeStart}
+                          onBlur={() => {
+                            setIsEditing(false);
+                            handleBlur();
+                          }}
+                          style={sliderRowStyles.valueInput}
+                          contentStyle={sliderRowStyles.valueInputContent}
+                          dense
+                        />
+      </View>
+    </View>
+  );
+});
+
+const sliderRowStyles = StyleSheet.create({
+  container: { gap: 6 },
+  sliderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  valueInput: {
+    width: 72,
+    height: 40,
+    marginVertical: 0,
+  },
+  valueInputContent: {
+    height: 40,
+    paddingVertical: 0,
+  },
+});
+
 const ModelConfigModal = memo(function ModelConfigModal({
   modelUri,
   modelName,
@@ -163,13 +286,8 @@ const ModelConfigModal = memo(function ModelConfigModal({
   const [draft, setDraft] = useState<ModelConfig>(
     () => config ?? DEFAULT_MODEL_CONFIG,
   );
-
-  // String state for text inputs to preserve decimals while typing
-  const [tempStr, setTempStr] = useState(() =>
-    String(config?.temperature ?? DEFAULT_MODEL_CONFIG.temperature),
-  );
-  const [topPStr, setTopPStr] = useState(() =>
-    String(config?.topP ?? DEFAULT_MODEL_CONFIG.topP),
+  const [accelerator, setAccelerator] = useState<Accelerator>(
+    () => (config?.backend as Accelerator) ?? "cpu",
   );
 
   useEffect(() => {
@@ -178,39 +296,9 @@ const ModelConfigModal = memo(function ModelConfigModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config]);
 
-  // Sync string state when config changes (modal reopens with different values)
   useEffect(() => {
-    setTempStr(String(config?.temperature ?? DEFAULT_MODEL_CONFIG.temperature));
-    setTopPStr(String(config?.topP ?? DEFAULT_MODEL_CONFIG.topP));
+    setAccelerator((config?.backend as Accelerator) ?? "cpu");
   }, [config]);
-
-  // Memoize handlers to avoid re-creating them on each render
-  const handleTempChange = useCallback((value: string) => {
-    setTempStr(value);
-    const num = Number(value);
-    if (Number.isFinite(num) && num >= 0 && num <= 2) {
-      setDraft((prev) => ({ ...prev, temperature: num }));
-    }
-  }, []);
-  const handleMaxTokensChange = useCallback((value: string) => {
-    const num = Number(value);
-    if (Number.isFinite(num) && num > 0) {
-      setDraft((prev) => ({ ...prev, maxTokens: Math.round(num) }));
-    }
-  }, []);
-  const handleTopKChange = useCallback((value: string) => {
-    const num = Number(value);
-    if (Number.isFinite(num) && num >= 0) {
-      setDraft((prev) => ({ ...prev, topK: Math.round(num) }));
-    }
-  }, []);
-  const handleTopPChange = useCallback((value: string) => {
-    setTopPStr(value);
-    const num = Number(value);
-    if (Number.isFinite(num) && num >= 0 && num <= 1) {
-      setDraft((prev) => ({ ...prev, topP: num }));
-    }
-  }, []);
 
   return (
     <Modal
@@ -227,59 +315,86 @@ const ModelConfigModal = memo(function ModelConfigModal({
           <Text variant="titleMedium" style={{ fontWeight: "700" }}>
             {modelName} Settings
           </Text>
-          <Text
-            variant="labelSmall"
-            style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}
-          >
-            Inference parameters
-          </Text>
+
+          {/* Max Tokens */}
           <View style={modalRow}>
             <TextInput
               mode="outlined"
-              label="Temperature"
-              keyboardType="decimal-pad"
-              value={tempStr}
-              onChangeText={handleTempChange}
-              style={flex1Style}
-              theme={MODAL_CONFIG_MODAL_THEME}
-            />
-            <TextInput
-              mode="outlined"
-              label="Max Tokens"
+              label="Max tokens"
               keyboardType="number-pad"
               value={String(draft.maxTokens)}
-              onChangeText={handleMaxTokensChange}
-              style={flex1Style}
+              onChangeText={(value) => {
+                const num = Number(value);
+                if (Number.isFinite(num) && num > 0) {
+                  setDraft((prev) => ({ ...prev, maxTokens: Math.round(num) }));
+                }
+              }}
+              style={{ flex: 1 }}
               theme={MODAL_CONFIG_MODAL_THEME}
             />
           </View>
-          <View style={modalRow}>
-            <TextInput
-              mode="outlined"
-              label="Top K"
-              keyboardType="number-pad"
-              value={String(draft.topK)}
-              onChangeText={handleTopKChange}
-              style={flex1Style}
-              theme={MODAL_CONFIG_MODAL_THEME}
-            />
-            <TextInput
-              mode="outlined"
-              label="Top P"
-              keyboardType="decimal-pad"
-              value={topPStr}
-              onChangeText={handleTopPChange}
-              style={flex1Style}
-              theme={MODAL_CONFIG_MODAL_THEME}
-            />
+
+          {/* TopK Slider */}
+          <SliderRow
+            label="Top K"
+            value={draft.topK}
+            min={5}
+            max={100}
+            step={1}
+            formatValue={(v) => String(Math.round(v))}
+            onValueChange={(v) =>
+              setDraft((prev) => ({ ...prev, topK: Math.round(v) }))
+            }
+            theme={theme}
+          />
+
+          {/* TopP Slider */}
+          <SliderRow
+            label="Top P"
+            value={draft.topP}
+            min={0}
+            max={1}
+            step={0.01}
+            formatValue={(v) => v.toFixed(2)}
+            onValueChange={(v) =>
+              setDraft((prev) => ({ ...prev, topP: Math.round(v * 100) / 100 }))
+            }
+            theme={theme}
+          />
+
+          {/* Temperature Slider */}
+          <SliderRow
+            label="Temperature"
+            value={draft.temperature}
+            min={0}
+            max={2}
+            step={0.01}
+            formatValue={(v) => v.toFixed(2)}
+            onValueChange={(v) =>
+              setDraft((prev) => ({
+                ...prev,
+                temperature: Math.round(v * 100) / 100,
+              }))
+            }
+            theme={theme}
+          />
+
+          {/* Accelerator Selection */}
+          <View>
+            <Text variant="bodyMedium" style={{ marginBottom: 8 }}>
+              Accelerator
+            </Text>
+            <Button mode="contained" compact>
+              CPU
+            </Button>
           </View>
+
           <View style={modalRowEnd}>
             <Button
               mode="text"
               onPress={() => {
                 setDraft(DEFAULT_MODEL_CONFIG);
-                setTempStr(String(DEFAULT_MODEL_CONFIG.temperature));
-                setTopPStr(String(DEFAULT_MODEL_CONFIG.topP));
+                setAccelerator("cpu");
               }}
             >
               Reset
@@ -287,9 +402,21 @@ const ModelConfigModal = memo(function ModelConfigModal({
             <Button mode="text" onPress={onClose}>
               Cancel
             </Button>
-            <Button mode="contained" onPress={() => onSave(draft)}>
-              Save
-            </Button>
+            <Button
+                          mode="contained"
+                          onPress={() => {
+                            // Validate and clamp all slider values before saving
+                            const validated = { ...draft };
+                            validated.topK = Math.min(Math.max(validated.topK, 5), 100);
+                            validated.topP = Math.min(Math.max(validated.topP, 0), 1);
+                            validated.temperature = Math.min(Math.max(validated.temperature, 0), 2);
+                            validated.maxTokens = Math.max(validated.maxTokens, 1);
+                            setDraft(validated);
+                            onSave({ ...validated, backend: accelerator });
+                          }}
+                        >
+                          Save
+                        </Button>
           </View>
         </Pressable>
       </Pressable>
@@ -1905,9 +2032,9 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     borderRadius: 20,
-    padding: 20,
-    gap: 12,
-    maxWidth: 500,
+    padding: 16,
+    gap: 10,
+    maxWidth: 320,
     width: "100%",
   },
 });

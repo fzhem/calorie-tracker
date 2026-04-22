@@ -87,6 +87,7 @@ export type ModelConfig = {
   maxTokens: number;
   topK: number;
   topP: number;
+  backend: "cpu" | "gpu" | "npu";
 };
 
 export const STORAGE_KEY = "calorie-tracker-storage-v1";
@@ -151,7 +152,25 @@ function normalizeStoredData(parsed: Partial<StoredData>): StoredData {
     favoriteQuickAdds: parsed.favoriteQuickAdds ?? [],
     weightHistory: parsed.weightHistory ?? [],
     bodyFatHistory: parsed.bodyFatHistory ?? [],
+    perModelConfig: normalizePerModelConfig(parsed.perModelConfig),
   };
+}
+
+function normalizePerModelConfig(
+  configs: Record<string, ModelConfig> | undefined,
+): Record<string, ModelConfig> {
+  if (!configs) return {};
+  const normalized: Record<string, ModelConfig> = {};
+  for (const [key, config] of Object.entries(configs)) {
+    normalized[key] = {
+      temperature: config.temperature,
+      maxTokens: config.maxTokens,
+      topK: config.topK,
+      topP: config.topP,
+      backend: config.backend ?? "cpu",
+    };
+  }
+  return normalized;
 }
 
 export function getCachedData() {
