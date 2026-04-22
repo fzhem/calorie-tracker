@@ -1182,7 +1182,7 @@ export default function SettingsScreen() {
               </Chip>
             )}
           />
-          <Card.Content style={styles.formArea}>
+          <Card.Content style={[styles.formArea, { marginTop: -20 }]}>
             <View
               style={[
                 styles.healthConnectStats,
@@ -1195,7 +1195,7 @@ export default function SettingsScreen() {
                   size={28}
                   color={theme.colors.primary}
                 />
-                <View>
+                <View style={styles.healthStatText}>
                   <Text
                     variant="labelSmall"
                     style={{ color: theme.colors.onSurfaceVariant }}
@@ -1219,7 +1219,7 @@ export default function SettingsScreen() {
                   size={28}
                   color={theme.colors.primary}
                 />
-                <View>
+                <View style={styles.healthStatText}>
                   <Text
                     variant="labelSmall"
                     style={{ color: theme.colors.onSurfaceVariant }}
@@ -1243,7 +1243,7 @@ export default function SettingsScreen() {
                   size={28}
                   color={theme.colors.onSurfaceVariant}
                 />
-                <View>
+                <View style={styles.healthStatText}>
                   <Text
                     variant="labelSmall"
                     style={{ color: theme.colors.onSurfaceVariant }}
@@ -1770,7 +1770,7 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, gap: 16 },
   card: { borderRadius: 24 },
   formArea: { gap: 10 },
-  buttonRow: { flexDirection: "row", gap: 10, marginTop: 4 },
+  buttonRow: { flexDirection: "row", gap: 10, marginTop: -8 },
   button: { flex: 1 },
   autoSyncRow: {
     flexDirection: "row",
@@ -1779,7 +1779,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderTopWidth: 1,
     borderTopColor: "rgba(0,0,0,0.08)",
-    marginTop: 8,
+    marginTop: 0,
   },
   healthConnectStats: {
     flexDirection: "row",
@@ -1787,14 +1787,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 16,
     padding: 12,
-    marginVertical: 4,
+    marginVertical: 0,
   },
   healthStat: {
-    flexDirection: "row",
+    flexDirection: "column",
     alignItems: "center",
-    gap: 10,
+    gap: 4,
     flex: 1,
     justifyContent: "center",
+  },
+  healthStatText: {
+    alignItems: "center",
   },
   healthStatDivider: {
     width: 1,
