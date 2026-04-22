@@ -4,9 +4,10 @@
   "scripts": {
     "start": "expo start --dev-client",
     "android": "npm run android:sync && expo run:android",
-    "android:sync": "npm run android:icons && npm run android:gradle",
+    "android:sync": "npm run android:icons && npm run android:gradle && npm run android:manifest",
     "android:icons": "node scripts/sync-android-icons.js",
     "android:gradle": "node scripts/sync-android-build-gradle.js",
+    "android:manifest": "node scripts/sync-android-manifest.js",
     "prebuild": "expo prebuild --platform android && npm run android:sync",
     "web": "expo start --web"
   },
