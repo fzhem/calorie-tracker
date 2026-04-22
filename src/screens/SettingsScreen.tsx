@@ -127,6 +127,7 @@ const BUILT_IN_MODELS: ModelCatalogItem[] = [
 ];
 
 const MODEL_DIRECTORY = new Directory(Paths.document, "models");
+const MODAL_CONFIG_MODAL_THEME = { animation: { scale: 0 } };
 
 type ModelConfigModalProps = {
   modelUri: string | null;
@@ -135,6 +136,20 @@ type ModelConfigModalProps = {
   theme: MD3Theme;
   onSave: (config: ModelConfig) => void;
   onClose: () => void;
+};
+
+const flex1Style = { flex: 1 };
+
+// Use StyleSheet for row styles to avoid type errors and ensure compatibility
+const modalRow = {
+  flexDirection: "row" as const,
+  gap: 8,
+};
+const modalRowEnd = {
+  flexDirection: "row" as const,
+  justifyContent: "flex-end" as const,
+  gap: 8,
+  marginTop: 4,
 };
 
 const ModelConfigModal = memo(function ModelConfigModal({
@@ -150,8 +165,36 @@ const ModelConfigModal = memo(function ModelConfigModal({
   );
 
   useEffect(() => {
-    if (config) setDraft(config);
+    if (config && JSON.stringify(config) !== JSON.stringify(draft))
+      setDraft(config);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config]);
+
+  // Memoize handlers to avoid re-creating them on each render
+  const handleTempChange = useCallback((value: string) => {
+    const num = Number(value);
+    if (Number.isFinite(num) && num >= 0 && num <= 2) {
+      setDraft((prev) => ({ ...prev, temperature: num }));
+    }
+  }, []);
+  const handleMaxTokensChange = useCallback((value: string) => {
+    const num = Number(value);
+    if (Number.isFinite(num) && num > 0) {
+      setDraft((prev) => ({ ...prev, maxTokens: Math.round(num) }));
+    }
+  }, []);
+  const handleTopKChange = useCallback((value: string) => {
+    const num = Number(value);
+    if (Number.isFinite(num) && num >= 0) {
+      setDraft((prev) => ({ ...prev, topK: Math.round(num) }));
+    }
+  }, []);
+  const handleTopPChange = useCallback((value: string) => {
+    const num = Number(value);
+    if (Number.isFinite(num) && num >= 0 && num <= 1) {
+      setDraft((prev) => ({ ...prev, topP: num }));
+    }
+  }, []);
 
   return (
     <Modal
@@ -174,70 +217,47 @@ const ModelConfigModal = memo(function ModelConfigModal({
           >
             Inference parameters
           </Text>
-          <View style={{ flexDirection: "row", gap: 8 }}>
+          <View style={modalRow}>
             <TextInput
               mode="outlined"
               label="Temperature"
               keyboardType="numeric"
               value={String(draft.temperature)}
-              onChangeText={(value) => {
-                const num = Number(value);
-                if (Number.isFinite(num) && num >= 0 && num <= 2) {
-                  setDraft((prev) => ({ ...prev, temperature: num }));
-                }
-              }}
-              style={{ flex: 1 }}
+              onChangeText={handleTempChange}
+              style={flex1Style}
+              theme={MODAL_CONFIG_MODAL_THEME}
             />
             <TextInput
               mode="outlined"
               label="Max Tokens"
               keyboardType="number-pad"
               value={String(draft.maxTokens)}
-              onChangeText={(value) => {
-                const num = Number(value);
-                if (Number.isFinite(num) && num > 0) {
-                  setDraft((prev) => ({ ...prev, maxTokens: Math.round(num) }));
-                }
-              }}
-              style={{ flex: 1 }}
+              onChangeText={handleMaxTokensChange}
+              style={flex1Style}
+              theme={MODAL_CONFIG_MODAL_THEME}
             />
           </View>
-          <View style={{ flexDirection: "row", gap: 8 }}>
+          <View style={modalRow}>
             <TextInput
               mode="outlined"
               label="Top K"
               keyboardType="number-pad"
               value={String(draft.topK)}
-              onChangeText={(value) => {
-                const num = Number(value);
-                if (Number.isFinite(num) && num >= 0) {
-                  setDraft((prev) => ({ ...prev, topK: Math.round(num) }));
-                }
-              }}
-              style={{ flex: 1 }}
+              onChangeText={handleTopKChange}
+              style={flex1Style}
+              theme={MODAL_CONFIG_MODAL_THEME}
             />
             <TextInput
               mode="outlined"
               label="Top P"
               keyboardType="numeric"
               value={String(draft.topP)}
-              onChangeText={(value) => {
-                const num = Number(value);
-                if (Number.isFinite(num) && num >= 0 && num <= 1) {
-                  setDraft((prev) => ({ ...prev, topP: num }));
-                }
-              }}
-              style={{ flex: 1 }}
+              onChangeText={handleTopPChange}
+              style={flex1Style}
+              theme={MODAL_CONFIG_MODAL_THEME}
             />
           </View>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "flex-end",
-              gap: 8,
-              marginTop: 4,
-            }}
-          >
+          <View style={modalRowEnd}>
             <Button mode="text" onPress={() => setDraft(DEFAULT_MODEL_CONFIG)}>
               Reset
             </Button>
