@@ -48,6 +48,7 @@ import {
 } from "../lib/modelCache";
 import {
   DEFAULT_DATA,
+  DEFAULT_MODEL_CONFIG,
   getCachedData,
   loadStoredData,
   saveStoredData,
@@ -86,13 +87,6 @@ async function getModelConfig() {
     systemPrompt: stored.systemPrompt,
   };
 }
-
-const DEFAULT_MODEL_CONFIG = {
-  temperature: 0.2,
-  maxTokens: 1024,
-  topK: 40,
-  topP: 0.95,
-};
 
 type QuickAddItem = {
   title: string;

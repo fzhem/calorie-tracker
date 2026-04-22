@@ -90,6 +90,14 @@ export type ModelConfig = {
   backend: "cpu" | "gpu" | "npu";
 };
 
+export const DEFAULT_MODEL_CONFIG: ModelConfig = {
+  temperature: 0.2,
+  maxTokens: 1024,
+  topK: 40,
+  topP: 0.95,
+  backend: "cpu",
+};
+
 export const STORAGE_KEY = "calorie-tracker-storage-v1";
 
 export const DEFAULT_DATA: StoredData = {

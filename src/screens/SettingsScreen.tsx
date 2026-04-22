@@ -49,6 +49,7 @@ import {
 } from "../lib/modelCache";
 import {
   DEFAULT_DATA,
+  DEFAULT_MODEL_CONFIG,
   getCachedData,
   loadStoredData as readStoredData,
   saveStoredData,
@@ -60,14 +61,6 @@ import type {
   WeightPoint,
 } from "../data/storage";
 import { useThemeMode, type ThemeMode } from "../ui/themeMode";
-
-const DEFAULT_MODEL_CONFIG: ModelConfig = {
-  temperature: 0.2,
-  maxTokens: 1024,
-  topK: 40,
-  topP: 0.95,
-  backend: "cpu",
-};
 
 type HealthConnectModule = typeof import("react-native-health-connect");
 const healthConnect: HealthConnectModule | null =
