@@ -1609,7 +1609,7 @@ export default function LogScreen() {
                 ) : !llmResultParsed.items ||
                   !Array.isArray(llmResultParsed.items) ||
                   llmResultParsed.items.every(
-                    (item: LLMEstimateItem) => item.calories === 0,
+                    (item: LLMEstimateItem) => !item.calories,
                   ) ? (
                   <Text
                     variant="bodySmall"
