@@ -164,14 +164,29 @@ const ModelConfigModal = memo(function ModelConfigModal({
     () => config ?? DEFAULT_MODEL_CONFIG,
   );
 
+  // String state for text inputs to preserve decimals while typing
+  const [tempStr, setTempStr] = useState(() =>
+    String(config?.temperature ?? DEFAULT_MODEL_CONFIG.temperature),
+  );
+  const [topPStr, setTopPStr] = useState(() =>
+    String(config?.topP ?? DEFAULT_MODEL_CONFIG.topP),
+  );
+
   useEffect(() => {
     if (config && JSON.stringify(config) !== JSON.stringify(draft))
       setDraft(config);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config]);
 
+  // Sync string state when config changes (modal reopens with different values)
+  useEffect(() => {
+    setTempStr(String(config?.temperature ?? DEFAULT_MODEL_CONFIG.temperature));
+    setTopPStr(String(config?.topP ?? DEFAULT_MODEL_CONFIG.topP));
+  }, [config]);
+
   // Memoize handlers to avoid re-creating them on each render
   const handleTempChange = useCallback((value: string) => {
+    setTempStr(value);
     const num = Number(value);
     if (Number.isFinite(num) && num >= 0 && num <= 2) {
       setDraft((prev) => ({ ...prev, temperature: num }));
@@ -190,6 +205,7 @@ const ModelConfigModal = memo(function ModelConfigModal({
     }
   }, []);
   const handleTopPChange = useCallback((value: string) => {
+    setTopPStr(value);
     const num = Number(value);
     if (Number.isFinite(num) && num >= 0 && num <= 1) {
       setDraft((prev) => ({ ...prev, topP: num }));
@@ -221,8 +237,8 @@ const ModelConfigModal = memo(function ModelConfigModal({
             <TextInput
               mode="outlined"
               label="Temperature"
-              keyboardType="numeric"
-              value={String(draft.temperature)}
+              keyboardType="decimal-pad"
+              value={tempStr}
               onChangeText={handleTempChange}
               style={flex1Style}
               theme={MODAL_CONFIG_MODAL_THEME}
@@ -250,15 +266,22 @@ const ModelConfigModal = memo(function ModelConfigModal({
             <TextInput
               mode="outlined"
               label="Top P"
-              keyboardType="numeric"
-              value={String(draft.topP)}
+              keyboardType="decimal-pad"
+              value={topPStr}
               onChangeText={handleTopPChange}
               style={flex1Style}
               theme={MODAL_CONFIG_MODAL_THEME}
             />
           </View>
           <View style={modalRowEnd}>
-            <Button mode="text" onPress={() => setDraft(DEFAULT_MODEL_CONFIG)}>
+            <Button
+              mode="text"
+              onPress={() => {
+                setDraft(DEFAULT_MODEL_CONFIG);
+                setTempStr(String(DEFAULT_MODEL_CONFIG.temperature));
+                setTopPStr(String(DEFAULT_MODEL_CONFIG.topP));
+              }}
+            >
               Reset
             </Button>
             <Button mode="text" onPress={onClose}>
