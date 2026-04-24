@@ -1,0 +1,109 @@
+diff --git a/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt b/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt
+index 3fcd4f3..dbb07c9 100644
+--- a/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt
++++ b/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt
+@@ -124,6 +124,8 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
+ 
+     // Configuration
+     private var backend: Backend = Backend.CPU
++    private var visionBackend: Backend? = null
++    private var audioBackend: Backend? = null
+     private var temperature: Double = 0.7
+     private var topK: Int = 40
+     private var topP: Double = 0.95
+@@ -153,6 +155,8 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
+                 // Apply configuration
+                 config?.let { cfg ->
+                     cfg.backend?.let { backend = it }
++                    cfg.visionBackend.let {visionBackend = it}
++                    cfg.audioBackend.let {audioBackend = it}
+                     cfg.temperature?.let { temperature = it }
+                     cfg.topK?.let { topK = it.toInt() }
+                     cfg.topP?.let { topP = it }
+@@ -172,12 +176,20 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
+                     }
+                     
+                     // Vision backend: hardcoded to GPU (required by Gemma models)
+-                    val lmVisionBackend = com.google.ai.edge.litertlm.Backend.GPU()
++                    val lmVisionBackend = when (visionBackend) {
++                        Backend.GPU -> com.google.ai.edge.litertlm.Backend.GPU()
++                        Backend.CPU -> com.google.ai.edge.litertlm.Backend.CPU()
++                        else -> null
++                    }
+                         
+                     // Audio backend: hardcoded to CPU (optimal for audio processing)
+-                    val lmAudioBackend = com.google.ai.edge.litertlm.Backend.CPU()
++                    val lmAudioBackend= when (audioBackend) {
++                        Backend.GPU -> com.google.ai.edge.litertlm.Backend.GPU()
++                        Backend.CPU -> com.google.ai.edge.litertlm.Backend.CPU()
++                        else -> null
++                    }
+     
+-                    Log.i(TAG, "Backend config: main=$lmBackend, vision=$lmVisionBackend (hardcoded), audio=$lmAudioBackend (hardcoded)")
++                    Log.i(TAG, "Backend config: main=$lmBackend, vision=$lmVisionBackend, audio=$lmAudioBackend")
+     
+                     // Get cache directory from application context
+                     val cacheDirectory = LiteRTLMInitProvider.applicationContext?.cacheDir?.absolutePath
+diff --git a/node_modules/react-native-litert-lm/nitro.json b/node_modules/react-native-litert-lm/nitro.json
+new file mode 100644
+index 0000000..3d1be96
+--- /dev/null
++++ b/node_modules/react-native-litert-lm/nitro.json
+@@ -0,0 +1,20 @@
++{
++  "$schema": "https://nitro.margelo.com/nitro.schema.json",
++  "cxxNamespace": ["litertlm"],
++  "ios": {
++    "iosModuleName": "LiteRTLM",
++    "language": "c++"
++  },
++  "android": {
++    "androidNamespace": ["dev", "litert", "litertlm"],
++    "androidCxxLibName": "LiteRTLM",
++    "language": "kotlin"
++  },
++  "autolinking": {
++    "LiteRTLM": {
++      "ios": { "language": "c++", "implementationClassName": "HybridLiteRTLM" },
++      "android": { "language": "kotlin", "implementationClassName": "HybridLiteRTLM" }
++    }
++  },
++  "ignorePaths": ["**/node_modules"]
++}
+diff --git a/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts b/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts
+index 33d865c..6bd5fa0 100644
+--- a/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts
++++ b/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts
+@@ -37,14 +37,28 @@ export interface LLMConfig {
+    * If not specified, defaults to 'cpu'.
+    * If specified backend is unavailable, falls back automatically.
+    *
+-   * @remarks
+-   * Vision encoder is always set to GPU (required by Gemma models).
+-   * Audio encoder is always set to CPU (optimal for audio processing).
+-   *
+    * @default 'cpu'
+    */
+   backend?: Backend;
+ 
++  /**
++   * Compute backend for vision/multimodal encoder.
++   * - 'cpu': CPU inference (slower, more compatible)
++   * - 'gpu': GPU acceleration (recommended, required by Gemma models)
++   *
++   * @default null
++   */
++  visionBackend?: Backend?;
++
++  /**
++   * Compute backend for audio encoder.
++   * - 'cpu': CPU inference (optimal for audio processing)
++   * - 'gpu': GPU acceleration
++   *
++   * @default null
++   */
++  audioBackend?: Backend?;
++
+   /**
+    * Maximum number of tokens to generate.
+    * @default 1024
