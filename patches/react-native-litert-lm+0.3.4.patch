@@ -1,5 +1,18 @@
+diff --git a/node_modules/react-native-litert-lm/android/CMakeLists.txt b/node_modules/react-native-litert-lm/android/CMakeLists.txt
+index 9af65fb..a468b1e 100644
+--- a/node_modules/react-native-litert-lm/android/CMakeLists.txt
++++ b/node_modules/react-native-litert-lm/android/CMakeLists.txt
+@@ -19,7 +19,7 @@ add_library(
+ # loads the NitroModules shared library. This is required because we're
+ # building a library that depends on NitroModules symbols which are only
+ # available at runtime.
+-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--allow-shlib-undefined")
++set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--allow-shlib-undefined,-z,max-page-size=16384")
+ 
+ # Include Nitrogen autolinking - this adds all generated sources and links
+ include(${CMAKE_SOURCE_DIR}/../nitrogen/generated/android/LiteRTLM+autolinking.cmake)
 diff --git a/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt b/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt
-index 3fcd4f3..dbb07c9 100644
+index 3fcd4f3..0911106 100644
 --- a/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt
 +++ b/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt
 @@ -124,6 +124,8 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
@@ -15,8 +28,8 @@ index 3fcd4f3..dbb07c9 100644
                  // Apply configuration
                  config?.let { cfg ->
                      cfg.backend?.let { backend = it }
-+                    cfg.visionBackend.let {visionBackend = it}
-+                    cfg.audioBackend.let {audioBackend = it}
++                    cfg.visionBackend?.let {visionBackend = it}
++                    cfg.audioBackend?.let {audioBackend = it}
                      cfg.temperature?.let { temperature = it }
                      cfg.topK?.let { topK = it.toInt() }
                      cfg.topP?.let { topP = it }
@@ -71,7 +84,7 @@ index 0000000..3d1be96
 +  "ignorePaths": ["**/node_modules"]
 +}
 diff --git a/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts b/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts
-index 33d865c..6bd5fa0 100644
+index 33d865c..9081772 100644
 --- a/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts
 +++ b/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts
 @@ -37,14 +37,28 @@ export interface LLMConfig {
