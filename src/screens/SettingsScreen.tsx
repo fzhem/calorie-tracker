@@ -1345,7 +1345,7 @@ export default function SettingsScreen() {
               </Chip>
             )}
           />
-          <Card.Content style={[styles.formArea, { marginTop: -20 }]}>
+          <Card.Content style={[styles.formArea, { marginTop: -15 }]}>
             <View
               style={[
                 styles.healthConnectStats,
