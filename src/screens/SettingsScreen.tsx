@@ -105,6 +105,9 @@ export const GEMMA_4_E2B_IT =
 export const GEMMA_4_E4B_IT =
   "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm";
 
+/** Magic number for .litertlm model files: "LITERTLM" */
+const LITERTLM_MAGIC = [0x4c, 0x49, 0x54, 0x45, 0x52, 0x54, 0x4c, 0x4d];
+
 const BUILT_IN_MODELS: ModelCatalogItem[] = [
   {
     key: "GEMMA_4_E2B_IT",
@@ -660,6 +663,52 @@ async function resolveRemoteFileSize(url: string) {
   return null;
 }
 
+/**
+ * Validates that the URL points to a valid .litertlm model file by checking
+ * the magic number in the first 8 bytes (LITERTLM).
+ */
+async function validateModelMagicNumber(
+  url: string,
+): Promise<{ valid: boolean; message?: string }> {
+  try {
+    const response = await fetchWithTimeout(url, {
+      method: "GET",
+      headers: { Range: "bytes=0-7" },
+      timeout: 15000,
+    });
+
+    if (!response.ok && response.status !== 206) {
+      // Can't validate (e.g. no partial content support), allow download to proceed
+      return { valid: true };
+    }
+
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength < 8) {
+      return {
+        valid: false,
+        message:
+          "The file is too small to be a valid model. Please check the URL.",
+      };
+    }
+
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < 8; i++) {
+      if (bytes[i] !== LITERTLM_MAGIC[i]) {
+        return {
+          valid: false,
+          message:
+            "The URL does not point to a valid .litertlm model file. This may indicate a blob URL or an incorrect link.",
+        };
+      }
+    }
+
+    return { valid: true };
+  } catch {
+    // If we can't validate, allow download to proceed and let it fail naturally
+    return { valid: true };
+  }
+}
+
 export default function SettingsScreen() {
   const [isExporting, setIsExporting] = useState(false);
   // Import data from JSON file
@@ -810,6 +859,13 @@ export default function SettingsScreen() {
   const [activeModelTab, setActiveModelTab] = useState<"download" | "offline">(
     "download",
   );
+
+  // Clear download error when switching from custom URL to built-in models
+  useEffect(() => {
+    if (selectedModelKey !== "custom") {
+      setDownloadError(null);
+    }
+  }, [selectedModelKey]);
 
   const activeModelConfig = activeModelConfigUri
     ? (data.perModelConfig?.[activeModelConfigUri] ?? DEFAULT_MODEL_CONFIG)
@@ -1164,6 +1220,15 @@ export default function SettingsScreen() {
     if (!source) {
       setDownloadError("Select a model or enter a valid custom URL first.");
       return;
+    }
+
+    // Validate magic number for custom URLs to detect blob URLs and invalid links
+    if (selectedModelKey === "custom") {
+      const magicValidation = await validateModelMagicNumber(source.url);
+      if (!magicValidation.valid) {
+        setDownloadError(magicValidation.message!);
+        return;
+      }
     }
 
     try {
