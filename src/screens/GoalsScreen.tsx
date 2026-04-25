@@ -838,7 +838,7 @@ export default function GoalsScreen() {
 
                 <Text
                   variant="bodySmall"
-                  style={{ marginTop: 6, color: theme.colors.onSurfaceVariant }}
+                  style={{ marginTop: 0, color: theme.colors.onSurfaceVariant }}
                 >
                   Sex
                 </Text>
@@ -882,7 +882,7 @@ export default function GoalsScreen() {
 
                 <Text
                   variant="bodySmall"
-                  style={{ marginTop: 6, color: theme.colors.onSurfaceVariant }}
+                  style={{ marginTop: 0, color: theme.colors.onSurfaceVariant }}
                 >
                   Activity Level
                 </Text>
@@ -960,7 +960,7 @@ export default function GoalsScreen() {
                   <Text
                     variant="bodySmall"
                     style={{
-                      marginTop: 6,
+                      marginTop: 0,
                       color: theme.colors.onSurfaceVariant,
                     }}
                   >
@@ -1034,7 +1034,7 @@ export default function GoalsScreen() {
                   </View>
                 </View>
 
-                <Text variant="labelMedium" style={{ marginTop: 6 }}>
+                <Text variant="labelMedium" style={{ marginTop: 3 }}>
                   Weight Tracking
                 </Text>
                 <TextInput
