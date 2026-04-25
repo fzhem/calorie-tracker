@@ -1395,6 +1395,7 @@ export default function SettingsScreen() {
             rightStyle={{ paddingRight: 8 }}
             right={() => (
               <Chip
+                mode="outlined"
                 icon={
                   healthStatus === "available"
                     ? "check-circle"
