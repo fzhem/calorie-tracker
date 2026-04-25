@@ -48,6 +48,8 @@ import {
   getModelMemoryUsageDetails,
   subscribeModelCache,
 } from "../lib/modelCache";
+
+import { ToastAndroid } from "react-native";
 import {
   DEFAULT_DATA,
   DEFAULT_MODEL_CONFIG,
@@ -881,6 +883,22 @@ export default function SettingsScreen() {
       },
     }));
     setActiveModelConfigUri(null);
+    const modelWasLoaded = !!require("../lib/modelCache").getModelInstance();
+    clearModelCache();
+    if (Platform.OS === "android") {
+      if (modelWasLoaded) {
+        ToastAndroid.show(
+          "Model unloaded. It will reload with new settings next time.",
+          ToastAndroid.LONG,
+        );
+      } else {
+        ToastAndroid.show(
+          "Settings saved. Model will use new settings next time it loads.",
+          ToastAndroid.SHORT,
+        );
+      }
+    }
+    // For iOS or cross-platform, you could use a Snackbar or similar if desired
   };
 
   const loadStoredData = useCallback(async () => {
