@@ -1930,7 +1930,7 @@ export default function SettingsScreen() {
                     </Text>
                   )}
                   <Button
-                    style={{ marginTop: 18 }}
+                    style={{ marginTop: 0 }}
                     onPress={() => setShowMemoryModal(false)}
                   >
                     Close
