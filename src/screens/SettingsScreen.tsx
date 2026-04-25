@@ -31,6 +31,7 @@ import {
   IconButton,
   ProgressBar,
   SegmentedButtons,
+  Snackbar,
   Switch,
   Text,
   TextInput,
@@ -730,6 +731,8 @@ export default function SettingsScreen() {
     availableMemoryBytes: number;
   } | null>(null);
   const [showMemoryModal, setShowMemoryModal] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [showSnackbar, setShowSnackbar] = useState(false);
 
   // Poll memory usage when a model is loaded
   useEffect(() => {
@@ -804,6 +807,9 @@ export default function SettingsScreen() {
   const [activeModelConfigUri, setActiveModelConfigUri] = useState<
     string | null
   >(null);
+  const [activeModelTab, setActiveModelTab] = useState<"download" | "offline">(
+    "download",
+  );
 
   const activeModelConfig = activeModelConfigUri
     ? (data.perModelConfig?.[activeModelConfigUri] ?? DEFAULT_MODEL_CONFIG)
@@ -1224,10 +1230,8 @@ export default function SettingsScreen() {
 
       setData((prev) => ({ ...prev, modelPath: destFile.uri }));
       await refreshDownloadedModels();
-      Alert.alert(
-        "Download complete",
-        `${source.label} is ready and selected for AI meal estimation.`,
-      );
+      setSnackbarMessage(`${source.label} downloaded and selected`);
+      setShowSnackbar(true);
     } catch (error) {
       setDownloadError(`Download failed: ${getErrorMessage(error)}`);
     } finally {
@@ -1508,6 +1512,260 @@ export default function SettingsScreen() {
               Active model: {selectedModelDescription}
             </Text>
 
+            {/* Tab navigation for Download / Offline Models */}
+            <SegmentedButtons
+              value={activeModelTab}
+              onValueChange={(value) =>
+                setActiveModelTab(value as "download" | "offline")
+              }
+              buttons={[
+                {
+                  value: "download",
+                  label: "Download",
+                  icon: "download",
+                },
+                {
+                  value: "offline",
+                  label:
+                    downloadedModels.length > 0
+                      ? `Offline (${downloadedModels.length})`
+                      : "Offline",
+                  icon: "package-down",
+                },
+              ]}
+            />
+
+            {/* Download Tab Content */}
+            {activeModelTab === "download" && (
+              <>
+                <View style={styles.modelSelector}>
+                  {BUILT_IN_MODELS.map((model) => (
+                    <Button
+                      key={model.key}
+                      mode={
+                        selectedModelKey === model.key
+                          ? "contained"
+                          : "outlined"
+                      }
+                      onPress={() => setSelectedModelKey(model.key)}
+                    >
+                      {model.label} ({model.sizeLabel})
+                    </Button>
+                  ))}
+                  <Button
+                    mode={
+                      selectedModelKey === "custom" ? "contained" : "outlined"
+                    }
+                    onPress={() => setSelectedModelKey("custom")}
+                  >
+                    Custom URL
+                  </Button>
+                </View>
+
+                {selectedModelKey === "custom" ? (
+                  <TextInput
+                    mode="outlined"
+                    label="Model URL"
+                    value={customModelUrl}
+                    onChangeText={setCustomModelUrl}
+                    placeholder="https://.../model.litertlm"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                ) : null}
+
+                <Button
+                  mode="contained"
+                  icon={isSelectedModelDownloaded ? "check" : "download"}
+                  onPress={handleDownloadModel}
+                  loading={isDownloading}
+                  disabled={
+                    isDownloading ||
+                    (selectedModelKey === "custom" && !customModelUrl.trim()) ||
+                    isSelectedModelDownloaded
+                  }
+                >
+                  {isDownloading
+                    ? "Downloading model..."
+                    : isSelectedModelDownloaded
+                      ? "Already downloaded"
+                      : "Download selected model"}
+                </Button>
+
+                {isDownloading ? (
+                  <View style={styles.downloadProgressArea}>
+                    <ProgressBar
+                      progress={totalBytes ? downloadProgress : undefined}
+                      indeterminate={!totalBytes}
+                      style={styles.progressBar}
+                    />
+                    <View style={styles.downloadProgressRow}>
+                      <Text
+                        variant="labelMedium"
+                        style={{ color: theme.colors.onSurfaceVariant }}
+                      >
+                        {totalBytes
+                          ? `${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)} (${Math.round(downloadProgress * 100)}%)`
+                          : formatBytes(downloadedBytes)}
+                      </Text>
+                      {downloadSpeed !== null ? (
+                        <Text
+                          variant="labelMedium"
+                          style={{ color: theme.colors.onSurfaceVariant }}
+                        >
+                          {formatBytes(Math.round(downloadSpeed))}/s
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ) : null}
+
+                {downloadError ? (
+                  <Text
+                    variant="bodyMedium"
+                    style={{ color: theme.colors.error }}
+                  >
+                    {downloadError}
+                  </Text>
+                ) : null}
+              </>
+            )}
+
+            {/* Offline Models Tab Content */}
+            {activeModelTab === "offline" && (
+              <View
+                style={[
+                  styles.downloadedModelsContainer,
+                  {
+                    backgroundColor: theme.colors.elevation.level1,
+                  },
+                ]}
+              >
+                {downloadedModels.length ? (
+                  <View style={styles.downloadedList}>
+                    {downloadedModels.map((model) => {
+                      const isActive = data.modelPath === model.uri;
+                      const inMemory = isInMemory(model.uri);
+                      const hasCustomConfig =
+                        !!data.perModelConfig?.[model.uri] &&
+                        JSON.stringify(data.perModelConfig[model.uri]) !==
+                          JSON.stringify(DEFAULT_MODEL_CONFIG);
+                      return (
+                        <View
+                          key={model.uri}
+                          style={[
+                            styles.downloadedItem,
+                            {
+                              borderColor: isActive
+                                ? theme.colors.primary
+                                : theme.colors.outlineVariant,
+                              backgroundColor: theme.colors.elevation.level2,
+                            },
+                          ]}
+                        >
+                          <View style={styles.downloadedItemTopRow}>
+                            <View style={styles.downloadedItemNameRow}>
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  flex: 1,
+                                  minWidth: 0,
+                                }}
+                              >
+                                <Text
+                                  variant="bodyLarge"
+                                  numberOfLines={1}
+                                  style={styles.downloadedItemName}
+                                >
+                                  {model.name}
+                                </Text>
+                                {inMemory ? (
+                                  <Icon
+                                    source="memory"
+                                    color={theme.dark ? "#7bd88f" : "#2e7d32"}
+                                    size={20}
+                                  />
+                                ) : null}
+                                {hasCustomConfig ? (
+                                  <Icon
+                                    source="tune"
+                                    color={theme.colors.primary}
+                                    size={16}
+                                  />
+                                ) : null}
+                              </View>
+                              <IconButton
+                                icon="cog-outline"
+                                size={22}
+                                onPress={() =>
+                                  setActiveModelConfigUri(model.uri)
+                                }
+                                style={{ marginVertical: -8, marginLeft: 4 }}
+                              />
+                            </View>
+                          </View>
+                          <Text
+                            variant="bodySmall"
+                            style={{ color: theme.colors.onSurfaceVariant }}
+                          >
+                            {formatBytes(model.size)}
+                          </Text>
+                          <View style={styles.downloadedItemActions}>
+                            <Button
+                              mode={isActive ? "contained" : "outlined"}
+                              onPress={() => setActiveModel(model.uri)}
+                            >
+                              {isActive ? "In use" : "Use"}
+                            </Button>
+                            {inMemory ? (
+                              <Button
+                                mode="outlined"
+                                onPress={() => clearModelCache()}
+                              >
+                                Unload
+                              </Button>
+                            ) : null}
+                            <Button
+                              mode="text"
+                              compact
+                              textColor={theme.colors.error}
+                              onPress={() => handleDeleteModel(model)}
+                            >
+                              Delete
+                            </Button>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <View style={styles.offlineEmptyState}>
+                    <MaterialCommunityIcons
+                      name="package-variant"
+                      size={48}
+                      color={theme.colors.onSurfaceVariant}
+                    />
+                    <Text
+                      variant="bodyMedium"
+                      style={{
+                        color: theme.colors.onSurfaceVariant,
+                        marginTop: 8,
+                      }}
+                    >
+                      No models downloaded yet
+                    </Text>
+                    <Text
+                      variant="labelSmall"
+                      style={{ color: theme.colors.onSurfaceVariant }}
+                    >
+                      Switch to Download tab to get started
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
             {/* Memory Usage Modal */}
             <Modal
               visible={!!showMemoryModal}
@@ -1615,222 +1873,6 @@ export default function SettingsScreen() {
                 </Pressable>
               </Pressable>
             </Modal>
-
-            <View style={styles.modelSelector}>
-              {BUILT_IN_MODELS.map((model) => (
-                <Button
-                  key={model.key}
-                  mode={
-                    selectedModelKey === model.key ? "contained" : "outlined"
-                  }
-                  onPress={() => setSelectedModelKey(model.key)}
-                >
-                  {model.label} ({model.sizeLabel})
-                </Button>
-              ))}
-              <Button
-                mode={selectedModelKey === "custom" ? "contained" : "outlined"}
-                onPress={() => setSelectedModelKey("custom")}
-              >
-                Custom URL
-              </Button>
-            </View>
-
-            {selectedModelKey === "custom" ? (
-              <TextInput
-                mode="outlined"
-                label="Model URL"
-                value={customModelUrl}
-                onChangeText={setCustomModelUrl}
-                placeholder="https://.../model.litertlm"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            ) : null}
-
-            <Button
-              mode="contained"
-              icon={isSelectedModelDownloaded ? "check" : "download"}
-              onPress={handleDownloadModel}
-              loading={isDownloading}
-              disabled={
-                isDownloading ||
-                (selectedModelKey === "custom" && !customModelUrl.trim()) ||
-                isSelectedModelDownloaded
-              }
-            >
-              {isDownloading
-                ? "Downloading model..."
-                : isSelectedModelDownloaded
-                  ? "Already downloaded"
-                  : "Download selected model"}
-            </Button>
-
-            {isDownloading ? (
-              <View style={styles.downloadProgressArea}>
-                <ProgressBar
-                  progress={totalBytes ? downloadProgress : undefined}
-                  indeterminate={!totalBytes}
-                  style={styles.progressBar}
-                />
-                <View style={styles.downloadProgressRow}>
-                  <Text
-                    variant="labelMedium"
-                    style={{ color: theme.colors.onSurfaceVariant }}
-                  >
-                    {totalBytes
-                      ? `${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)} (${Math.round(downloadProgress * 100)}%)`
-                      : formatBytes(downloadedBytes)}
-                  </Text>
-                  {downloadSpeed !== null ? (
-                    <Text
-                      variant="labelMedium"
-                      style={{ color: theme.colors.onSurfaceVariant }}
-                    >
-                      {formatBytes(Math.round(downloadSpeed))}/s
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-            ) : null}
-
-            {downloadError ? (
-              <Text variant="bodyMedium" style={{ color: theme.colors.error }}>
-                {downloadError}
-              </Text>
-            ) : null}
-
-            <View
-              style={[
-                styles.downloadedModelsContainer,
-                {
-                  backgroundColor: theme.colors.elevation.level1,
-                  borderColor: theme.colors.primary,
-                },
-              ]}
-            >
-              <View style={styles.downloadedModelsHeader}>
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
-                  <MaterialCommunityIcons
-                    name="package-down"
-                    size={24}
-                    color={theme.colors.primary}
-                  />
-                  <Text
-                    variant="headlineSmall"
-                    style={{ fontWeight: "700", color: theme.colors.primary }}
-                  >
-                    Offline Models
-                  </Text>
-                </View>
-              </View>
-              {downloadedModels.length ? (
-                <View style={styles.downloadedList}>
-                  {downloadedModels.map((model) => {
-                    const isActive = data.modelPath === model.uri;
-                    const inMemory = isInMemory(model.uri);
-                    const hasCustomConfig =
-                      !!data.perModelConfig?.[model.uri] &&
-                      JSON.stringify(data.perModelConfig[model.uri]) !==
-                        JSON.stringify(DEFAULT_MODEL_CONFIG);
-                    return (
-                      <View
-                        key={model.uri}
-                        style={[
-                          styles.downloadedItem,
-                          {
-                            borderColor: isActive
-                              ? theme.colors.primary
-                              : theme.colors.outlineVariant,
-                            backgroundColor: theme.colors.elevation.level2,
-                          },
-                        ]}
-                      >
-                        <View style={styles.downloadedItemTopRow}>
-                          <View style={styles.downloadedItemNameRow}>
-                            <View
-                              style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                flex: 1,
-                                minWidth: 0,
-                              }}
-                            >
-                              <Text
-                                variant="bodyLarge"
-                                numberOfLines={1}
-                                style={styles.downloadedItemName}
-                              >
-                                {model.name}
-                              </Text>
-                              {inMemory ? (
-                                <Icon
-                                  source="memory"
-                                  color={theme.dark ? "#7bd88f" : "#2e7d32"}
-                                  size={20}
-                                />
-                              ) : null}
-                              {hasCustomConfig ? (
-                                <Icon
-                                  source="tune"
-                                  color={theme.colors.primary}
-                                  size={16}
-                                />
-                              ) : null}
-                            </View>
-                            <IconButton
-                              icon="cog-outline"
-                              size={22}
-                              onPress={() => setActiveModelConfigUri(model.uri)}
-                              style={{ marginVertical: -8, marginLeft: 4 }}
-                            />
-                          </View>
-                        </View>
-                        <Text
-                          variant="bodySmall"
-                          style={{ color: theme.colors.onSurfaceVariant }}
-                        >
-                          {formatBytes(model.size)}
-                        </Text>
-                        <View style={styles.downloadedItemActions}>
-                          <Button
-                            mode={isActive ? "contained" : "outlined"}
-                            onPress={() => setActiveModel(model.uri)}
-                          >
-                            {isActive ? "In use" : "Use"}
-                          </Button>
-                          {inMemory ? (
-                            <Button
-                              mode="outlined"
-                              onPress={() => clearModelCache()}
-                            >
-                              Unload
-                            </Button>
-                          ) : null}
-                          <Button
-                            mode="text"
-                            compact
-                            textColor={theme.colors.error}
-                            onPress={() => handleDeleteModel(model)}
-                          >
-                            Delete
-                          </Button>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : (
-                <Text
-                  variant="bodyMedium"
-                  style={{ color: theme.colors.onSurfaceVariant }}
-                >
-                  No models downloaded yet.
-                </Text>
-              )}
-            </View>
           </Card.Content>
         </Card>
 
@@ -1928,6 +1970,17 @@ export default function SettingsScreen() {
         onSave={handleSaveModelConfig}
         onClose={() => setActiveModelConfigUri(null)}
       />
+      <Snackbar
+        visible={showSnackbar}
+        onDismiss={() => setShowSnackbar(false)}
+        duration={3000}
+        action={{
+          label: "View",
+          onPress: () => setActiveModelTab("offline"),
+        }}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </View>
   );
 }
@@ -1971,6 +2024,10 @@ const styles = StyleSheet.create({
     height: 40,
   },
   modelSelector: { gap: 8 },
+  offlineEmptyState: {
+    alignItems: "center",
+    paddingVertical: 24,
+  },
   downloadProgressArea: { gap: 6 },
   downloadProgressRow: {
     flexDirection: "row",
@@ -1978,12 +2035,7 @@ const styles = StyleSheet.create({
   },
   progressBar: { height: 10, borderRadius: 6 },
   downloadedModelsContainer: {
-    borderRadius: 12,
-    borderWidth: 2,
-    padding: 16,
     gap: 12,
-    marginVertical: 4,
-    marginHorizontal: 0,
   },
   downloadedModelsHeader: {
     marginBottom: 3,
