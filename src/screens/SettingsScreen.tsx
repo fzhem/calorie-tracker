@@ -171,7 +171,6 @@ const SliderRow = memo(function SliderRow({
   const [valueStr, setValueStr] = useState(() => formatValue(value));
   const [isEditing, setIsEditing] = useState(false);
 
-
   // Update text when slider value changes externally (only if not currently editing)
   useEffect(() => {
     if (!isEditing) {
@@ -183,41 +182,43 @@ const SliderRow = memo(function SliderRow({
     setIsEditing(true);
   }, []);
 
-
   const handleValueChange = useCallback(
-      (text: string) => {
-        setValueStr(text);
-        const num = Number(text);
-        // Only update slider if value is valid and in range
-        if (Number.isFinite(num) && num >= min && num <= max) {
-          onValueChange(num);
-        }
-      },
-      [min, max, onValueChange],
-    );
-
-    const handleBlur = useCallback(() => {
-      const num = Number(valueStr);
-      if (!Number.isFinite(num) || num < min) {
-        setValueStr(formatValue(min));
-        onValueChange(min);
-      } else if (num > max) {
-        setValueStr(formatValue(max));
-        onValueChange(max);
-      } else {
-        const rounded = Math.round(num * 100) / 100;
-        setValueStr(formatValue(rounded));
-        if (rounded !== num) {
-          onValueChange(rounded);
-        }
+    (text: string) => {
+      setValueStr(text);
+      const num = Number(text);
+      // Only update slider if value is valid and in range
+      if (Number.isFinite(num) && num >= min && num <= max) {
+        onValueChange(num);
       }
-    }, [valueStr, min, max, onValueChange, formatValue]);
+    },
+    [min, max, onValueChange],
+  );
+
+  const handleBlur = useCallback(() => {
+    const num = Number(valueStr);
+    if (!Number.isFinite(num) || num < min) {
+      setValueStr(formatValue(min));
+      onValueChange(min);
+    } else if (num > max) {
+      setValueStr(formatValue(max));
+      onValueChange(max);
+    } else {
+      const rounded = Math.round(num * 100) / 100;
+      setValueStr(formatValue(rounded));
+      if (rounded !== num) {
+        onValueChange(rounded);
+      }
+    }
+  }, [valueStr, min, max, onValueChange, formatValue]);
 
   return (
     <View style={sliderRowStyles.container}>
       <Text variant="bodyMedium">{label}</Text>
       <View style={sliderRowStyles.sliderRow}>
-        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+        <Text
+          variant="bodySmall"
+          style={{ color: theme.colors.onSurfaceVariant }}
+        >
           {formatValue(min)}
         </Text>
         <Slider
@@ -232,19 +233,19 @@ const SliderRow = memo(function SliderRow({
           thumbTintColor={theme.colors.primary}
         />
         <TextInput
-                          mode="outlined"
-                          keyboardType="decimal-pad"
-                          value={valueStr}
-                          onChangeText={handleValueChange}
-                          onFocus={handleTextChangeStart}
-                          onBlur={() => {
-                            setIsEditing(false);
-                            handleBlur();
-                          }}
-                          style={sliderRowStyles.valueInput}
-                          contentStyle={sliderRowStyles.valueInputContent}
-                          dense
-                        />
+          mode="outlined"
+          keyboardType="decimal-pad"
+          value={valueStr}
+          onChangeText={handleValueChange}
+          onFocus={handleTextChangeStart}
+          onBlur={() => {
+            setIsEditing(false);
+            handleBlur();
+          }}
+          style={sliderRowStyles.valueInput}
+          contentStyle={sliderRowStyles.valueInputContent}
+          dense
+        />
       </View>
     </View>
   );
@@ -396,20 +397,23 @@ const ModelConfigModal = memo(function ModelConfigModal({
               Cancel
             </Button>
             <Button
-                          mode="contained"
-                          onPress={() => {
-                            // Validate and clamp all slider values before saving
-                            const validated = { ...draft };
-                            validated.topK = Math.min(Math.max(validated.topK, 5), 100);
-                            validated.topP = Math.min(Math.max(validated.topP, 0), 1);
-                            validated.temperature = Math.min(Math.max(validated.temperature, 0), 2);
-                            validated.maxTokens = Math.max(validated.maxTokens, 1);
-                            setDraft(validated);
-                            onSave({ ...validated, backend: accelerator });
-                          }}
-                        >
-                          Save
-                        </Button>
+              mode="contained"
+              onPress={() => {
+                // Validate and clamp all slider values before saving
+                const validated = { ...draft };
+                validated.topK = Math.min(Math.max(validated.topK, 5), 100);
+                validated.topP = Math.min(Math.max(validated.topP, 0), 1);
+                validated.temperature = Math.min(
+                  Math.max(validated.temperature, 0),
+                  2,
+                );
+                validated.maxTokens = Math.max(validated.maxTokens, 1);
+                setDraft(validated);
+                onSave({ ...validated, backend: accelerator });
+              }}
+            >
+              Save
+            </Button>
           </View>
         </Pressable>
       </Pressable>
