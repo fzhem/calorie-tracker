@@ -1431,17 +1431,9 @@ export default function SettingsScreen() {
                   size={28}
                   color={theme.colors.primary}
                 />
-                <View style={styles.healthStatText}>
-                  <Text
-                    variant="labelSmall"
-                    style={{ color: theme.colors.onSurfaceVariant }}
-                  >
-                    Weight
-                  </Text>
-                  <Text variant="titleMedium">
-                    {latestWeight ? `${latestWeight} kg` : "—"}
-                  </Text>
-                </View>
+                <Text variant="titleMedium">
+                  {latestWeight ? `${latestWeight} kg` : "—"}
+                </Text>
               </View>
               <View
                 style={[
@@ -1455,17 +1447,9 @@ export default function SettingsScreen() {
                   size={28}
                   color={theme.colors.primary}
                 />
-                <View style={styles.healthStatText}>
-                  <Text
-                    variant="labelSmall"
-                    style={{ color: theme.colors.onSurfaceVariant }}
-                  >
-                    Body Fat
-                  </Text>
-                  <Text variant="titleMedium">
-                    {latestBodyFat !== null ? `${latestBodyFat}%` : "—"}
-                  </Text>
-                </View>
+                <Text variant="titleMedium">
+                  {latestBodyFat !== null ? `${latestBodyFat}%` : "—"}
+                </Text>
               </View>
               <View
                 style={[
@@ -1479,42 +1463,34 @@ export default function SettingsScreen() {
                   size={28}
                   color={theme.colors.onSurfaceVariant}
                 />
-                <View style={styles.healthStatText}>
-                  <Text
-                    variant="labelSmall"
-                    style={{ color: theme.colors.onSurfaceVariant }}
-                  >
-                    Last Sync
-                  </Text>
-                  <Text variant="titleMedium">
-                    {data.lastWeightSyncAt
-                      ? (() => {
-                          const syncDate = new Date(data.lastWeightSyncAt!);
-                          const today = new Date();
-                          const yesterday = new Date(today);
-                          yesterday.setDate(yesterday.getDate() - 1);
-                          if (
-                            syncDate.getDate() === today.getDate() &&
-                            syncDate.getMonth() === today.getMonth() &&
-                            syncDate.getFullYear() === today.getFullYear()
-                          ) {
-                            return "Today";
-                          }
-                          if (
-                            syncDate.getDate() === yesterday.getDate() &&
-                            syncDate.getMonth() === yesterday.getMonth() &&
-                            syncDate.getFullYear() === yesterday.getFullYear()
-                          ) {
-                            return "Yesterday";
-                          }
-                          return syncDate.toLocaleDateString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                          });
-                        })()
-                      : "Never"}
-                  </Text>
-                </View>
+                <Text variant="titleMedium">
+                  {data.lastWeightSyncAt
+                    ? (() => {
+                        const syncDate = new Date(data.lastWeightSyncAt!);
+                        const today = new Date();
+                        const yesterday = new Date(today);
+                        yesterday.setDate(yesterday.getDate() - 1);
+                        if (
+                          syncDate.getDate() === today.getDate() &&
+                          syncDate.getMonth() === today.getMonth() &&
+                          syncDate.getFullYear() === today.getFullYear()
+                        ) {
+                          return "Today";
+                        }
+                        if (
+                          syncDate.getDate() === yesterday.getDate() &&
+                          syncDate.getMonth() === yesterday.getMonth() &&
+                          syncDate.getFullYear() === yesterday.getFullYear()
+                        ) {
+                          return "Yesterday";
+                        }
+                        return syncDate.toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        });
+                      })()
+                    : "Never"}
+                </Text>
               </View>
             </View>
             <View style={styles.buttonRow}>
@@ -2075,13 +2051,7 @@ const styles = StyleSheet.create({
     marginVertical: 0,
   },
   healthStat: {
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 4,
     flex: 1,
-    justifyContent: "center",
-  },
-  healthStatText: {
     alignItems: "center",
   },
   healthStatDivider: {
