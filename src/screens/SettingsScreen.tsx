@@ -1575,7 +1575,7 @@ export default function SettingsScreen() {
               Active model: {selectedModelDescription}
             </Text>
 
-            {/* Tab navigation for Download / Offline Models */}
+            {/* Tab navigation for Offline / Download Models */}
             <SegmentedButtons
               value={activeModelTab}
               onValueChange={(value) =>
@@ -1583,17 +1583,17 @@ export default function SettingsScreen() {
               }
               buttons={[
                 {
-                  value: "download",
-                  label: "Download",
-                  icon: "download",
-                },
-                {
                   value: "offline",
                   label:
                     downloadedModels.length > 0
                       ? `Offline (${downloadedModels.length})`
                       : "Offline",
                   icon: "package-down",
+                },
+                {
+                  value: "download",
+                  label: "Download",
+                  icon: "download",
                 },
               ]}
             />
@@ -1619,7 +1619,7 @@ export default function SettingsScreen() {
                           <View
                             style={[
                               styles.recommendedBadge,
-                              { backgroundColor: '#ba1a1a' },
+                              { backgroundColor: "#ba1a1a" },
                             ]}
                           >
                             <Text style={styles.recommendedBadgeText}>★</Text>
