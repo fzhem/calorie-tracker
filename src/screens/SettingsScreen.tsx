@@ -24,6 +24,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import type { Permission } from "react-native-health-connect";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  Badge,
   Button,
   Card,
   Chip,
@@ -83,6 +84,7 @@ type ModelCatalogItem = {
   sizeLabel: string;
   url: string;
   fileName: string;
+  recommended?: boolean;
 };
 
 type DownloadedModel = {
@@ -117,6 +119,7 @@ const BUILT_IN_MODELS: ModelCatalogItem[] = [
     sizeLabel: "2.58 GB",
     url: GEMMA_4_E2B_IT,
     fileName: "gemma-4-E2B-it.litertlm",
+    recommended: true,
   },
   {
     key: "GEMMA_4_E4B_IT",
@@ -1600,17 +1603,30 @@ export default function SettingsScreen() {
               <>
                 <View style={styles.modelSelector}>
                   {BUILT_IN_MODELS.map((model) => (
-                    <Button
-                      key={model.key}
-                      mode={
-                        selectedModelKey === model.key
-                          ? "contained"
-                          : "outlined"
-                      }
-                      onPress={() => setSelectedModelKey(model.key)}
-                    >
-                      {model.label} ({model.sizeLabel})
-                    </Button>
+                    <View key={model.key}>
+                      <View>
+                        <Button
+                          mode={
+                            selectedModelKey === model.key
+                              ? "contained"
+                              : "outlined"
+                          }
+                          onPress={() => setSelectedModelKey(model.key)}
+                        >
+                          {model.label} ({model.sizeLabel})
+                        </Button>
+                        {model.recommended && (
+                          <View
+                            style={[
+                              styles.recommendedBadge,
+                              { backgroundColor: '#ba1a1a' },
+                            ]}
+                          >
+                            <Text style={styles.recommendedBadgeText}>★</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
                   ))}
                   <Button
                     mode={
@@ -2078,6 +2094,21 @@ const styles = StyleSheet.create({
     height: 40,
   },
   modelSelector: { gap: 8 },
+  recommendedBadge: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recommendedBadgeText: {
+    fontSize: 12,
+    color: "white",
+    fontWeight: "bold",
+  },
   offlineEmptyState: {
     alignItems: "center",
     paddingVertical: 24,
