@@ -46,6 +46,7 @@ import {
   subscribeModelCache,
   getModelKeySnapshot,
 } from "../lib/modelCache";
+import { checkModelMemory } from "../lib/memoryUtils";
 import {
   DEFAULT_DATA,
   DEFAULT_MODEL_CONFIG,
@@ -203,6 +204,9 @@ type QuickLogCardProps = {
   onToggleFavoriteQuickAdd: (item: QuickAddItem) => void;
   onOpenLlmEstimator: () => void;
   data: StoredData;
+  isModelBlocked?: boolean;
+  isModelWarning?: boolean;
+  memoryUsagePercent?: number;
 };
 
 const QuickLogCard = memo(function QuickLogCard({
@@ -216,6 +220,9 @@ const QuickLogCard = memo(function QuickLogCard({
   onToggleFavoriteQuickAdd,
   onOpenLlmEstimator,
   data,
+  isModelBlocked,
+  isModelWarning,
+  memoryUsagePercent,
 }: QuickLogCardProps) {
   const theme = useTheme();
   const [mealTitle, setMealTitle] = useState("");
@@ -332,16 +339,51 @@ const QuickLogCard = memo(function QuickLogCard({
         style={styles.quickLogHeader}
         titleStyle={styles.quickLogTitle}
         right={() => (
-          <Button
-            mode="outlined"
-            compact
-            icon="robot"
-            onPress={onOpenLlmEstimator}
-            style={styles.quickLogLlmButton}
-            contentStyle={styles.quickLogLlmButtonContent}
-          >
-            Estimate Meal
-          </Button>
+          <View style={styles.quickLogLlmButtonContainer}>
+            {isModelWarning && !isModelBlocked && (
+              <View
+                style={[
+                  styles.memoryStatusBadge,
+                  { backgroundColor: theme.colors.tertiary },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="alert"
+                  size={10}
+                  color="#000000"
+                />
+                <Text style={styles.memoryStatusText}>
+                  {memoryUsagePercent}% RAM
+                </Text>
+              </View>
+            )}
+            {isModelBlocked && (
+              <View
+                style={[
+                  styles.memoryStatusBadge,
+                  { backgroundColor: theme.colors.error },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="alert-circle-outline"
+                  size={10}
+                  color="#000000"
+                />
+                <Text style={styles.memoryStatusText}>Blocked</Text>
+              </View>
+            )}
+            <Button
+              mode={isModelBlocked ? "contained-tonal" : "outlined"}
+              compact
+              icon={isModelBlocked ? "lock" : "robot"}
+              onPress={onOpenLlmEstimator}
+              disabled={isModelBlocked}
+              style={styles.quickLogLlmButton}
+              contentStyle={styles.quickLogLlmButtonContent}
+            >
+              Estimate Meal
+            </Button>
+          </View>
         )}
       />
       <Card.Content style={styles.formArea}>
@@ -1279,6 +1321,35 @@ export default function LogScreen() {
     Alert.alert("Model status", message);
   }, [isModelInMemory]);
 
+  // Determine which model key is currently selected and check if it's blocked
+  const selectedModelKey = useMemo(() => {
+    if (!modelPath) return null;
+    const fileName = modelPath.split("/").pop() ?? "";
+    if (fileName.includes("gemma-4-E2B")) return "GEMMA_4_E2B_IT";
+    if (fileName.includes("gemma-4-E4B")) return "GEMMA_4_E4B_IT";
+    return null;
+  }, [modelPath]);
+
+  const memoryCheck = useMemo(() => {
+    if (!selectedModelKey) return null;
+    return checkModelMemory(selectedModelKey);
+  }, [selectedModelKey]);
+
+  const isModelBlocked = memoryCheck?.status === "blocked";
+  const isModelWarning = memoryCheck?.status === "warning";
+
+  const handleOpenLlmEstimator = useCallback(() => {
+    if (isModelBlocked) {
+      Alert.alert(
+        "Low Device Memory",
+        `The selected model (${selectedModelKey}) requires ${memoryCheck?.usagePercent ?? "?"}% of available RAM, which exceeds the 60% safety threshold. This may cause device instability.\n\nPlease select a smaller model or free up device memory, then try again.`,
+        [{ text: "OK" }],
+      );
+      return;
+    }
+    setLlmModalVisible(true);
+  }, [isModelBlocked, selectedModelKey, memoryCheck?.usagePercent]);
+
   return (
     <View
       style={[
@@ -1472,8 +1543,11 @@ export default function LogScreen() {
           onAddMeal={addMeal}
           onQuickAddMeal={quickAddMeal}
           onToggleFavoriteQuickAdd={toggleFavoriteQuickAdd}
-          onOpenLlmEstimator={() => setLlmModalVisible(true)}
+          onOpenLlmEstimator={handleOpenLlmEstimator}
           data={data}
+          isModelBlocked={isModelBlocked}
+          isModelWarning={isModelWarning}
+          memoryUsagePercent={memoryCheck?.usagePercent}
         />
 
         <Card style={styles.card} mode="elevated">
@@ -1537,6 +1611,26 @@ export default function LogScreen() {
             <Text variant="titleMedium" style={{ fontWeight: "700" }}>
               Meal Estimator
             </Text>
+            {isModelWarning && !isModelBlocked && memoryCheck && (
+              <View
+                style={[
+                  styles.llmMemoryWarning,
+                  { backgroundColor: theme.colors.tertiaryContainer },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="alert"
+                  size={16}
+                  color={theme.colors.tertiary}
+                />
+                <Text
+                  variant="labelSmall"
+                  style={{ color: theme.colors.tertiary, flex: 1 }}
+                >
+                  Model uses {memoryCheck.usagePercent}% of available RAM
+                </Text>
+              </View>
+            )}
             <TextInput
               label="Describe your meal"
               value={llmPrompt}
@@ -2127,8 +2221,34 @@ const styles = StyleSheet.create({
   quickAddItem: { flexDirection: "row", alignItems: "center", gap: 2 },
   quickLogHeader: { minHeight: 56, paddingVertical: 6 },
   quickLogTitle: { marginLeft: -2 },
-  quickLogLlmButton: { marginRight: 8 },
+  quickLogLlmButtonContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginRight: 4,
+  },
+  quickLogLlmButton: { marginRight: 0 },
   quickLogLlmButtonContent: { paddingHorizontal: 4 },
+  memoryStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  memoryStatusText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#000000",
+  },
+  llmMemoryWarning: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 8,
+    borderRadius: 8,
+  },
   macroSectionHeader: {
     flexDirection: "row",
     alignItems: "center",

@@ -49,6 +49,7 @@ import {
   getModelMemoryUsageDetails,
   subscribeModelCache,
 } from "../lib/modelCache";
+import { checkModelMemory } from "../lib/memoryUtils";
 
 import { ToastAndroid } from "react-native";
 import {
@@ -1602,32 +1603,121 @@ export default function SettingsScreen() {
             {activeModelTab === "download" && (
               <>
                 <View style={styles.modelSelector}>
-                  {BUILT_IN_MODELS.map((model) => (
-                    <View key={model.key}>
-                      <View>
-                        <Button
-                          mode={
-                            selectedModelKey === model.key
-                              ? "contained"
-                              : "outlined"
-                          }
-                          onPress={() => setSelectedModelKey(model.key)}
+                  {BUILT_IN_MODELS.map((model) => {
+                    const memoryCheck = checkModelMemory(model.key);
+                    const isBlocked = memoryCheck.status === "blocked";
+                    const isWarning = memoryCheck.status === "warning";
+                    const memoryGB =
+                      memoryCheck.modelMemoryBytes / (1024 * 1024 * 1024);
+                    const memoryLabel = `${memoryGB} GB`;
+                    return (
+                      <View key={model.key}>
+                        <View
+                          style={[isBlocked && styles.modelBlockedContainer]}
                         >
-                          {model.label} ({model.sizeLabel})
-                        </Button>
-                        {model.recommended && (
-                          <View
-                            style={[
-                              styles.recommendedBadge,
-                              { backgroundColor: "#ba1a1a" },
-                            ]}
+                          <Button
+                            mode={
+                              selectedModelKey === model.key
+                                ? "contained"
+                                : "outlined"
+                            }
+                            onPress={() => {
+                              if (!isBlocked) setSelectedModelKey(model.key);
+                            }}
+                            disabled={isBlocked}
+                            icon={
+                              isBlocked
+                                ? "lock"
+                                : isWarning
+                                  ? "alert"
+                                  : undefined
+                            }
+                            style={
+                              isBlocked ? styles.modelBlockedButton : undefined
+                            }
+                            textColor={
+                              isBlocked
+                                ? theme.colors.onSurfaceVariant
+                                : undefined
+                            }
                           >
-                            <Text style={styles.recommendedBadgeText}>★</Text>
-                          </View>
-                        )}
+                            {model.label} ({model.sizeLabel})
+                          </Button>
+                          {(isBlocked || isWarning) && (
+                            <View
+                              style={[
+                                styles.memoryWarningBadge,
+                                {
+                                  backgroundColor: isBlocked
+                                    ? theme.colors.error
+                                    : theme.colors.tertiary,
+                                },
+                              ]}
+                            >
+                              <MaterialCommunityIcons
+                                name={
+                                  isBlocked ? "alert-circle-outline" : "alert"
+                                }
+                                size={12}
+                                color="#000000"
+                              />
+                              <Text
+                                variant="labelSmall"
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: "700",
+                                  color: isBlocked ? "#000000" : "#000000",
+                                }}
+                              >
+                                {isBlocked ? "Low RAM" : "Warning"}
+                              </Text>
+                            </View>
+                          )}
+                          {model.recommended && !isBlocked && (
+                            <View
+                              style={[
+                                styles.recommendedBadge,
+                                {
+                                  backgroundColor: theme.colors.inversePrimary,
+                                },
+                              ]}
+                            >
+                              <Text style={styles.recommendedBadgeText}>★</Text>
+                            </View>
+                          )}
+                          {isBlocked && (
+                            <Text
+                              variant="labelSmall"
+                              style={[
+                                styles.memoryWarningSubtext,
+                                {
+                                  color: theme.colors.error,
+                                  fontWeight: "700",
+                                },
+                              ]}
+                            >
+                              Requires {memoryLabel} ({memoryCheck.usagePercent}
+                              % of RAM)
+                            </Text>
+                          )}
+                          {isWarning && !isBlocked && (
+                            <Text
+                              variant="labelSmall"
+                              style={[
+                                styles.memoryWarningSubtext,
+                                {
+                                  color: theme.colors.tertiary,
+                                  fontWeight: "700",
+                                },
+                              ]}
+                            >
+                              Uses {memoryCheck.usagePercent}% of RAM
+                            </Text>
+                          )}
+                        </View>
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                   <Button
                     mode={
                       selectedModelKey === "custom" ? "contained" : "outlined"
@@ -1658,7 +1748,9 @@ export default function SettingsScreen() {
                   disabled={
                     isDownloading ||
                     (selectedModelKey === "custom" && !customModelUrl.trim()) ||
-                    isSelectedModelDownloaded
+                    isSelectedModelDownloaded ||
+                    (selectedModelKey !== "custom" &&
+                      checkModelMemory(selectedModelKey).status === "blocked")
                   }
                 >
                   {isDownloading
@@ -1667,6 +1759,34 @@ export default function SettingsScreen() {
                       ? "Already downloaded"
                       : "Download selected model"}
                 </Button>
+                {selectedModelKey !== "custom" &&
+                  (() => {
+                    const check = checkModelMemory(selectedModelKey);
+                    if (check.status === "warning") {
+                      return (
+                        <View
+                          style={[
+                            styles.memoryAlertBox,
+                            { backgroundColor: theme.colors.tertiaryContainer },
+                          ]}
+                        >
+                          <MaterialCommunityIcons
+                            name="alert"
+                            size={20}
+                            color={theme.colors.tertiary}
+                          />
+                          <Text
+                            variant="labelSmall"
+                            style={{ color: theme.colors.tertiary, flex: 1 }}
+                          >
+                            This model uses {check.usagePercent}% of available
+                            RAM. Monitor device performance.
+                          </Text>
+                        </View>
+                      );
+                    }
+                    return null;
+                  })()}
 
                 {isDownloading ? (
                   <View style={styles.downloadProgressArea}>
@@ -1726,6 +1846,19 @@ export default function SettingsScreen() {
                         !!data.perModelConfig?.[model.uri] &&
                         JSON.stringify(data.perModelConfig[model.uri]) !==
                           JSON.stringify(DEFAULT_MODEL_CONFIG);
+
+                      // Determine model key from filename
+                      const modelKey = model.name.includes("gemma-4-E2B")
+                        ? "GEMMA_4_E2B_IT"
+                        : model.name.includes("gemma-4-E4B")
+                          ? "GEMMA_4_E4B_IT"
+                          : null;
+                      const memoryCheck = modelKey
+                        ? checkModelMemory(modelKey)
+                        : null;
+                      const isBlocked = memoryCheck?.status === "blocked";
+                      const isWarning = memoryCheck?.status === "warning";
+
                       return (
                         <View
                           key={model.uri}
@@ -1734,7 +1867,9 @@ export default function SettingsScreen() {
                             {
                               borderColor: isActive
                                 ? theme.colors.primary
-                                : theme.colors.outlineVariant,
+                                : isBlocked
+                                  ? theme.colors.error
+                                  : theme.colors.outlineVariant,
                               backgroundColor: theme.colors.elevation.level2,
                             },
                           ]}
@@ -1771,12 +1906,42 @@ export default function SettingsScreen() {
                                   />
                                 ) : null}
                               </View>
+                              {(isBlocked || isWarning) && (
+                                <View
+                                  style={[
+                                    styles.memoryWarningBadge,
+                                    {
+                                      backgroundColor: isBlocked
+                                        ? theme.colors.error
+                                        : theme.colors.tertiary,
+                                      position: "relative",
+                                      top: 0,
+                                      right: 0,
+                                    },
+                                  ]}
+                                >
+                                  <MaterialCommunityIcons
+                                    name={
+                                      isBlocked
+                                        ? "alert-circle-outline"
+                                        : "alert"
+                                    }
+                                    size={12}
+                                    color={
+                                      isBlocked
+                                        ? theme.colors.onError
+                                        : theme.colors.onTertiary
+                                    }
+                                  />
+                                </View>
+                              )}
                               <IconButton
                                 icon="cog-outline"
                                 size={22}
                                 onPress={() =>
                                   setActiveModelConfigUri(model.uri)
                                 }
+                                disabled={isBlocked}
                                 style={{ marginVertical: -8, marginLeft: 4 }}
                               />
                             </View>
@@ -1787,12 +1952,32 @@ export default function SettingsScreen() {
                           >
                             {formatBytes(model.size)}
                           </Text>
+                          {memoryCheck && (isBlocked || isWarning) && (
+                            <Text
+                              variant="labelSmall"
+                              style={{
+                                color: isBlocked
+                                  ? theme.colors.error
+                                  : theme.colors.tertiary,
+                              }}
+                            >
+                              {isBlocked
+                                ? `Uses ${memoryCheck.usagePercent}% of RAM (blocked)`
+                                : `Uses ${memoryCheck.usagePercent}% of RAM`}
+                            </Text>
+                          )}
                           <View style={styles.downloadedItemActions}>
                             <Button
                               mode={isActive ? "contained" : "outlined"}
                               onPress={() => setActiveModel(model.uri)}
+                              disabled={isBlocked}
+                              icon={isBlocked ? "lock" : undefined}
                             >
-                              {isActive ? "In use" : "Use"}
+                              {isActive
+                                ? "In use"
+                                : isBlocked
+                                  ? "Blocked"
+                                  : "Use"}
                             </Button>
                             {inMemory ? (
                               <Button
@@ -2108,6 +2293,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "white",
     fontWeight: "bold",
+  },
+  modelBlockedContainer: {
+    opacity: 0.6,
+  },
+  modelBlockedButton: {
+    backgroundColor: "#e0e0e0",
+  },
+  memoryWarningBadge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 8,
+    zIndex: 1,
+  },
+  memoryWarningSubtext: {
+    marginTop: 2,
+    marginLeft: 4,
+  },
+  memoryAlertBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 8,
   },
   offlineEmptyState: {
     alignItems: "center",
