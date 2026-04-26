@@ -480,8 +480,8 @@ const QuickLogCard = memo(function QuickLogCard({
               value={quickAddTab}
               onValueChange={(value) => setQuickAddTab(value as QuickAddTab)}
               buttons={[
-                { value: "recent", label: "Recents", icon: "history" },
                 { value: "favorites", label: "Favourites", icon: "star" },
+                { value: "recent", label: "Recents", icon: "history" },
               ]}
             />
             {activeQuickAdds.length ? (
