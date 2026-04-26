@@ -1,5 +1,6 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Animated } from "react-native";
 import {
   Alert,
   Modal,
@@ -191,6 +192,8 @@ export default function GoalsScreen() {
   );
   const [heightUnit, setHeightUnit] = useState<HeightUnit>("cm");
   const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
+  const weightAnim = useRef(new Animated.Value(1)).current;
+  const toggleAnim = useRef(new Animated.Value(0)).current; // 0 for kg, 1 for lb
   const [heightPickerOpen, setHeightPickerOpen] = useState(false);
   const [goalAdjustmentPickerVisible, setGoalAdjustmentPickerVisible] =
     useState(false);
@@ -287,9 +290,26 @@ export default function GoalsScreen() {
     );
   }, [selectedHeightCm, heightUnit]);
 
-  const onWeightUnitChange = (nextValue: string) => {
-    const nextUnit = nextValue as WeightUnit;
-    if (nextUnit === weightUnit) return;
+  const onToggleWeightUnit = () => {
+    const nextUnit = weightUnit === "kg" ? "lb" : "kg";
+    Animated.timing(toggleAnim, {
+      toValue: nextUnit === "kg" ? 0 : 1,
+      duration: 180,
+      useNativeDriver: false,
+    }).start();
+    // Animate scale for feedback
+    Animated.sequence([
+      Animated.timing(weightAnim, {
+        toValue: 0.85,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(weightAnim, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+    ]).start();
     const parsed = parseNumberInput(manualWeightInput);
     if (parsed !== null) {
       const inKg = weightUnit === "kg" ? parsed : parsed * KG_PER_LB;
@@ -1037,33 +1057,92 @@ export default function GoalsScreen() {
                 <Text variant="labelMedium" style={{ marginTop: 3 }}>
                   Weight Tracking
                 </Text>
-                <TextInput
-                  label={`Manual weight (${weightUnit})`}
-                  value={manualWeightInput}
-                  onChangeText={setManualWeightInput}
-                  keyboardType="numeric"
-                  placeholder={weightUnit === "kg" ? "78.45" : "173.00"}
-                  mode="outlined"
-                  editable={weightUnlocked}
-                  right={
-                    <TextInput.Icon
-                      icon={weightUnlocked ? "lock-open-variant" : "lock"}
-                      onPress={() => {
-                        Vibration.vibrate(40);
-                        setWeightUnlocked(!weightUnlocked);
-                      }}
+                <View style={styles.weightRow}>
+                  <Animated.View
+                    style={{
+                      flex: 1,
+                      justifyContent: "center",
+                      transform: [{ scale: weightAnim }],
+                    }}
+                  >
+                    <TextInput
+                      label={`Manual weight (${weightUnit})`}
+                      value={manualWeightInput}
+                      onChangeText={setManualWeightInput}
+                      keyboardType="numeric"
+                      placeholder={weightUnit === "kg" ? "78.45" : "173.00"}
+                      mode="outlined"
+                      editable={weightUnlocked}
+                      right={
+                        <TextInput.Icon
+                          icon={weightUnlocked ? "lock-open-variant" : "lock"}
+                          onPress={() => {
+                            Vibration.vibrate(40);
+                            setWeightUnlocked(!weightUnlocked);
+                          }}
+                        />
+                      }
+                      theme={GOALS_PROFILE_INPUT_THEME}
                     />
-                  }
-                  theme={GOALS_PROFILE_INPUT_THEME}
-                />
-                <SegmentedButtons
-                  value={weightUnit}
-                  onValueChange={onWeightUnitChange}
-                  buttons={[
-                    { value: "kg", label: "kg" },
-                    { value: "lb", label: "lb" },
-                  ]}
-                />
+                  </Animated.View>
+                  <Animated.View
+                    style={{
+                      marginLeft: 8,
+                      transform: [{ scale: weightAnim }],
+                    }}
+                  >
+                    <Pressable
+                      onPress={onToggleWeightUnit}
+                      style={[
+                        styles.toggleOuter,
+                        { backgroundColor: theme.colors.surfaceVariant },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Toggle weight unit"
+                    >
+                      <Animated.View
+                        style={[
+                          styles.togglePill,
+                          {
+                            left: toggleAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [2, 30],
+                            }),
+                            backgroundColor: theme.colors.primary,
+                          },
+                        ]}
+                      />
+                      <View style={styles.toggleLabelRow}>
+                        <Text
+                          style={[
+                            styles.toggleLabel,
+                            {
+                              color:
+                                weightUnit === "kg"
+                                  ? theme.colors.onPrimary
+                                  : theme.colors.onSurfaceVariant,
+                            },
+                          ]}
+                        >
+                          kg
+                        </Text>
+                        <Text
+                          style={[
+                            styles.toggleLabel,
+                            {
+                              color:
+                                weightUnit === "lb"
+                                  ? theme.colors.onPrimary
+                                  : theme.colors.onSurfaceVariant,
+                            },
+                          ]}
+                        >
+                          lb
+                        </Text>
+                      </View>
+                    </Pressable>
+                  </Animated.View>
+                </View>
                 <Button
                   mode="text"
                   icon="delete-outline"
@@ -1453,6 +1532,43 @@ const styles = StyleSheet.create({
   },
   macroGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   macroInput: { minWidth: "47%", flexGrow: 1 },
+  weightRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+    minHeight: 56,
+  },
+  toggleOuter: {
+    width: 60,
+    height: 34,
+    borderRadius: 19,
+    justifyContent: "center",
+    marginRight: 2,
+    position: "relative",
+    overflow: "hidden",
+  },
+  togglePill: {
+    position: "absolute",
+    top: 4,
+    width: 28,
+    height: 26,
+    borderRadius: 15,
+    zIndex: 1,
+  },
+  toggleLabelRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    width: "100%",
+    height: "100%",
+  },
+  toggleLabel: {
+    fontWeight: "700",
+    fontSize: 13,
+    zIndex: 2,
+    width: 28,
+    textAlign: "center",
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.35)",
