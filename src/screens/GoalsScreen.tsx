@@ -41,6 +41,11 @@ import {
   getGoalCalorieDelta,
 } from "../domain/metabolism";
 
+import {
+  DEFAULT_BASE_TARGET_CALORIES,
+  DEFAULT_CALORIES_PER_KG,
+} from "../constants";
+
 const KG_PER_LB = 0.45359237;
 const CM_PER_IN = 2.54;
 const DEFAULT_HEIGHT_CM = 170;
@@ -645,16 +650,16 @@ export default function GoalsScreen() {
   };
 
   const resetOverrides = () => {
-    setBaseTargetInput(`${DEFAULT_DATA.baseTarget}`);
-    setCaloriesPerKgInput(`${DEFAULT_DATA.caloriesPerKg}`);
+    setBaseTargetInput(`${DEFAULT_BASE_TARGET_CALORIES}`);
+    setCaloriesPerKgInput(`${DEFAULT_CALORIES_PER_KG}`);
     setProteinGoalInput("");
     setFatGoalInput("");
     setCarbsGoalInput("");
     setFiberGoalInput("");
     setData((prev) => ({
       ...prev,
-      baseTarget: DEFAULT_DATA.baseTarget,
-      caloriesPerKg: DEFAULT_DATA.caloriesPerKg,
+      baseTarget: DEFAULT_BASE_TARGET_CALORIES,
+      caloriesPerKg: DEFAULT_CALORIES_PER_KG,
       proteinGoalGrams: null,
       fatGoalGrams: null,
       carbsGoalGrams: null,

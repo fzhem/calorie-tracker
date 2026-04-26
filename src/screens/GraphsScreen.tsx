@@ -38,6 +38,15 @@ import type {
   WeightPoint,
 } from "../data/storage";
 
+import {
+  TREND_RECENT_POINTS,
+  TREND_EMA_ALPHA,
+  TREND_EMA_GAMMA,
+  GRAPH_MAX_DAYS_SHORT,
+  GRAPH_MAX_DAYS_MEDIUM,
+  GRAPH_MAX_DAYS_LONG,
+} from "../constants";
+
 const WEIGHT_CHART_HEIGHT = 220;
 const WEIGHT_GUIDE_BOTTOM = WEIGHT_CHART_HEIGHT - 40;
 
@@ -213,14 +222,14 @@ function calculateEMA(
 
 function calculateWeightTrend(history: WeightPoint[]): WeightTrend | null {
   // Use the first 5 most recent entries for trend calculation (oldest to newest)
-  const recent = history.slice(0, 5);
-  return calculateTrendWithEMA(recent, 0.4, 0.2);
+  const recent = history.slice(0, TREND_RECENT_POINTS);
+  return calculateTrendWithEMA(recent, TREND_EMA_ALPHA, TREND_EMA_GAMMA);
 }
 
 function calculateBodyFatTrend(history: WeightPoint[]): WeightTrend | null {
   // Use the first 5 entries most recent entries for trend calculation (oldest to newest)
-  const recent = history.slice(0, 5);
-  return calculateTrendWithEMA(recent, 0.4, 0.2);
+  const recent = history.slice(0, TREND_RECENT_POINTS);
+  return calculateTrendWithEMA(recent, TREND_EMA_ALPHA, TREND_EMA_GAMMA);
 }
 
 function getWeeklyData(history: WeightPoint[]): {
@@ -411,7 +420,7 @@ function buildCalorieSeries(entries: MealEntry[], days: number) {
 
   if (days <= 31) {
     // Cap daily view to avoid rendering thousands of bars (90d for W, 365d for M)
-    const cap = 365;
+    const cap = GRAPH_MAX_DAYS_LONG;
     const start = toStartOfDay(addDays(end, -(cap - 1)));
     const dailyRows: Array<{ date: Date; value: number }> = [];
     for (
@@ -508,7 +517,7 @@ function buildWeightSeries(
 
   if (days <= 31) {
     // Keep the short-range mode readable by capping to recent daily points.
-    const cap = days <= 7 ? 90 : 365;
+    const cap = days <= GRAPH_MAX_DAYS_SHORT ? GRAPH_MAX_DAYS_MEDIUM : GRAPH_MAX_DAYS_LONG;
     const cutoff = toStartOfDay(addDays(new Date(), -(cap - 1)));
     const byDay = new Map<string, WeightTrendPoint>();
     for (const point of sorted) {

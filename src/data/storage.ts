@@ -1,4 +1,22 @@
 import { kvStore } from "../lib/kvStore";
+import {
+  STORAGE_KEY as CONST_STORAGE_KEY,
+  DEFAULT_BASE_TARGET_CALORIES,
+  DEFAULT_CALORIES_PER_KG,
+  DEFAULT_CALORIE_ADJUSTMENT,
+  DEFAULT_PERCENT_PER_WEEK,
+  DEFAULT_CALORIE_TOLERANCE_PERCENT,
+  DEFAULT_GRAPH_TOLERANCE_CALORIES,
+  DEFAULT_ACTIVITY_LEVEL,
+  DEFAULT_SEX,
+  DEFAULT_MODEL_TEMPERATURE,
+  DEFAULT_MODEL_MAX_TOKENS,
+  DEFAULT_MODEL_TOP_K,
+  DEFAULT_MODEL_TOP_P,
+  DEFAULT_MODEL_BACKEND,
+  PHASE_MAINTAIN,
+  ADJUSTMENT_TYPE_KCAL,
+} from "../constants";
 
 export type MealEntry = {
   id: string;
@@ -91,14 +109,14 @@ export type ModelConfig = {
 };
 
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
-  temperature: 0.2,
-  maxTokens: 1024,
-  topK: 64,
-  topP: 0.95,
-  backend: "cpu",
+  temperature: DEFAULT_MODEL_TEMPERATURE,
+  maxTokens: DEFAULT_MODEL_MAX_TOKENS,
+  topK: DEFAULT_MODEL_TOP_K,
+  topP: DEFAULT_MODEL_TOP_P,
+  backend: DEFAULT_MODEL_BACKEND,
 };
 
-export const STORAGE_KEY = "calorie-tracker-storage-v1";
+export const STORAGE_KEY = CONST_STORAGE_KEY;
 
 export const DEFAULT_DATA: StoredData = {
   entries: [],
@@ -122,19 +140,19 @@ export const DEFAULT_DATA: StoredData = {
     ]
   }`,
   quickLogMacrosExpanded: false,
-  baseTarget: 2100,
-  caloriesPerKg: 30,
-  goalPhase: "maintain",
-  cutAdjustmentType: "kcal",
-  cutCalorieAdjustment: 500,
-  cutPercentPerWeek: 1,
-  bulkAdjustmentType: "kcal",
-  bulkCalorieAdjustment: 500,
-  bulkPercentPerWeek: 1,
-  metabolismSex: "male",
+  baseTarget: DEFAULT_BASE_TARGET_CALORIES,
+  caloriesPerKg: DEFAULT_CALORIES_PER_KG,
+  goalPhase: PHASE_MAINTAIN,
+  cutAdjustmentType: ADJUSTMENT_TYPE_KCAL,
+  cutCalorieAdjustment: DEFAULT_CALORIE_ADJUSTMENT,
+  cutPercentPerWeek: DEFAULT_PERCENT_PER_WEEK,
+  bulkAdjustmentType: ADJUSTMENT_TYPE_KCAL,
+  bulkCalorieAdjustment: DEFAULT_CALORIE_ADJUSTMENT,
+  bulkPercentPerWeek: DEFAULT_PERCENT_PER_WEEK,
+  metabolismSex: DEFAULT_SEX,
   metabolismAgeYears: null,
   metabolismHeightCm: null,
-  activityLevel: "moderate",
+  activityLevel: DEFAULT_ACTIVITY_LEVEL,
   manualWeightKg: null,
   weightHistory: [],
   bodyFatHistory: [],
@@ -144,8 +162,8 @@ export const DEFAULT_DATA: StoredData = {
   fatGoalGrams: null,
   carbsGoalGrams: null,
   fiberGoalGrams: null,
-  calorieTolerancePercent: 12,
-  graphToleranceCalories: 100,
+  calorieTolerancePercent: DEFAULT_CALORIE_TOLERANCE_PERCENT,
+  graphToleranceCalories: DEFAULT_GRAPH_TOLERANCE_CALORIES,
   perModelConfig: {},
   healthConnectAutoSync: false,
 };

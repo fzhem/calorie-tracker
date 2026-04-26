@@ -8,10 +8,15 @@ import {
   type ReactNode,
 } from "react";
 import { kvStore } from "../lib/kvStore";
+import {
+  THEME_MODE_STORAGE_KEY,
+  THEME_MODE_SYSTEM,
+  THEME_MODE_LIGHT,
+  THEME_MODE_DARK,
+} from "../constants";
 
 export type ThemeMode = "system" | "light" | "dark";
 
-const THEME_MODE_STORAGE_KEY = "calorie-tracker-theme-mode-v1";
 
 type ThemeModeContextValue = {
   mode: ThemeMode;
@@ -21,12 +26,12 @@ type ThemeModeContextValue = {
 const ThemeModeContext = createContext<ThemeModeContextValue | null>(null);
 
 export function ThemeModeProvider({ children }: { children: ReactNode }) {
-  const [mode, setModeState] = useState<ThemeMode>("system");
+  const [mode, setModeState] = useState<ThemeMode>(THEME_MODE_SYSTEM);
 
   useEffect(() => {
     try {
       const stored = kvStore.getString(THEME_MODE_STORAGE_KEY);
-      if (stored === "light" || stored === "dark" || stored === "system") {
+      if (stored === THEME_MODE_LIGHT || stored === THEME_MODE_DARK || stored === THEME_MODE_SYSTEM) {
         setModeState(stored);
       }
     } catch {

@@ -67,6 +67,8 @@ import type {
 } from "../data/storage";
 import { useThemeMode, type ThemeMode } from "../ui/themeMode";
 
+import { AUTO_SYNC_INTERVAL_MS } from "../constants";
+
 type HealthConnectModule = typeof import("react-native-health-connect");
 const healthConnect: HealthConnectModule | null =
   Platform.OS === "android" ? require("react-native-health-connect") : null;
@@ -837,7 +839,7 @@ export default function SettingsScreen() {
 
     const initialTimer = setTimeout(doAutoSync, 1);
     // Periodic sync every hour
-    const interval = setInterval(doAutoSync, 60 * 60 * 1000);
+    const interval = setInterval(doAutoSync, AUTO_SYNC_INTERVAL_MS);
 
     return () => {
       clearTimeout(initialTimer);

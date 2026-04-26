@@ -18,7 +18,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { PaperProvider } from "react-native-paper";
+import { PaperProvider, type MD3Theme } from "react-native-paper";
 import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
 
 import GoalsScreen from "../screens/GoalsScreen";
@@ -28,16 +28,33 @@ import SettingsScreen from "../screens/SettingsScreen";
 import { loadStoredData } from "../data/storage";
 import { ThemeModeProvider, useThemeMode } from "../ui/themeMode";
 import { APP_DARK_THEME, APP_LIGHT_THEME } from "../constants/Colors";
+import {
+  TAB_ICON_LOG,
+  TAB_ICON_GRAPHS,
+  TAB_ICON_GOALS,
+  TAB_ICON_SETTINGS,
+  TAB_RIPPLE_DURATION_MS,
+  TAB_BAR_HEIGHT_BASE,
+  TAB_BAR_PADDING_TOP,
+  TAB_BAR_PADDING_BOTTOM_MIN,
+  TAB_ICON_SIZE_FOCUSED,
+  TAB_ICON_SIZE_UNFOCUSED,
+  TAB_LABEL_FONT_SIZE,
+  TAB_LABEL_FONT_WEIGHT,
+  TAB_LABEL_PADDING_BOTTOM,
+  TAB_RIPPLE_SIZE,
+  TAB_RIPPLE_BORDER_RADIUS,
+} from "../constants";
 
 const Tab = createBottomTabNavigator();
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 const TAB_ICONS: Record<string, IconName> = {
-  Log: "food-apple-outline",
-  Graphs: "chart-bar",
-  Goals: "bullseye",
-  Settings: "cog-outline",
+  Log: TAB_ICON_LOG,
+  Graphs: TAB_ICON_GRAPHS,
+  Goals: TAB_ICON_GOALS,
+  Settings: TAB_ICON_SETTINGS,
 };
 
 function RippleTabBarButton({
@@ -60,13 +77,13 @@ function RippleTabBarButton({
     Animated.parallel([
       Animated.timing(rippleScale, {
         toValue: 1,
-        duration: 320,
+        duration: TAB_RIPPLE_DURATION_MS,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(rippleOpacity, {
         toValue: 0,
-        duration: 320,
+        duration: TAB_RIPPLE_DURATION_MS,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
@@ -191,16 +208,16 @@ function AppTabs({
             backgroundColor: theme.colors.surface,
             borderTopColor: theme.colors.outlineVariant,
             borderTopWidth: 1,
-            height: 66 + insets.bottom,
-            paddingTop: 8,
-            paddingBottom: Math.max(10, insets.bottom),
+            height: TAB_BAR_HEIGHT_BASE + insets.bottom,
+            paddingTop: TAB_BAR_PADDING_TOP,
+            paddingBottom: Math.max(TAB_BAR_PADDING_BOTTOM_MIN, insets.bottom),
           },
           tabBarActiveTintColor: theme.colors.primary,
           tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
           tabBarLabelStyle: {
-            fontSize: 12,
-            fontWeight: "700",
-            paddingBottom: 3,
+            fontSize: TAB_LABEL_FONT_SIZE,
+            fontWeight: TAB_LABEL_FONT_WEIGHT,
+            paddingBottom: TAB_LABEL_PADDING_BOTTOM,
           },
           tabBarButton: (props) => (
             <RippleTabBarButton {...props} rippleColor={theme.colors.primary} />
@@ -209,7 +226,7 @@ function AppTabs({
             <MaterialCommunityIcons
               name={TAB_ICONS[route.name] ?? "circle-outline"}
               color={color}
-              size={focused ? 24 : 22}
+              size={focused ? TAB_ICON_SIZE_FOCUSED : TAB_ICON_SIZE_UNFOCUSED}
             />
           ),
         })}
@@ -231,8 +248,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   tabRipple: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: TAB_RIPPLE_SIZE,
+    height: TAB_RIPPLE_SIZE,
+    borderRadius: TAB_RIPPLE_BORDER_RADIUS,
   },
 });

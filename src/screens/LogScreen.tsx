@@ -56,6 +56,12 @@ import {
 } from "../data/storage";
 import type { MealEntry, StoredData } from "../data/storage";
 
+import {
+  MAX_VISIBLE_ENTRIES,
+  MAX_FAVORITE_QUICK_ADDS,
+  LOG_ENTRY_MAX_WIDTH,
+} from "../constants";
+
 export type NutritionResult = {
   calories: number;
   protein: number;
@@ -825,7 +831,7 @@ export default function LogScreen() {
     [favoriteQuickAdds],
   );
   const visibleEntries = useMemo(
-    () => sortedTodayEntries.slice(0, 40),
+    () => sortedTodayEntries.slice(0, MAX_VISIBLE_ENTRIES),
     [sortedTodayEntries],
   );
   const todayCalories = todayEntries.reduce((sum, e) => sum + e.calories, 0);
@@ -1048,7 +1054,7 @@ export default function LogScreen() {
       const exists = current.some((fav) => quickAddKey(fav) === key);
       const nextFavorites = exists
         ? current.filter((fav) => quickAddKey(fav) !== key)
-        : [item, ...current].slice(0, 24);
+        : [item, ...current].slice(0, MAX_FAVORITE_QUICK_ADDS);
       return { ...prev, favoriteQuickAdds: nextFavorites };
     });
   }, []);
@@ -2171,7 +2177,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     gap: 12,
-    maxWidth: 500,
+    maxWidth: LOG_ENTRY_MAX_WIDTH,
     width: "100%",
   },
   macrosSection: { marginTop: 8, paddingTop: 8, borderTopWidth: 1 },

@@ -1,5 +1,6 @@
 import { createMMKV } from "react-native-mmkv";
+import { MMKV_INSTANCE_ID } from "../constants";
 
 export const kvStore = createMMKV({
-  id: "calorie-tracker-mmkv-v1",
+  id: MMKV_INSTANCE_ID,
 });

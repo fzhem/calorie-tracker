@@ -5,16 +5,32 @@ import type {
   MetabolismSex,
   StoredData,
 } from "../data/storage";
+import {
+  KCAL_PER_KG_BODY_WEIGHT,
+  ACTIVITY_FACTOR_BY_LEVEL,
+  BMR_WEIGHT_COEFF,
+  BMR_HEIGHT_COEFF,
+  BMR_AGE_COEFF,
+  BMR_MALE_OFFSET,
+  BMR_FEMALE_OFFSET,
+  CALORIES_PER_GRAM_PROTEIN,
+  CALORIES_PER_GRAM_CARBS,
+  CALORIES_PER_GRAM_FAT,
+  DEFAULT_MACRO_RATIOS,
+  DEFAULT_CALORIE_ADJUSTMENT,
+  DEFAULT_PERCENT_PER_WEEK,
+  PHASE_CUT,
+  PHASE_BULK,
+  PHASE_MAINTAIN,
+  ADJUSTMENT_TYPE_KCAL,
+  ADJUSTMENT_TYPE_PERCENT,
+  SEX_UNSPECIFIED,
+  SEX_MALE,
+  SEX_FEMALE,
+  SOURCE_HEALTH_CONNECT,
+} from "../constants";
 
-const KCAL_PER_KG_BODY_WEIGHT = 7700;
 
-const ACTIVITY_FACTOR_BY_LEVEL: Record<ActivityLevel, number> = {
-  sedentary: 1.2,
-  light: 1.375,
-  moderate: 1.55,
-  heavy: 1.725,
-  athlete: 1.9,
-};
 
 type MetabolismInput = {
   weightKg: number | null;
@@ -55,14 +71,14 @@ export function getGoalCalorieDelta(
 ) {
   const safeAdjustmentKcal = Math.max(
     0,
-    Math.round(options?.adjustmentKcal ?? 500),
+    Math.round(options?.adjustmentKcal ?? DEFAULT_CALORIE_ADJUSTMENT),
   );
-  const safePercentPerWeek = Math.max(0, options?.percentPerWeek ?? 1);
+  const safePercentPerWeek = Math.max(0, options?.percentPerWeek ?? DEFAULT_PERCENT_PER_WEEK);
   const weightKg = options?.weightKg;
 
   let dailyDelta = safeAdjustmentKcal;
   if (
-    options?.adjustmentType === "percent" &&
+    options?.adjustmentType === ADJUSTMENT_TYPE_PERCENT &&
     typeof weightKg === "number" &&
     Number.isFinite(weightKg) &&
     weightKg > 0
@@ -72,8 +88,8 @@ export function getGoalCalorieDelta(
     dailyDelta = Math.round((weeklyKgDelta * KCAL_PER_KG_BODY_WEIGHT) / 7);
   }
 
-  if (goalPhase === "cut") return -dailyDelta;
-  if (goalPhase === "bulk") return dailyDelta;
+  if (goalPhase === PHASE_CUT) return -dailyDelta;
+  if (goalPhase === PHASE_BULK) return dailyDelta;
   return 0;
 }
 
@@ -84,13 +100,13 @@ export function estimateMetabolism(input: MetabolismInput): MetabolismMetrics {
     !isPositiveNumber(weightKg) ||
     !isPositiveNumber(heightCm) ||
     !isPositiveNumber(ageYears) ||
-    sex === "unspecified"
+    sex === SEX_UNSPECIFIED
   ) {
     return { bmr: null, tdee: null, maintenanceCalories: null };
   }
 
-  const sexOffset = sex === "male" ? 5 : -161;
-  const bmr = 10 * weightKg + 6.25 * heightCm - 5 * ageYears + sexOffset;
+  const sexOffset = sex === SEX_MALE ? BMR_MALE_OFFSET : BMR_FEMALE_OFFSET;
+  const bmr = BMR_WEIGHT_COEFF * weightKg + BMR_HEIGHT_COEFF * heightCm - BMR_AGE_COEFF * ageYears + sexOffset;
   const tdee = bmr * getActivityFactor(activityLevel);
 
   return {
@@ -102,7 +118,7 @@ export function estimateMetabolism(input: MetabolismInput): MetabolismMetrics {
 
 export function getAdjustedCalorieTarget(data: StoredData) {
   const latestHealthConnectWeight =
-    data.weightHistory.find((point) => point.source === "health-connect")
+    data.weightHistory.find((point) => point.source === SOURCE_HEALTH_CONNECT)
       ?.weightKg ?? null;
   const effectiveWeightKg = data.manualWeightKg ?? latestHealthConnectWeight;
 
@@ -114,25 +130,25 @@ export function getAdjustedCalorieTarget(data: StoredData) {
     activityLevel: data.activityLevel,
   });
 
-  const goalDelta = getGoalCalorieDelta(data.goalPhase ?? "maintain", {
+  const goalDelta = getGoalCalorieDelta(data.goalPhase ?? PHASE_MAINTAIN, {
     adjustmentType:
-      data.goalPhase === "cut"
-        ? (data.cutAdjustmentType ?? "kcal")
-        : data.goalPhase === "bulk"
-          ? (data.bulkAdjustmentType ?? "kcal")
-          : "kcal",
+      data.goalPhase === PHASE_CUT
+        ? (data.cutAdjustmentType ?? ADJUSTMENT_TYPE_KCAL)
+        : data.goalPhase === PHASE_BULK
+          ? (data.bulkAdjustmentType ?? ADJUSTMENT_TYPE_KCAL)
+          : ADJUSTMENT_TYPE_KCAL,
     adjustmentKcal:
-      data.goalPhase === "cut"
-        ? (data.cutCalorieAdjustment ?? 500)
-        : data.goalPhase === "bulk"
-          ? (data.bulkCalorieAdjustment ?? 500)
-          : 500,
+      data.goalPhase === PHASE_CUT
+        ? (data.cutCalorieAdjustment ?? DEFAULT_CALORIE_ADJUSTMENT)
+        : data.goalPhase === PHASE_BULK
+          ? (data.bulkCalorieAdjustment ?? DEFAULT_CALORIE_ADJUSTMENT)
+          : DEFAULT_CALORIE_ADJUSTMENT,
     percentPerWeek:
-      data.goalPhase === "cut"
-        ? (data.cutPercentPerWeek ?? 1)
-        : data.goalPhase === "bulk"
-          ? (data.bulkPercentPerWeek ?? 1)
-          : 1,
+      data.goalPhase === PHASE_CUT
+        ? (data.cutPercentPerWeek ?? DEFAULT_PERCENT_PER_WEEK)
+        : data.goalPhase === PHASE_BULK
+          ? (data.bulkPercentPerWeek ?? DEFAULT_PERCENT_PER_WEEK)
+          : DEFAULT_PERCENT_PER_WEEK,
     weightKg: effectiveWeightKg,
   });
 
@@ -160,23 +176,15 @@ export function getAutoMacroTargets(
 
   // Use a simple phase-aware split with slightly higher protein for cuts
   // and higher carbs for bulks.
-  let proteinRatio = 0.3;
-  let carbsRatio = 0.4;
-  let fatRatio = 0.3;
-
-  if (goalPhase === "cut") {
-    proteinRatio = 0.35;
-    carbsRatio = 0.35;
-    fatRatio = 0.3;
-  } else if (goalPhase === "bulk") {
-    proteinRatio = 0.3;
-    carbsRatio = 0.45;
-    fatRatio = 0.25;
-  }
+  const ratio = goalPhase === PHASE_CUT
+    ? DEFAULT_MACRO_RATIOS.cut
+    : goalPhase === PHASE_BULK
+      ? DEFAULT_MACRO_RATIOS.bulk
+      : DEFAULT_MACRO_RATIOS.maintain;
 
   return {
-    proteinGrams: Math.round((safeCalories * proteinRatio) / 4),
-    carbsGrams: Math.round((safeCalories * carbsRatio) / 4),
-    fatGrams: Math.round((safeCalories * fatRatio) / 9),
+    proteinGrams: Math.round((safeCalories * ratio.protein) / CALORIES_PER_GRAM_PROTEIN),
+    carbsGrams: Math.round((safeCalories * ratio.carbs) / CALORIES_PER_GRAM_CARBS),
+    fatGrams: Math.round((safeCalories * ratio.fat) / CALORIES_PER_GRAM_FAT),
   };
 }
