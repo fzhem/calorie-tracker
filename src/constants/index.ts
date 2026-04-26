@@ -138,6 +138,7 @@ export const ISO_DAY_END_SUFFIX = "T23:59:59.999Z";
 
 // ── Graph Defaults ───────────────────────────────────────────
 export const GRAPH_MAX_DAYS_SHORT = 7;
+export const GRAPH_MAX_DAYS_MEDIUM = 90;
 export const GRAPH_MAX_DAYS_LONG = 365;
 
 // ── Weight Trend EMA ─────────────────────────────────────────
