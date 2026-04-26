@@ -1651,6 +1651,9 @@ export default function SettingsScreen() {
                                   backgroundColor: isBlocked
                                     ? theme.colors.error
                                     : theme.colors.tertiary,
+                                  paddingHorizontal: 6,
+                                  paddingVertical: 2,
+                                  borderRadius: 6,
                                 },
                               ]}
                             >
@@ -1666,7 +1669,8 @@ export default function SettingsScreen() {
                                 style={{
                                   fontSize: 10,
                                   fontWeight: "700",
-                                  color: isBlocked ? "#000000" : "#000000",
+                                  color: "#000000",
+                                  textShadowRadius: 1,
                                 }}
                               >
                                 {isBlocked ? "Low RAM" : "Warning"}
@@ -1693,6 +1697,9 @@ export default function SettingsScreen() {
                                 {
                                   color: theme.colors.error,
                                   fontWeight: "700",
+                                  textShadowColor: "rgba(255, 82, 82, 0.4)",
+                                  textShadowOffset: { width: 0, height: 0 },
+                                  textShadowRadius: 4,
                                 },
                               ]}
                             >

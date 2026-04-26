@@ -51,7 +51,7 @@ const APP_LIGHT_THEME: MD3Theme = {
     surfaceVariant: "#dbe7dc",
     onSurfaceVariant: "#344f40",
     outline: "#6f8475",
-    error: "#ba1a1a",
+    error: "#b71c1c",
     inversePrimary: "#4f378b",
   },
 };
@@ -72,7 +72,7 @@ const APP_DARK_THEME: MD3Theme = {
     surfaceVariant: "#1c1f1d",
     onSurfaceVariant: "#c3c9c4",
     outline: "#7b837d",
-    error: "#ba1a1a",
+    error: "#f44336",
     inversePrimary: "#4f378b",
     elevation: {
       level0: "#000000",
