@@ -54,13 +54,19 @@ import {
   loadStoredData,
   saveStoredData,
 } from "../data/storage";
-import type { MealEntry, StoredData } from "../data/storage";
+import type { StoredData } from "../data/storage";
+import type { Meal } from "../db/index";
 
 import {
   MAX_VISIBLE_ENTRIES,
   MAX_FAVORITE_QUICK_ADDS,
   LOG_ENTRY_MAX_WIDTH,
 } from "../constants";
+
+import { insertMeal, getMealsForDay, deleteMeal, updateMeal, getLatestWeightBySource } from "../db/index";
+import { makeMealId } from "../db/helpers";
+import { invalidateCachePrefix } from "../lib/queryCache";
+
 
 export type NutritionResult = {
   calories: number;
@@ -138,9 +144,6 @@ function parseNumberInput(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function createId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
 
 function quickAddKey(item: QuickAddItem) {
   return `${item.title.toLowerCase()}-${item.calories}-${item.proteinGrams ?? ""}-${item.fatGrams ?? ""}-${item.carbsGrams ?? ""}-${item.fiberGrams ?? ""}`;
@@ -749,6 +752,10 @@ export default function LogScreen() {
   const [data, setData] = useState<StoredData>(
     () => getCachedData() ?? DEFAULT_DATA,
   );
+
+  const todayKey = getLocalDateKey(new Date());
+  const [entries, setEntries] = useState<Meal[]>([]);
+  const [latestHCWeightKg, setLatestHCWeightKg] = useState<number | null>(null);
   const [isReady, setIsReady] = useState(false);
   const hasCompletedInitialLoad = useRef(false);
   const [sortMode, setSortMode] = useState<SortMode>("newest");
@@ -769,6 +776,22 @@ export default function LogScreen() {
       });
   }, []);
 
+  // Load today's entries from DB
+  useEffect(() => {
+    if (!isReady) return;
+    getMealsForDay(todayKey)
+      .then(setEntries)
+      .catch(() => {});
+  }, [isReady, todayKey]);
+
+  // Load latest health-connect weight for calorie target calculation
+  useEffect(() => {
+    if (!isReady) return;
+    getLatestWeightBySource("health-connect")
+      .then((point) => setLatestHCWeightKg(point?.weightKg ?? null))
+      .catch(() => {});
+  }, [isReady]);
+
   useFocusEffect(
     useCallback(() => {
       if (!hasCompletedInitialLoad.current) return;
@@ -777,9 +800,13 @@ export default function LogScreen() {
         .catch(() =>
           Alert.alert("Storage error", "Saved data could not be loaded."),
         );
+      // Refresh today's entries from DB on focus
+      const key = getLocalDateKey(new Date());
+      getMealsForDay(key).then(setEntries).catch(() => {});
     }, []),
   );
 
+  // Persist settings (but not meal entries – those are in SQLite)
   useEffect(() => {
     if (!isReady) return;
     saveStoredData(data).catch(() =>
@@ -787,14 +814,8 @@ export default function LogScreen() {
     );
   }, [data, isReady]);
 
-  const todayKey = getLocalDateKey(new Date());
-  const todayEntries = useMemo(
-    () =>
-      data.entries.filter(
-        (e) => getLocalDateKey(new Date(e.loggedAt)) === todayKey,
-      ),
-    [data.entries, todayKey],
-  );
+  // todayKey computed earlier above the state declarations
+  const todayEntries = entries;
   const sortedTodayEntries = useMemo(() => {
     const list = [...todayEntries];
     list.sort((a, b) => {
@@ -806,7 +827,7 @@ export default function LogScreen() {
   }, [sortMode, todayEntries]);
   const recentQuickAdds = useMemo(() => {
     const unique = new Map<string, QuickAddItem>();
-    for (const entry of data.entries) {
+    for (const entry of entries) {
       const key = quickAddKey({ title: entry.title, calories: entry.calories });
       if (!unique.has(key)) {
         unique.set(key, {
@@ -821,7 +842,7 @@ export default function LogScreen() {
       if (unique.size >= 8) break;
     }
     return Array.from(unique.values());
-  }, [data.entries]);
+  }, [entries]);
   const favoriteQuickAdds = useMemo(
     () => data.favoriteQuickAdds ?? [],
     [data.favoriteQuickAdds],
@@ -836,8 +857,8 @@ export default function LogScreen() {
   );
   const todayCalories = todayEntries.reduce((sum, e) => sum + e.calories, 0);
   const { adjustedTarget, goalDelta, metabolism } = useMemo(
-    () => getAdjustedCalorieTarget(data),
-    [data],
+    () => getAdjustedCalorieTarget(data, latestHCWeightKg),
+    [data, latestHCWeightKg],
   );
   const remaining = adjustedTarget - todayCalories;
   const progress = Math.min(todayCalories / Math.max(adjustedTarget, 1), 1);
@@ -1008,41 +1029,37 @@ export default function LogScreen() {
   );
 
   const addMeal = useCallback((item: QuickAddItem) => {
-    setData((prev) => ({
-      ...prev,
-      entries: [
-        {
-          id: createId(),
-          title: item.title,
-          calories: item.calories,
-          proteinGrams: item.proteinGrams ?? null,
-          fatGrams: item.fatGrams ?? null,
-          carbsGrams: item.carbsGrams ?? null,
-          fiberGrams: item.fiberGrams ?? null,
-          loggedAt: new Date().toISOString(),
-        },
-        ...prev.entries,
-      ],
-    }));
+    const now = new Date().toISOString();
+    const meal = {
+      id: makeMealId({ loggedAt: now, title: item.title, calories: item.calories }),
+      title: item.title,
+      calories: item.calories,
+      proteinGrams: item.proteinGrams ?? null,
+      fatGrams: item.fatGrams ?? null,
+      carbsGrams: item.carbsGrams ?? null,
+      fiberGrams: item.fiberGrams ?? null,
+      loggedAt: now,
+    };
+    insertMeal(meal).catch(() => {});
+    invalidateCachePrefix("meals:");
+    setEntries((prev) => [meal, ...prev]);
   }, []);
 
   const quickAddMeal = useCallback((item: QuickAddItem) => {
-    setData((prev) => ({
-      ...prev,
-      entries: [
-        {
-          id: createId(),
-          title: item.title,
-          calories: item.calories,
-          proteinGrams: item.proteinGrams ?? null,
-          fatGrams: item.fatGrams ?? null,
-          carbsGrams: item.carbsGrams ?? null,
-          fiberGrams: item.fiberGrams ?? null,
-          loggedAt: new Date().toISOString(),
-        },
-        ...prev.entries,
-      ],
-    }));
+    const now = new Date().toISOString();
+    const meal = {
+      id: makeMealId({ loggedAt: now, title: item.title, calories: item.calories }),
+      title: item.title,
+      calories: item.calories,
+      proteinGrams: item.proteinGrams ?? null,
+      fatGrams: item.fatGrams ?? null,
+      carbsGrams: item.carbsGrams ?? null,
+      fiberGrams: item.fiberGrams ?? null,
+      loggedAt: now,
+    };
+    insertMeal(meal).catch(() => {});
+    invalidateCachePrefix("meals:");
+    setEntries((prev) => [meal, ...prev]);
     Vibration.vibrate(10);
   }, []);
 
@@ -1060,13 +1077,12 @@ export default function LogScreen() {
   }, []);
 
   const deleteEntry = useCallback((id: string) => {
-    setData((prev) => ({
-      ...prev,
-      entries: prev.entries.filter((e) => e.id !== id),
-    }));
+    deleteMeal(id).catch(() => {});
+    invalidateCachePrefix("meals:");
+    setEntries((prev) => prev.filter((e) => e.id !== id));
   }, []);
 
-  const openEditEntry = useCallback((entry: MealEntry) => {
+  const openEditEntry = useCallback((entry: Meal) => {
     Vibration.vibrate(10);
     setShowEditMacros(false);
     setEditDraft({
@@ -1125,23 +1141,24 @@ export default function LogScreen() {
       return;
     }
 
-    setData((prev) => ({
-      ...prev,
-      entries: prev.entries.map((entry) =>
+    const updatedEntry = {
+      title: editDraft.title.trim(),
+      calories: Math.round(calories),
+      proteinGrams:
+        protein !== null ? Math.round(protein * 10) / 10 : null,
+      fatGrams: fat !== null ? Math.round(fat * 10) / 10 : null,
+      carbsGrams: carbs !== null ? Math.round(carbs * 10) / 10 : null,
+      fiberGrams: fiber !== null ? Math.round(fiber * 10) / 10 : null,
+    };
+    updateMeal(editDraft.id, updatedEntry).catch(() => {});
+    invalidateCachePrefix("meals:");
+    setEntries((prev) =>
+      prev.map((entry) =>
         entry.id === editDraft.id
-          ? {
-              ...entry,
-              title: editDraft.title.trim(),
-              calories: Math.round(calories),
-              proteinGrams:
-                protein !== null ? Math.round(protein * 10) / 10 : null,
-              fatGrams: fat !== null ? Math.round(fat * 10) / 10 : null,
-              carbsGrams: carbs !== null ? Math.round(carbs * 10) / 10 : null,
-              fiberGrams: fiber !== null ? Math.round(fiber * 10) / 10 : null,
-            }
+          ? { ...entry, ...updatedEntry }
           : entry,
       ),
-    }));
+    );
     closeEditModal();
   }, [closeEditModal, editDraft]);
 

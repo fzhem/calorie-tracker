@@ -116,11 +116,11 @@ export function estimateMetabolism(input: MetabolismInput): MetabolismMetrics {
   };
 }
 
-export function getAdjustedCalorieTarget(data: StoredData) {
-  const latestHealthConnectWeight =
-    data.weightHistory.find((point) => point.source === SOURCE_HEALTH_CONNECT)
-      ?.weightKg ?? null;
-  const effectiveWeightKg = data.manualWeightKg ?? latestHealthConnectWeight;
+export function getAdjustedCalorieTarget(
+  data: StoredData,
+  latestHealthConnectWeightKg?: number | null,
+) {
+  const effectiveWeightKg = data.manualWeightKg ?? latestHealthConnectWeightKg ?? null;
 
   const metabolism = estimateMetabolism({
     weightKg: effectiveWeightKg,

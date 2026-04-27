@@ -33,8 +33,8 @@ import type {
   GoalAdjustmentType,
   GoalPhase,
   StoredData,
-  WeightPoint,
 } from "../data/storage";
+import type { Weight } from "../db/index";
 import {
   estimateMetabolism,
   getActivityFactor,
@@ -45,6 +45,11 @@ import {
   DEFAULT_BASE_TARGET_CALORIES,
   DEFAULT_CALORIES_PER_KG,
 } from "../constants";
+
+import { insertWeight, getLatestWeightBySource, getLatestBodyFat, deleteWeightBySource } from "../db/index";
+import { makeWeightId } from "../db/helpers";
+import { getCachedOrFetch, invalidateCache, invalidateCachePrefix } from "../lib/queryCache";
+
 
 const KG_PER_LB = 0.45359237;
 const CM_PER_IN = 2.54;
@@ -99,10 +104,10 @@ function parseNumberInput(value: string) {
 }
 
 function mergeWeightHistory(
-  existing: WeightPoint[],
-  incoming: WeightPoint[],
-): WeightPoint[] {
-  const keyed = new Map<string, WeightPoint>();
+  existing: Weight[],
+  incoming: Weight[],
+): Weight[] {
+  const keyed = new Map<string, Weight>();
   for (const p of [...existing, ...incoming])
     keyed.set(`${p.source}-${p.recordedAt}`, p);
   return Array.from(keyed.values()).sort(
@@ -253,6 +258,14 @@ export default function GoalsScreen() {
       });
   }, []);
 
+  // Fetch latest health-connect weight on mount so metabolism can use it
+  const [latestHealthConnectWeightKg, setLatestHealthConnectWeightKg] = useState<number | null>(null);
+  useEffect(() => {
+    getLatestWeightBySource("health-connect").then((point) => {
+      setLatestHealthConnectWeightKg(point?.weightKg ?? null);
+    });
+  }, []);
+
   useEffect(() => {
     if (!isReady) return;
     saveStoredData(data).catch(() =>
@@ -282,6 +295,10 @@ export default function GoalsScreen() {
           setFiberGoalInput(
             next.fiberGoalGrams ? `${next.fiberGoalGrams}` : "",
           );
+          // Re-fetch latest health-connect weight so the metabolism display is up to date
+          getLatestWeightBySource("health-connect").then((point) => {
+            setLatestHealthConnectWeightKg(point?.weightKg ?? null);
+          });
         })
         .catch(() => {});
     }, [weightUnit]),
@@ -608,33 +625,35 @@ export default function GoalsScreen() {
       return;
     }
 
-    setData((prev) => {
-      let nextWeightHistory = prev.weightHistory;
-      if (nextWeightKg && nextWeightKg > 0) {
-        nextWeightHistory = mergeWeightHistory(prev.weightHistory, [
-          {
-            recordedAt: new Date().toISOString(),
-            weightKg: roundTo(nextWeightKg, 2),
-            source: "manual",
-          },
-        ]);
-      }
-      return {
-        ...prev,
-        baseTarget: Math.round(nextBase),
-        caloriesPerKg: roundTo(nextPerKg, 1),
-        metabolismAgeYears: nextAge !== null ? Math.round(nextAge) : null,
-        metabolismHeightCm:
-          nextHeightCm !== null ? roundTo(nextHeightCm, 1) : null,
-        manualWeightKg:
-          nextWeightKg && nextWeightKg > 0 ? roundTo(nextWeightKg, 2) : null,
-        weightHistory: nextWeightHistory,
-        proteinGoalGrams: nextProtein !== null ? roundTo(nextProtein, 1) : null,
-        fatGoalGrams: nextFat !== null ? roundTo(nextFat, 1) : null,
-        carbsGoalGrams: nextCarbs !== null ? roundTo(nextCarbs, 1) : null,
-        fiberGoalGrams: nextFiber !== null ? roundTo(nextFiber, 1) : null,
-      };
-    });
+    if (nextWeightKg && nextWeightKg > 0) {
+      insertWeight({
+        recordedAt: new Date().toISOString(),
+        weightKg: roundTo(nextWeightKg, 2),
+        source: "manual",
+        originAppId: null,
+        originAppName: null,
+        originDevice: null,
+      }).catch(() => {});
+    }
+    // Invalidate caches so other screens (Graphs) pick up the new manual weight
+    invalidateCachePrefix("weightSeries:");
+    invalidateCache("latestWeight");
+
+
+    setData((prev) => ({
+      ...prev,
+      baseTarget: Math.round(nextBase),
+      caloriesPerKg: roundTo(nextPerKg, 1),
+      metabolismAgeYears: nextAge !== null ? Math.round(nextAge) : null,
+      metabolismHeightCm:
+        nextHeightCm !== null ? roundTo(nextHeightCm, 1) : null,
+      manualWeightKg:
+        nextWeightKg && nextWeightKg > 0 ? roundTo(nextWeightKg, 2) : null,
+      proteinGoalGrams: nextProtein !== null ? roundTo(nextProtein, 1) : null,
+      fatGoalGrams: nextFat !== null ? roundTo(nextFat, 1) : null,
+      carbsGoalGrams: nextCarbs !== null ? roundTo(nextCarbs, 1) : null,
+      fiberGoalGrams: nextFiber !== null ? roundTo(nextFiber, 1) : null,
+    }));
 
     setManualWeightInput(
       nextWeightKg && nextWeightKg > 0
@@ -670,24 +689,19 @@ export default function GoalsScreen() {
   const clearManualWeight = () => {
     Vibration.vibrate(40); // Vibrate for 40ms
     setManualWeightInput("");
+    deleteWeightBySource("manual").catch(() => {});
+    // Invalidate caches when manual weight is cleared
+    invalidateCachePrefix("weightSeries:");
+    invalidateCache("latestWeight");
     setData((prev) => ({
       ...prev,
       manualWeightKg: null,
-      weightHistory: prev.weightHistory.filter(
-        (point) => point.source !== "manual",
-      ),
     }));
   };
+  const hasSavedManualWeight = data.manualWeightKg !== null;
 
-  const hasSavedManualWeight =
-    data.manualWeightKg !== null ||
-    data.weightHistory.some((point) => point.source === "manual");
-
-  const latestHealthConnectWeightPoint =
-    data.weightHistory.find((point) => point.source === "health-connect") ??
-    null;
   const latestWeight =
-    data.manualWeightKg ?? latestHealthConnectWeightPoint?.weightKg ?? null;
+    data.manualWeightKg ?? latestHealthConnectWeightKg ?? null;
   const metabolism = estimateMetabolism({
     weightKg: latestWeight,
     heightCm: data.metabolismHeightCm,

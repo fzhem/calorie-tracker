@@ -14,7 +14,7 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.fzhem.calorietracker",
+      "package": "com.sus.calorietracker",
       "displayName": "Calorie Tracker",
       "adaptiveIcon": {
         "foregroundImage": "./assets/ic_launcher-playstore.png",

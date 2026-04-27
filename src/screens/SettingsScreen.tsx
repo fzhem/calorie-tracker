@@ -59,15 +59,16 @@ import {
   loadStoredData as readStoredData,
   saveStoredData,
 } from "../data/storage";
+import type { Weight, BodyFat } from "../db/index";
 import type {
-  BodyFatPoint,
   ModelConfig,
   StoredData,
-  WeightPoint,
 } from "../data/storage";
 import { useThemeMode, type ThemeMode } from "../ui/themeMode";
 
 import { AUTO_SYNC_INTERVAL_MS } from "../constants";
+import { insertWeight, insertBodyFat, getLatestWeight, getLatestBodyFat } from "../db/index";
+import { invalidateCache, invalidateCachePrefix } from "../lib/queryCache";
 
 type HealthConnectModule = typeof import("react-native-health-connect");
 const healthConnect: HealthConnectModule | null =
@@ -443,31 +444,6 @@ function roundTo(value: number, digits = 1) {
   return Math.round(value * 10 ** digits) / 10 ** digits;
 }
 
-function mergeWeightHistory(
-  existing: WeightPoint[],
-  incoming: WeightPoint[],
-): WeightPoint[] {
-  const keyed = new Map<string, WeightPoint>();
-  for (const p of [...existing, ...incoming])
-    keyed.set(`${p.source}-${p.recordedAt}`, p);
-  return Array.from(keyed.values()).sort(
-    (a, b) =>
-      new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
-  );
-}
-
-function mergeBodyFatHistory(
-  existing: BodyFatPoint[],
-  incoming: BodyFatPoint[],
-): BodyFatPoint[] {
-  const keyed = new Map<string, BodyFatPoint>();
-  for (const p of [...existing, ...incoming])
-    keyed.set(`${p.source}-${p.recordedAt}`, p);
-  return Array.from(keyed.values()).sort(
-    (a, b) =>
-      new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
-  );
-}
 
 function formatDisplayDate(value: string) {
   return new Date(value).toLocaleString(undefined, {
@@ -613,7 +589,7 @@ function extractHealthOrigin(record: unknown) {
     originAppId,
     originAppName: getKnownOriginAppName(originAppId) ?? originAppId,
     originDevice,
-  } as Pick<WeightPoint, "originAppId" | "originAppName" | "originDevice">;
+  } as Pick<Weight, "originAppId" | "originAppName" | "originDevice">;
 }
 
 function formatBytes(value: number | null) {
@@ -735,6 +711,13 @@ export default function SettingsScreen() {
       }
       const json = await file.text();
       await importUserData(json);
+      // Refresh latest weight & body fat from DB after import
+      getLatestWeight().then((point) =>
+        setLatestWeight(point?.weightKg ?? null),
+      );
+      getLatestBodyFat().then((point) =>
+        setLatestBodyFat(point?.bodyFatPercentage ?? null),
+      );
       Alert.alert("Import successful", "Your data has been imported.");
     } catch (error) {
       Alert.alert(
@@ -747,7 +730,7 @@ export default function SettingsScreen() {
   const handleExportData = async () => {
     try {
       setIsExporting(true);
-      const json = exportUserData();
+      const json = await exportUserData();
       const now = new Date();
       const timestamp = now
         .toISOString()
@@ -1114,14 +1097,14 @@ export default function SettingsScreen() {
         } while (pageToken);
       }
 
-      const synced: WeightPoint[] = allRecords.map((r) => ({
+      const synced: Omit<Weight, "id">[] = allRecords.map((r) => ({
         recordedAt: r.time,
         weightKg: roundTo(r.weight.inKilograms, 2),
         source: "health-connect",
         ...extractHealthOrigin(r),
       }));
 
-      const syncedBodyFat: BodyFatPoint[] = allBodyFatRecords
+      const syncedBodyFat: Omit<BodyFat, "id">[] = allBodyFatRecords
         .map((r) => {
           const raw =
             typeof r.percentage === "number"
@@ -1139,19 +1122,24 @@ export default function SettingsScreen() {
         })
         .filter((point) => Number.isFinite(point.bodyFatPercentage));
 
+      // Insert synced records into SQLite
+      for (const w of synced) {
+        await insertWeight(w).catch(() => {});
+      }
+      for (const bf of syncedBodyFat) {
+        await insertBodyFat(bf).catch(() => {});
+      }
       setData((prev) => ({
         ...prev,
-        weightHistory: mergeWeightHistory(
-          prev.weightHistory.filter((p) => p.source !== "health-connect"),
-          synced,
-        ),
-        bodyFatHistory: mergeBodyFatHistory(
-          prev.bodyFatHistory.filter((p) => p.source !== "health-connect"),
-          syncedBodyFat,
-        ),
         lastWeightSyncAt: new Date().toISOString(),
         lastBodyFatSyncAt: new Date().toISOString(),
       }));
+      // Invalidate cached weight/body-fat so GraphsScreen picks up the fresh data
+      invalidateCachePrefix("weightSeries:");
+      invalidateCachePrefix("bodyFatSeries:");
+      invalidateCache("latestWeight");
+      invalidateCache("latestBodyFat");
+
 
       setHealthStatus("available");
     } catch (error) {
@@ -1359,8 +1347,13 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const latestWeight = data.weightHistory[0]?.weightKg ?? data.manualWeightKg;
-  const latestBodyFat = data.bodyFatHistory[0]?.bodyFatPercentage ?? null;
+  useEffect(() => {
+    getLatestWeight().then((point) => setLatestWeight(point?.weightKg ?? data.manualWeightKg));
+    getLatestBodyFat().then((point) => setLatestBodyFat(point?.bodyFatPercentage ?? null));
+  }, [data.manualWeightKg, data.lastWeightSyncAt, data.lastBodyFatSyncAt]);
+
+  const [latestWeight, setLatestWeight] = useState<number | null>(null);
+  const [latestBodyFat, setLatestBodyFat] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isReady || !data.modelPath) return;

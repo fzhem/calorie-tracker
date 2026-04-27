@@ -6,7 +6,7 @@
 export const STORAGE_KEY = "calorie-tracker-storage-v1";
 export const MMKV_INSTANCE_ID = "calorie-tracker-mmkv-v1";
 export const THEME_MODE_STORAGE_KEY = "calorie-tracker-theme-mode-v1";
-export const SQLITE_DB_NAME = "myDB";
+export const SQLITE_DB_NAME = "calorie-tracker-db";
 export const EXPORT_FILENAME_PREFIX = "calorie-tracker-export_";
 
 // ── Database Table Names ─────────────────────────────────────

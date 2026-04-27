@@ -27,6 +27,9 @@ import LogScreen from "../screens/LogScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import { loadStoredData } from "../data/storage";
 import { ThemeModeProvider, useThemeMode } from "../ui/themeMode";
+import { useMigrations } from "drizzle-orm/op-sqlite/migrator";
+import migrations from "../drizzle/migrations";
+import { database } from "../db";
 import { APP_DARK_THEME, APP_LIGHT_THEME } from "../constants/Colors";
 import {
   TAB_ICON_LOG,
@@ -121,6 +124,14 @@ function RippleTabBarButton({
 
 export default function App() {
   const [assetsReady, setAssetsReady] = useState(false);
+
+  const { success: migrationSuccess, error: migrationError } = useMigrations(database, migrations);
+
+  useEffect(() => {
+    if (migrationError) {
+      console.error("Migration failed:", migrationError);
+    }
+  }, [migrationError]);
 
   useEffect(() => {
     async function prepare() {
