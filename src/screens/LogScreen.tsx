@@ -10,7 +10,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import {
-  Alert,
   AppState,
   Modal,
   Platform,
@@ -33,6 +32,7 @@ import {
   TextInput,
   useTheme,
 } from "react-native-paper";
+import { useM3Alert } from "../ui/m3Alert";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -250,6 +250,7 @@ const QuickLogCard = memo(function QuickLogCard({
   const activeQuickAdds =
     quickAddTab === "favourites" ? favouriteQuickAdds : recentQuickAdds;
 
+  const m3Alert = useM3Alert();
   const addDraftMismatch = useMemo(() => {
     const calories = parseNumberInput(mealCalories);
     if (!calories || calories <= 0) return null;
@@ -275,7 +276,7 @@ const QuickLogCard = memo(function QuickLogCard({
   const handleAddMeal = useCallback(() => {
     const multiplier = parseNumberInput(mealMultiplier);
     if (!multiplier || multiplier <= 0) {
-      Alert.alert(
+      m3Alert.alert(
         "Invalid multiplier",
         "Multiplier must be a positive number.",
       );
@@ -289,27 +290,27 @@ const QuickLogCard = memo(function QuickLogCard({
     const fiber = mealFiber.trim() ? parseNumberInput(mealFiber) : null;
 
     if (!mealTitle.trim()) {
-      Alert.alert("Missing meal name", "Add a label.");
+      m3Alert.alert("Missing meal name", "Add a label.");
       return;
     }
     if (!calories || calories <= 0) {
-      Alert.alert("Invalid calories", "Enter a positive number.");
+      m3Alert.alert("Invalid calories", "Enter a positive number.");
       return;
     }
     if (protein !== null && protein < 0) {
-      Alert.alert("Invalid protein", "Protein must be 0 or more.");
+      m3Alert.alert("Invalid protein", "Protein must be 0 or more.");
       return;
     }
     if (fat !== null && fat < 0) {
-      Alert.alert("Invalid fat", "Fat must be 0 or more.");
+      m3Alert.alert("Invalid fat", "Fat must be 0 or more.");
       return;
     }
     if (carbs !== null && carbs < 0) {
-      Alert.alert("Invalid carbs", "Carbs must be 0 or more.");
+      m3Alert.alert("Invalid carbs", "Carbs must be 0 or more.");
       return;
     }
     if (fiber !== null && fiber < 0) {
-      Alert.alert("Invalid fibre", "Fibre must be 0 or more.");
+      m3Alert.alert("Invalid fibre", "Fibre must be 0 or more.");
       return;
     }
 
@@ -606,6 +607,7 @@ const QuickLogCard = memo(function QuickLogCard({
           </View>
         ) : null}
       </Card.Content>
+      {m3Alert.alertDialog}
     </Card>
   );
 });
@@ -751,6 +753,7 @@ export default function LogScreen() {
       setLlmStageStartedAt(null);
     }
   };
+  const m3Alert = useM3Alert();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const [data, setData] = useState<StoredData>(
@@ -772,7 +775,7 @@ export default function LogScreen() {
     loadStoredData()
       .then((next) => setData(next))
       .catch(() =>
-        Alert.alert("Storage error", "Saved data could not be loaded."),
+        m3Alert.alert("Storage error", "Saved data could not be loaded."),
       )
       .finally(() => {
         hasCompletedInitialLoad.current = true;
@@ -802,7 +805,7 @@ export default function LogScreen() {
       loadStoredData()
         .then((next) => setData(next))
         .catch(() =>
-          Alert.alert("Storage error", "Saved data could not be loaded."),
+          m3Alert.alert("Storage error", "Saved data could not be loaded."),
         );
       // Refresh today's entries from DB on focus
       const key = getLocalDateKey(new Date());
@@ -816,7 +819,7 @@ export default function LogScreen() {
   useEffect(() => {
     if (!isReady) return;
     saveStoredData(data).catch(() =>
-      Alert.alert("Storage error", "Changes could not be saved."),
+      m3Alert.alert("Storage error", "Changes could not be saved."),
     );
   }, [data, isReady]);
 
@@ -1131,27 +1134,27 @@ export default function LogScreen() {
       : null;
 
     if (!editDraft.title.trim()) {
-      Alert.alert("Missing meal name", "Add a label.");
+      m3Alert.alert("Missing meal name", "Add a label.");
       return;
     }
     if (!calories || calories <= 0) {
-      Alert.alert("Invalid calories", "Enter a positive number.");
+      m3Alert.alert("Invalid calories", "Enter a positive number.");
       return;
     }
     if (protein !== null && protein < 0) {
-      Alert.alert("Invalid protein", "Protein must be 0 or more.");
+      m3Alert.alert("Invalid protein", "Protein must be 0 or more.");
       return;
     }
     if (fat !== null && fat < 0) {
-      Alert.alert("Invalid fat", "Fat must be 0 or more.");
+      m3Alert.alert("Invalid fat", "Fat must be 0 or more.");
       return;
     }
     if (carbs !== null && carbs < 0) {
-      Alert.alert("Invalid carbs", "Carbs must be 0 or more.");
+      m3Alert.alert("Invalid carbs", "Carbs must be 0 or more.");
       return;
     }
     if (fiber !== null && fiber < 0) {
-      Alert.alert("Invalid fibre", "Fibre must be 0 or more.");
+      m3Alert.alert("Invalid fibre", "Fibre must be 0 or more.");
       return;
     }
 
@@ -1352,7 +1355,7 @@ export default function LogScreen() {
       ToastAndroid.show(message, ToastAndroid.SHORT);
       return;
     }
-    Alert.alert("Model status", message);
+    m3Alert.alert("Model status", message);
   }, [isModelInMemory]);
 
   // Determine which model key is currently selected and check if it's blocked
@@ -1374,10 +1377,9 @@ export default function LogScreen() {
 
   const handleOpenLlmEstimator = useCallback(() => {
     if (isModelBlocked) {
-      Alert.alert(
+      m3Alert.alert(
         "Low Device Memory",
         `The selected model (${selectedModelKey}) requires ${memoryCheck?.usagePercent ?? "?"}% of available RAM, which exceeds the 60% safety threshold. This may cause device instability.\n\nPlease select a smaller model or free up device memory, then try again.`,
-        [{ text: "OK" }],
       );
       return;
     }
@@ -2149,6 +2151,7 @@ export default function LogScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+      {m3Alert.alertDialog}
     </View>
   );
 }

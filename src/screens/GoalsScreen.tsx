@@ -2,7 +2,6 @@ import { useFocusEffect } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated } from "react-native";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -22,6 +21,7 @@ import {
   TextInput,
   useTheme,
 } from "react-native-paper";
+import { useM3Alert } from "../ui/m3Alert";
 
 import {
   DEFAULT_DATA,
@@ -46,10 +46,18 @@ import {
   DEFAULT_CALORIES_PER_KG,
 } from "../constants";
 
-import { insertWeight, getLatestWeightBySource, getLatestBodyFat, deleteWeightBySource } from "../db/index";
+import {
+  insertWeight,
+  getLatestWeightBySource,
+  getLatestBodyFat,
+  deleteWeightBySource,
+} from "../db/index";
 import { makeWeightId } from "../db/helpers";
-import { getCachedOrFetch, invalidateCache, invalidateCachePrefix } from "../lib/queryCache";
-
+import {
+  getCachedOrFetch,
+  invalidateCache,
+  invalidateCachePrefix,
+} from "../lib/queryCache";
 
 const KG_PER_LB = 0.45359237;
 const CM_PER_IN = 2.54;
@@ -103,10 +111,7 @@ function parseNumberInput(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function mergeWeightHistory(
-  existing: Weight[],
-  incoming: Weight[],
-): Weight[] {
+function mergeWeightHistory(existing: Weight[], incoming: Weight[]): Weight[] {
   const keyed = new Map<string, Weight>();
   for (const p of [...existing, ...incoming])
     keyed.set(`${p.source}-${p.recordedAt}`, p);
@@ -217,6 +222,7 @@ export default function GoalsScreen() {
   const suppressEffectScrollRef = useRef(false);
   const isUnitSwitchingRef = useRef(false);
   const pendingUnitTargetIndexRef = useRef<number | null>(null);
+  const m3Alert = useM3Alert();
   const hasCompletedInitialLoad = useRef(false);
 
   useEffect(() => {
@@ -250,7 +256,7 @@ export default function GoalsScreen() {
         setFiberGoalInput(next.fiberGoalGrams ? `${next.fiberGoalGrams}` : "");
       })
       .catch(() =>
-        Alert.alert("Storage error", "Saved data could not be loaded."),
+        m3Alert.alert("Storage error", "Saved data could not be loaded."),
       )
       .finally(() => {
         hasCompletedInitialLoad.current = true;
@@ -259,7 +265,8 @@ export default function GoalsScreen() {
   }, []);
 
   // Fetch latest health-connect weight on mount so metabolism can use it
-  const [latestHealthConnectWeightKg, setLatestHealthConnectWeightKg] = useState<number | null>(null);
+  const [latestHealthConnectWeightKg, setLatestHealthConnectWeightKg] =
+    useState<number | null>(null);
   useEffect(() => {
     getLatestWeightBySource("health-connect").then((point) => {
       setLatestHealthConnectWeightKg(point?.weightKg ?? null);
@@ -269,7 +276,7 @@ export default function GoalsScreen() {
   useEffect(() => {
     if (!isReady) return;
     saveStoredData(data).catch(() =>
-      Alert.alert("Storage error", "Changes could not be saved."),
+      m3Alert.alert("Storage error", "Changes could not be saved."),
     );
   }, [data, isReady]);
 
@@ -587,41 +594,41 @@ export default function GoalsScreen() {
       : null;
 
     if (!nextBase || nextBase <= 0) {
-      Alert.alert("Invalid goal", "Enter a valid override calorie target.");
+      m3Alert.alert("Invalid goal", "Enter a valid override calorie target.");
       return;
     }
     if (!nextPerKg || nextPerKg <= 0) {
-      Alert.alert(
+      m3Alert.alert(
         "Invalid multiplier",
         "Enter calories per kg as a positive number.",
       );
       return;
     }
     if (nextAge !== null && (nextAge < 13 || nextAge > 120)) {
-      Alert.alert("Invalid age", "Enter an age between 13 and 120.");
+      m3Alert.alert("Invalid age", "Enter an age between 13 and 120.");
       return;
     }
     if (nextHeightCm !== null && (nextHeightCm < 92 || nextHeightCm > 214)) {
-      Alert.alert(
+      m3Alert.alert(
         "Invalid height",
         "Enter a height between 92 cm (3') and 214 cm (7').",
       );
       return;
     }
     if (nextProtein !== null && nextProtein < 0) {
-      Alert.alert("Invalid protein goal", "Protein must be 0 or more.");
+      m3Alert.alert("Invalid protein goal", "Protein must be 0 or more.");
       return;
     }
     if (nextFat !== null && nextFat < 0) {
-      Alert.alert("Invalid fat goal", "Fat must be 0 or more.");
+      m3Alert.alert("Invalid fat goal", "Fat must be 0 or more.");
       return;
     }
     if (nextCarbs !== null && nextCarbs < 0) {
-      Alert.alert("Invalid carbs goal", "Carbs must be 0 or more.");
+      m3Alert.alert("Invalid carbs goal", "Carbs must be 0 or more.");
       return;
     }
     if (nextFiber !== null && nextFiber < 0) {
-      Alert.alert("Invalid fibre goal", "Fibre must be 0 or more.");
+      m3Alert.alert("Invalid fibre goal", "Fibre must be 0 or more.");
       return;
     }
 
@@ -638,7 +645,6 @@ export default function GoalsScreen() {
     // Invalidate caches so other screens (Graphs) pick up the new manual weight
     invalidateCachePrefix("weightSeries:");
     invalidateCache("latestWeight");
-
 
     setData((prev) => ({
       ...prev,
@@ -1456,7 +1462,7 @@ export default function GoalsScreen() {
                 const parsedPercent = parseNumberInput(goalPercentInput);
                 if (adjustmentType === "kcal") {
                   if (!parsedKcal || parsedKcal < 50 || parsedKcal > 1500) {
-                    Alert.alert(
+                    m3Alert.alert(
                       "Invalid adjustment",
                       "Enter goal adjustment between 50 and 1500 kcal.",
                     );
@@ -1483,7 +1489,7 @@ export default function GoalsScreen() {
                     parsedPercent < 0.1 ||
                     parsedPercent > 3
                   ) {
-                    Alert.alert(
+                    m3Alert.alert(
                       "Invalid percentage",
                       "Enter weekly change between 0.1% and 3.0%.",
                     );
@@ -1513,6 +1519,7 @@ export default function GoalsScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+      {m3Alert.alertDialog}
     </View>
   );
 }
