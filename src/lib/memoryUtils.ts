@@ -41,7 +41,6 @@ export function getTotalMemoryBytesSync(): number {
 export function checkModelMemory(modelKey: string): MemoryCheckResult {
   const modelMemoryBytes = MODEL_MEMORY_REQUIREMENTS[modelKey] ?? 0;
   const totalMem = getTotalMemoryBytesSync();
-  console.log(totalMem);
 
   const threshold50Percent = Math.round(totalMem * 0.5);
   const threshold60Percent = Math.round(totalMem * 0.6);
