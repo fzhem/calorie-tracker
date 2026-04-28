@@ -78,7 +78,7 @@ export type NutritionResult = {
   protein: number;
   fat: number;
   carbs: number;
-  fiber: number;
+  fibre: number;
   raw: string;
 };
 
@@ -112,7 +112,7 @@ type QuickAddItem = {
   proteinGrams?: number | null;
   fatGrams?: number | null;
   carbsGrams?: number | null;
-  fiberGrams?: number | null;
+  fibreGrams?: number | null;
 };
 
 type SortMode = "newest" | "oldest";
@@ -125,7 +125,7 @@ type EditEntryDraft = {
   protein: string;
   fat: string;
   carbs: string;
-  fiber: string;
+  fibre: string;
 };
 
 function getLocalDateKey(date: Date) {
@@ -150,20 +150,20 @@ function parseNumberInput(value: string) {
 }
 
 function quickAddKey(item: QuickAddItem) {
-  return `${item.title.toLowerCase()}-${item.calories}-${item.proteinGrams ?? ""}-${item.fatGrams ?? ""}-${item.carbsGrams ?? ""}-${item.fiberGrams ?? ""}`;
+  return `${item.title.toLowerCase()}-${item.calories}-${item.proteinGrams ?? ""}-${item.fatGrams ?? ""}-${item.carbsGrams ?? ""}-${item.fibreGrams ?? ""}`;
 }
 
 function formatMacroLine(item: {
   proteinGrams?: number | null;
   fatGrams?: number | null;
   carbsGrams?: number | null;
-  fiberGrams?: number | null;
+  fibreGrams?: number | null;
 }) {
   const parts = [
     typeof item.proteinGrams === "number" ? `P ${item.proteinGrams}g` : null,
     typeof item.carbsGrams === "number" ? `C ${item.carbsGrams}g` : null,
     typeof item.fatGrams === "number" ? `F ${item.fatGrams}g` : null,
-    typeof item.fiberGrams === "number" ? `Fib ${item.fiberGrams}g` : null,
+    typeof item.fibreGrams === "number" ? `Fib ${item.fibreGrams}g` : null,
   ].filter((value): value is string => !!value);
   return parts.join("  ");
 }
@@ -203,7 +203,7 @@ function getMacroCalorieMismatch(
   return { macroCalories: roundedMacroCalories, delta };
 }
 
-const FIBER_GRAMS_PER_1000_KCAL = 14;
+const FIBRE_GRAMS_PER_1000_KCAL = 14;
 const QUICK_LOG_INPUT_THEME = { animation: { scale: 0 } };
 
 type QuickLogCardProps = {
@@ -243,7 +243,7 @@ const QuickLogCard = memo(function QuickLogCard({
   const [mealProtein, setMealProtein] = useState("");
   const [mealFat, setMealFat] = useState("");
   const [mealCarbs, setMealCarbs] = useState("");
-  const [mealFiber, setMealFiber] = useState("");
+  const [mealFibre, setMealFibre] = useState("");
   const [mealMultiplier, setMealMultiplier] = useState("1"); // New state for multiplier
   const [quickAddTab, setQuickAddTab] = useState<QuickAddTab>("favourites");
 
@@ -287,7 +287,7 @@ const QuickLogCard = memo(function QuickLogCard({
     const protein = mealProtein.trim() ? parseNumberInput(mealProtein) : null;
     const fat = mealFat.trim() ? parseNumberInput(mealFat) : null;
     const carbs = mealCarbs.trim() ? parseNumberInput(mealCarbs) : null;
-    const fiber = mealFiber.trim() ? parseNumberInput(mealFiber) : null;
+    const fibre = mealFibre.trim() ? parseNumberInput(mealFibre) : null;
 
     if (!mealTitle.trim()) {
       m3Alert.alert("Missing meal name", "Add a label.");
@@ -309,7 +309,7 @@ const QuickLogCard = memo(function QuickLogCard({
       m3Alert.alert("Invalid carbs", "Carbs must be 0 or more.");
       return;
     }
-    if (fiber !== null && fiber < 0) {
+    if (fibre !== null && fibre < 0) {
       m3Alert.alert("Invalid fibre", "Fibre must be 0 or more.");
       return;
     }
@@ -322,8 +322,8 @@ const QuickLogCard = memo(function QuickLogCard({
       fatGrams: fat !== null ? Math.round(fat * multiplier * 10) / 10 : null,
       carbsGrams:
         carbs !== null ? Math.round(carbs * multiplier * 10) / 10 : null,
-      fiberGrams:
-        fiber !== null ? Math.round(fiber * multiplier * 10) / 10 : null,
+      fibreGrams:
+        fibre !== null ? Math.round(fibre * multiplier * 10) / 10 : null,
     });
 
     setMealTitle("");
@@ -331,14 +331,14 @@ const QuickLogCard = memo(function QuickLogCard({
     setMealProtein("");
     setMealFat("");
     setMealCarbs("");
-    setMealFiber("");
+    setMealFibre("");
     setMealMultiplier("1"); // Reset multiplier
     Vibration.vibrate(12);
   }, [
     mealCalories,
     mealCarbs,
     mealFat,
-    mealFiber,
+    mealFibre,
     mealMultiplier,
     mealProtein,
     mealTitle,
@@ -503,8 +503,8 @@ const QuickLogCard = memo(function QuickLogCard({
               />
               <TextInput
                 label="Fibre (g)"
-                value={mealFiber}
-                onChangeText={setMealFiber}
+                value={mealFibre}
+                onChangeText={setMealFibre}
                 placeholder="8"
                 keyboardType="numeric"
                 mode="outlined"
@@ -845,7 +845,7 @@ export default function LogScreen() {
           proteinGrams: entry.proteinGrams ?? null,
           fatGrams: entry.fatGrams ?? null,
           carbsGrams: entry.carbsGrams ?? null,
-          fiberGrams: entry.fiberGrams ?? null,
+          fibreGrams: entry.fibreGrams ?? null,
         });
       }
       if (unique.size >= 8) break;
@@ -890,19 +890,19 @@ export default function LogScreen() {
     (sum, e) => sum + (e.carbsGrams ?? 0),
     0,
   );
-  const todayTotalFiber = todayEntries.reduce(
-    (sum, e) => sum + (e.fiberGrams ?? 0),
+  const todayTotalFibre = todayEntries.reduce(
+    (sum, e) => sum + (e.fibreGrams ?? 0),
     0,
   );
 
   const proteinGoal = data.proteinGoalGrams ?? autoMacroTargets.proteinGrams;
   const fatGoal = data.fatGoalGrams ?? autoMacroTargets.fatGrams;
   const carbsGoal = data.carbsGoalGrams ?? autoMacroTargets.carbsGrams;
-  const fiberGoal =
-    data.fiberGoalGrams ??
+  const fibreGoal =
+    data.fibreGoalGrams ??
     Math.max(
       0,
-      Math.round((adjustedTarget / 1000) * FIBER_GRAMS_PER_1000_KCAL),
+      Math.round((adjustedTarget / 1000) * FIBRE_GRAMS_PER_1000_KCAL),
     );
 
   const proteinProgress = proteinGoal
@@ -912,8 +912,8 @@ export default function LogScreen() {
   const carbsProgress = carbsGoal
     ? Math.min(todayTotalCarbs / carbsGoal, 1)
     : 0;
-  const fiberProgress = fiberGoal
-    ? Math.min(todayTotalFiber / fiberGoal, 1)
+  const fibreProgress = fibreGoal
+    ? Math.min(todayTotalFibre / fibreGoal, 1)
     : 0;
 
   const hasMacroGoals = proteinGoal > 0 || fatGoal > 0 || carbsGoal > 0;
@@ -943,14 +943,14 @@ export default function LogScreen() {
     data.proteinGoalGrams !== null ||
     data.carbsGoalGrams !== null ||
     data.fatGoalGrams !== null ||
-    data.fiberGoalGrams !== null
+    data.fibreGoalGrams !== null
       ? "tune"
       : "brightness-auto";
   const macroGoalModeText =
     data.proteinGoalGrams !== null ||
     data.carbsGoalGrams !== null ||
     data.fatGoalGrams !== null ||
-    data.fiberGoalGrams !== null
+    data.fibreGoalGrams !== null
       ? "Custom macro targets"
       : "Auto macro targets";
 
@@ -1029,7 +1029,7 @@ export default function LogScreen() {
         color: theme.dark ? "#8fc8ff" : "#1c5f97",
         background: theme.dark ? "#1b3550" : "#dbeeff",
       },
-      fiber: {
+      fibre: {
         color: theme.dark ? "#96e0a0" : "#257536",
         background: theme.dark ? "#1b3921" : "#dff4e2",
       },
@@ -1050,7 +1050,7 @@ export default function LogScreen() {
       proteinGrams: item.proteinGrams ?? null,
       fatGrams: item.fatGrams ?? null,
       carbsGrams: item.carbsGrams ?? null,
-      fiberGrams: item.fiberGrams ?? null,
+      fibreGrams: item.fibreGrams ?? null,
       loggedAt: now,
     };
     insertMeal(meal).catch(() => {});
@@ -1071,7 +1071,7 @@ export default function LogScreen() {
       proteinGrams: item.proteinGrams ?? null,
       fatGrams: item.fatGrams ?? null,
       carbsGrams: item.carbsGrams ?? null,
-      fiberGrams: item.fiberGrams ?? null,
+      fibreGrams: item.fibreGrams ?? null,
       loggedAt: now,
     };
     insertMeal(meal).catch(() => {});
@@ -1110,7 +1110,7 @@ export default function LogScreen() {
         typeof entry.proteinGrams === "number" ? `${entry.proteinGrams}` : "",
       fat: typeof entry.fatGrams === "number" ? `${entry.fatGrams}` : "",
       carbs: typeof entry.carbsGrams === "number" ? `${entry.carbsGrams}` : "",
-      fiber: typeof entry.fiberGrams === "number" ? `${entry.fiberGrams}` : "",
+      fibre: typeof entry.fibreGrams === "number" ? `${entry.fibreGrams}` : "",
     });
   }, []);
 
@@ -1129,8 +1129,8 @@ export default function LogScreen() {
     const carbs = editDraft.carbs.trim()
       ? parseNumberInput(editDraft.carbs)
       : null;
-    const fiber = editDraft.fiber.trim()
-      ? parseNumberInput(editDraft.fiber)
+    const fibre = editDraft.fibre.trim()
+      ? parseNumberInput(editDraft.fibre)
       : null;
 
     if (!editDraft.title.trim()) {
@@ -1153,7 +1153,7 @@ export default function LogScreen() {
       m3Alert.alert("Invalid carbs", "Carbs must be 0 or more.");
       return;
     }
-    if (fiber !== null && fiber < 0) {
+    if (fibre !== null && fibre < 0) {
       m3Alert.alert("Invalid fibre", "Fibre must be 0 or more.");
       return;
     }
@@ -1164,7 +1164,7 @@ export default function LogScreen() {
       proteinGrams: protein !== null ? Math.round(protein * 10) / 10 : null,
       fatGrams: fat !== null ? Math.round(fat * 10) / 10 : null,
       carbsGrams: carbs !== null ? Math.round(carbs * 10) / 10 : null,
-      fiberGrams: fiber !== null ? Math.round(fiber * 10) / 10 : null,
+      fibreGrams: fibre !== null ? Math.round(fibre * 10) / 10 : null,
     };
     updateMeal(editDraft.id, updatedEntry).catch(() => {});
     invalidateCachePrefix("meals:");
@@ -1187,7 +1187,7 @@ export default function LogScreen() {
         proteinGrams: entry.proteinGrams ?? null,
         fatGrams: entry.fatGrams ?? null,
         carbsGrams: entry.carbsGrams ?? null,
-        fiberGrams: entry.fiberGrams ?? null,
+        fibreGrams: entry.fibreGrams ?? null,
       };
       const isEntryFavourite = favouriteQuickAddKeys.has(
         quickAddKey(entryAsQuickAdd),
@@ -1535,18 +1535,18 @@ export default function LogScreen() {
                     <View
                       style={[
                         styles.macroToken,
-                        { backgroundColor: macroPalette.fiber.background },
+                        { backgroundColor: macroPalette.fibre.background },
                       ]}
                     >
                       <Text
                         variant="labelSmall"
                         style={{
-                          color: macroPalette.fiber.color,
+                          color: macroPalette.fibre.color,
                           fontWeight: "700",
                         }}
                       >
-                        Fib {Math.round(todayTotalFiber)}/
-                        {Math.round(fiberGoal)}
+                        Fib {Math.round(todayTotalFibre)}/
+                        {Math.round(fibreGoal)}
                       </Text>
                     </View>
                   </View>
@@ -1791,7 +1791,7 @@ export default function LogScreen() {
                               proteinGrams: item.protein,
                               fatGrams: item.fat,
                               carbsGrams: item.carbs,
-                              fiberGrams: item.fibre,
+                              fibreGrams: item.fibre,
                             });
                           },
                         );
@@ -1944,10 +1944,10 @@ export default function LogScreen() {
                 />
                 <TextInput
                   label="Fibre (g)"
-                  value={editDraft?.fiber ?? ""}
+                  value={editDraft?.fibre ?? ""}
                   onChangeText={(value) =>
                     setEditDraft((prev) =>
-                      prev ? { ...prev, fiber: value } : prev,
+                      prev ? { ...prev, fibre: value } : prev,
                     )
                   }
                   keyboardType="numeric"
@@ -2115,13 +2115,13 @@ export default function LogScreen() {
                   <MaterialCommunityIcons
                     name="leaf"
                     size={16}
-                    color={macroPalette.fiber.color}
+                    color={macroPalette.fibre.color}
                   />
                   <Text
                     variant="labelSmall"
                     style={{
                       fontWeight: "700",
-                      color: macroPalette.fiber.color,
+                      color: macroPalette.fibre.color,
                     }}
                   >
                     Fibre
@@ -2131,12 +2131,12 @@ export default function LogScreen() {
                   variant="bodySmall"
                   style={{ color: theme.colors.onSurfaceVariant }}
                 >
-                  {Math.round(todayTotalFiber)} / {Math.round(fiberGoal)} g
+                  {Math.round(todayTotalFibre)} / {Math.round(fibreGoal)} g
                 </Text>
               </View>
               <ProgressBar
-                progress={fiberProgress}
-                color={macroPalette.fiber.color}
+                progress={fibreProgress}
+                color={macroPalette.fibre.color}
                 style={styles.macroBar}
               />
             </View>

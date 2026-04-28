@@ -18,7 +18,6 @@ import {
   SOURCE_HEALTH_CONNECT,
 } from "../constants";
 
-
 export const meals = sqliteTable(
   DB_TABLE_MEALS,
   {
@@ -30,7 +29,7 @@ export const meals = sqliteTable(
     proteinGrams: real("protein_g"),
     fatGrams: real("fat_g"),
     carbsGrams: real("carbs_g"),
-    fiberGrams: real("fiber_g"),
+    fibreGrams: real("fibre_g"),
 
     loggedAt: text("logged_at").notNull(),
   },

@@ -202,8 +202,8 @@ export default function GoalsScreen() {
   const [carbsGoalInput, setCarbsGoalInput] = useState(
     initialData.carbsGoalGrams ? `${initialData.carbsGoalGrams}` : "",
   );
-  const [fiberGoalInput, setFiberGoalInput] = useState(
-    initialData.fiberGoalGrams ? `${initialData.fiberGoalGrams}` : "",
+  const [fibreGoalInput, setFibreGoalInput] = useState(
+    initialData.fibreGoalGrams ? `${initialData.fibreGoalGrams}` : "",
   );
   const [heightUnit, setHeightUnit] = useState<HeightUnit>("cm");
   const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
@@ -253,7 +253,7 @@ export default function GoalsScreen() {
         );
         setFatGoalInput(next.fatGoalGrams ? `${next.fatGoalGrams}` : "");
         setCarbsGoalInput(next.carbsGoalGrams ? `${next.carbsGoalGrams}` : "");
-        setFiberGoalInput(next.fiberGoalGrams ? `${next.fiberGoalGrams}` : "");
+        setFibreGoalInput(next.fibreGoalGrams ? `${next.fibreGoalGrams}` : "");
       })
       .catch(() =>
         m3Alert.alert("Storage error", "Saved data could not be loaded."),
@@ -302,8 +302,8 @@ export default function GoalsScreen() {
           setCarbsGoalInput(
             next.carbsGoalGrams ? `${next.carbsGoalGrams}` : "",
           );
-          setFiberGoalInput(
-            next.fiberGoalGrams ? `${next.fiberGoalGrams}` : "",
+          setFibreGoalInput(
+            next.fibreGoalGrams ? `${next.fibreGoalGrams}` : "",
           );
           // Re-fetch latest health-connect weight so the metabolism display is up to date
           getLatestWeightBySource("health-connect").then((point) => {
@@ -592,8 +592,8 @@ export default function GoalsScreen() {
     const nextCarbs = carbsGoalInput.trim()
       ? parseNumberInput(carbsGoalInput)
       : null;
-    const nextFiber = fiberGoalInput.trim()
-      ? parseNumberInput(fiberGoalInput)
+    const nextFibre = fibreGoalInput.trim()
+      ? parseNumberInput(fibreGoalInput)
       : null;
 
     if (!nextBase || nextBase <= 0) {
@@ -630,7 +630,7 @@ export default function GoalsScreen() {
       m3Alert.alert("Invalid carbs goal", "Carbs must be 0 or more.");
       return;
     }
-    if (nextFiber !== null && nextFiber < 0) {
+    if (nextFibre !== null && nextFibre < 0) {
       m3Alert.alert("Invalid fibre goal", "Fibre must be 0 or more.");
       return;
     }
@@ -661,7 +661,7 @@ export default function GoalsScreen() {
       proteinGoalGrams: nextProtein !== null ? roundTo(nextProtein, 1) : null,
       fatGoalGrams: nextFat !== null ? roundTo(nextFat, 1) : null,
       carbsGoalGrams: nextCarbs !== null ? roundTo(nextCarbs, 1) : null,
-      fiberGoalGrams: nextFiber !== null ? roundTo(nextFiber, 1) : null,
+      fibreGoalGrams: nextFibre !== null ? roundTo(nextFibre, 1) : null,
     }));
 
     setManualWeightInput(
@@ -683,7 +683,7 @@ export default function GoalsScreen() {
     setProteinGoalInput("");
     setFatGoalInput("");
     setCarbsGoalInput("");
-    setFiberGoalInput("");
+    setFibreGoalInput("");
     setData((prev) => ({
       ...prev,
       baseTarget: DEFAULT_BASE_TARGET_CALORIES,
@@ -691,7 +691,7 @@ export default function GoalsScreen() {
       proteinGoalGrams: null,
       fatGoalGrams: null,
       carbsGoalGrams: null,
-      fiberGoalGrams: null,
+      fibreGoalGrams: null,
     }));
   };
 
@@ -1309,8 +1309,8 @@ export default function GoalsScreen() {
                   />
                   <TextInput
                     label="Fibre (g)"
-                    value={fiberGoalInput}
-                    onChangeText={setFiberGoalInput}
+                    value={fibreGoalInput}
+                    onChangeText={setFibreGoalInput}
                     placeholder="e.g. 30"
                     keyboardType="numeric"
                     mode="outlined"

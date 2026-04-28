@@ -103,7 +103,7 @@ export async function importUserData(json: string) {
       proteinGoalGrams: (data.proteinGoalGrams as number | null) ?? null,
       fatGoalGrams: (data.fatGoalGrams as number | null) ?? null,
       carbsGoalGrams: (data.carbsGoalGrams as number | null) ?? null,
-      fiberGoalGrams: (data.fiberGoalGrams as number | null) ?? null,
+      fibreGoalGrams: (data.fibreGoalGrams as number | null) ?? null,
       calorieTolerancePercent:
         (data.calorieTolerancePercent as number) ??
         DEFAULT_DATA.calorieTolerancePercent,

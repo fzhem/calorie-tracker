@@ -24,7 +24,7 @@ export type FavouriteQuickAdd = {
   proteinGrams?: number | null;
   fatGrams?: number | null;
   carbsGrams?: number | null;
-  fiberGrams?: number | null;
+  fibreGrams?: number | null;
 };
 
 export type MetabolismSex = "unspecified" | "male" | "female";
@@ -79,7 +79,7 @@ export type StoredData = {
   proteinGoalGrams: number | null;
   fatGoalGrams: number | null;
   carbsGoalGrams: number | null;
-  fiberGoalGrams: number | null;
+  fibreGoalGrams: number | null;
   calorieTolerancePercent: number;
   graphToleranceCalories: number;
   perModelConfig: Record<string, ModelConfig>;
@@ -144,7 +144,7 @@ export const DEFAULT_DATA: StoredData = {
   proteinGoalGrams: null,
   fatGoalGrams: null,
   carbsGoalGrams: null,
-  fiberGoalGrams: null,
+  fibreGoalGrams: null,
   calorieTolerancePercent: DEFAULT_CALORIE_TOLERANCE_PERCENT,
   graphToleranceCalories: DEFAULT_GRAPH_TOLERANCE_CALORIES,
   perModelConfig: {},
@@ -205,6 +205,6 @@ export type MealEntry = {
   proteinGrams?: number | null;
   fatGrams?: number | null;
   carbsGrams?: number | null;
-  fiberGrams?: number | null;
+  fibreGrams?: number | null;
   loggedAt: string;
 };

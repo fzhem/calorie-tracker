@@ -16,7 +16,7 @@ CREATE TABLE `meals` (
 	`protein_g` real,
 	`fat_g` real,
 	`carbs_g` real,
-	`fiber_g` real,
+	`fibre_g` real,
 	`logged_at` text NOT NULL
 );
 --> statement-breakpoint

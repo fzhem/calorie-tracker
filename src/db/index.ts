@@ -6,7 +6,6 @@ import {
   SOURCE_HEALTH_CONNECT,
 } from "../constants";
 
-
 import { drizzle } from "drizzle-orm/op-sqlite";
 import { and, asc, gte, lte, desc, eq, sql } from "drizzle-orm";
 import { open } from "@op-engineering/op-sqlite";
@@ -16,7 +15,7 @@ import { makeWeightId, makeBodyFatId, makeMealId } from "./helpers";
 const sqlite = open({
   name: SQLITE_DB_NAME,
 });
-const db = drizzle(sqlite, {schema});
+const db = drizzle(sqlite, { schema });
 export { db as database };
 
 const dayExpr = sql<string>`DATE(${schema.meals.loggedAt})`;
@@ -43,7 +42,7 @@ export async function insertMeal(meal: Meal): Promise<void> {
     proteinGrams: meal.proteinGrams ?? null,
     fatGrams: meal.fatGrams ?? null,
     carbsGrams: meal.carbsGrams ?? null,
-    fiberGrams: meal.fiberGrams ?? null,
+    fibreGrams: meal.fibreGrams ?? null,
   };
   await db.insert(schema.meals).values(row);
 }
@@ -56,7 +55,9 @@ export async function getMealsForDay(dateKey: string): Promise<Meal[]> {
   return await db
     .select()
     .from(schema.meals)
-    .where(and(gte(schema.meals.loggedAt, start), lte(schema.meals.loggedAt, end)))
+    .where(
+      and(gte(schema.meals.loggedAt, start), lte(schema.meals.loggedAt, end)),
+    )
     .orderBy(desc(schema.meals.loggedAt));
 }
 
@@ -69,11 +70,9 @@ export async function getMealsSince(since: string): Promise<Meal[]> {
     .orderBy(desc(schema.meals.loggedAt));
 }
 
-
 export async function deleteMeal(id: string): Promise<void> {
   await db.delete(schema.meals).where(eq(schema.meals.id, id));
 }
-
 
 export async function updateMeal(
   id: string,
@@ -81,8 +80,6 @@ export async function updateMeal(
 ): Promise<void> {
   await db.update(schema.meals).set(data).where(eq(schema.meals.id, id));
 }
-
-
 
 /** Calories per day over the last N days (for GraphsScreen calorie chart). */
 
@@ -205,21 +202,23 @@ export async function getBodyFatSeries(since: string): Promise<BodyFat[]> {
     .orderBy(asc(schema.bodyFatHistory.recordedAt));
 }
 
-
 export async function updateWeight(
   id: string,
   data: Partial<Omit<Weight, "id">>,
 ): Promise<void> {
-  await db.update(schema.weightHistory).set(data).where(eq(schema.weightHistory.id, id));
+  await db
+    .update(schema.weightHistory)
+    .set(data)
+    .where(eq(schema.weightHistory.id, id));
 }
 
 export async function deleteWeightBySource(
   source: typeof SOURCE_MANUAL | typeof SOURCE_HEALTH_CONNECT,
 ): Promise<void> {
-  await db.delete(schema.weightHistory).where(eq(schema.weightHistory.source, source));
+  await db
+    .delete(schema.weightHistory)
+    .where(eq(schema.weightHistory.source, source));
 }
-
-
 
 // ── Combined ───────────────────────────────────────────────────────────────
 
@@ -242,22 +241,30 @@ export async function getCaloriesVsWeight(
     .orderBy(dayExpr);
 }
 
-
 // ── Export / Import helpers ──────────────────────────────────────────
 
 /** Get all meals (for export) */
 export async function getAllMeals(): Promise<Meal[]> {
-  return await db.select().from(schema.meals).orderBy(desc(schema.meals.loggedAt));
+  return await db
+    .select()
+    .from(schema.meals)
+    .orderBy(desc(schema.meals.loggedAt));
 }
 
 /** Get all weight history (for export) */
 export async function getAllWeights(): Promise<Weight[]> {
-  return await db.select().from(schema.weightHistory).orderBy(desc(schema.weightHistory.recordedAt));
+  return await db
+    .select()
+    .from(schema.weightHistory)
+    .orderBy(desc(schema.weightHistory.recordedAt));
 }
 
 /** Get all body fat history (for export) */
 export async function getAllBodyFats(): Promise<BodyFat[]> {
-  return await db.select().from(schema.bodyFatHistory).orderBy(desc(schema.bodyFatHistory.recordedAt));
+  return await db
+    .select()
+    .from(schema.bodyFatHistory)
+    .orderBy(desc(schema.bodyFatHistory.recordedAt));
 }
 
 /** Bulk import meals (INSERT OR IGNORE for idempotency) */
@@ -276,7 +283,9 @@ export async function importMealsBulk(mealsData: Meal[]): Promise<number> {
 }
 
 /** Bulk import weight history (INSERT OR IGNORE for idempotency) */
-export async function importWeightsBulk(weightsData: Weight[]): Promise<number> {
+export async function importWeightsBulk(
+  weightsData: Weight[],
+): Promise<number> {
   let count = 0;
   for (const w of weightsData) {
     try {
@@ -291,7 +300,9 @@ export async function importWeightsBulk(weightsData: Weight[]): Promise<number> 
 }
 
 /** Bulk import body fat history (INSERT OR IGNORE for idempotency) */
-export async function importBodyFatsBulk(bodyFatsData: BodyFat[]): Promise<number> {
+export async function importBodyFatsBulk(
+  bodyFatsData: BodyFat[],
+): Promise<number> {
   let count = 0;
   for (const bf of bodyFatsData) {
     try {
