@@ -92,7 +92,7 @@ export function useM3Alert() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: 4,
+    paddingBottom: 6,
   },
   actions: {
     paddingTop: 0,
