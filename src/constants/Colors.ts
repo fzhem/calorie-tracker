@@ -16,7 +16,7 @@ export const APP_LIGHT_THEME: MD3Theme = {
     surfaceVariant: "#dbe7dc",
     onSurfaceVariant: "#344f40",
     outline: "#6f8475",
-    error: "#b71c1c",
+    error: "#ba1a1a",
     inversePrimary: "#4f378b",
   },
 };
@@ -37,7 +37,7 @@ export const APP_DARK_THEME: MD3Theme = {
     surfaceVariant: "#1c1f1d",
     onSurfaceVariant: "#c3c9c4",
     outline: "#7b837d",
-    error: "#d32f2f",
+    error: "#ffb4ab",
     inversePrimary: "#4f378b",
     elevation: {
       level0: "#000000",
