@@ -59,14 +59,19 @@ import type { Meal } from "../db/index";
 
 import {
   MAX_VISIBLE_ENTRIES,
-  MAX_FAVORITE_QUICK_ADDS,
+  MAX_FAVOURITE_QUICK_ADDS,
   LOG_ENTRY_MAX_WIDTH,
 } from "../constants";
 
-import { insertMeal, getMealsForDay, deleteMeal, updateMeal, getLatestWeightBySource } from "../db/index";
+import {
+  insertMeal,
+  getMealsForDay,
+  deleteMeal,
+  updateMeal,
+  getLatestWeightBySource,
+} from "../db/index";
 import { makeMealId } from "../db/helpers";
 import { invalidateCachePrefix } from "../lib/queryCache";
-
 
 export type NutritionResult = {
   calories: number;
@@ -111,7 +116,7 @@ type QuickAddItem = {
 };
 
 type SortMode = "newest" | "oldest";
-type QuickAddTab = "recent" | "favorites";
+type QuickAddTab = "recent" | "favourites";
 
 type EditEntryDraft = {
   id: string;
@@ -143,7 +148,6 @@ function parseNumberInput(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
-
 
 function quickAddKey(item: QuickAddItem) {
   return `${item.title.toLowerCase()}-${item.calories}-${item.proteinGrams ?? ""}-${item.fatGrams ?? ""}-${item.carbsGrams ?? ""}-${item.fiberGrams ?? ""}`;
@@ -204,13 +208,13 @@ const QUICK_LOG_INPUT_THEME = { animation: { scale: 0 } };
 
 type QuickLogCardProps = {
   recentQuickAdds: QuickAddItem[];
-  favoriteQuickAdds: QuickAddItem[];
-  favoriteQuickAddKeys: Set<string>;
+  favouriteQuickAdds: QuickAddItem[];
+  favouriteQuickAddKeys: Set<string>;
   isMacrosExpanded: boolean;
   onSetMacrosExpanded: (next: boolean) => void;
   onAddMeal: (item: QuickAddItem) => void;
   onQuickAddMeal: (item: QuickAddItem) => void;
-  onToggleFavoriteQuickAdd: (item: QuickAddItem) => void;
+  onToggleFavouriteQuickAdd: (item: QuickAddItem) => void;
   onOpenLlmEstimator: () => void;
   data: StoredData;
   isModelBlocked?: boolean;
@@ -220,13 +224,13 @@ type QuickLogCardProps = {
 
 const QuickLogCard = memo(function QuickLogCard({
   recentQuickAdds,
-  favoriteQuickAdds,
-  favoriteQuickAddKeys,
+  favouriteQuickAdds,
+  favouriteQuickAddKeys,
   isMacrosExpanded,
   onSetMacrosExpanded,
   onAddMeal,
   onQuickAddMeal,
-  onToggleFavoriteQuickAdd,
+  onToggleFavouriteQuickAdd,
   onOpenLlmEstimator,
   data,
   isModelBlocked,
@@ -241,10 +245,10 @@ const QuickLogCard = memo(function QuickLogCard({
   const [mealCarbs, setMealCarbs] = useState("");
   const [mealFiber, setMealFiber] = useState("");
   const [mealMultiplier, setMealMultiplier] = useState("1"); // New state for multiplier
-  const [quickAddTab, setQuickAddTab] = useState<QuickAddTab>("recent");
+  const [quickAddTab, setQuickAddTab] = useState<QuickAddTab>("favourites");
 
   const activeQuickAdds =
-    quickAddTab === "favorites" ? favoriteQuickAdds : recentQuickAdds;
+    quickAddTab === "favourites" ? favouriteQuickAdds : recentQuickAdds;
 
   const addDraftMismatch = useMemo(() => {
     const calories = parseNumberInput(mealCalories);
@@ -525,13 +529,13 @@ const QuickLogCard = memo(function QuickLogCard({
         <Button mode="contained" icon="plus" onPress={handleAddMeal}>
           Add entry
         </Button>
-        {recentQuickAdds.length || favoriteQuickAdds.length ? (
+        {recentQuickAdds.length || favouriteQuickAdds.length ? (
           <View style={styles.quickAddSection}>
             <SegmentedButtons
               value={quickAddTab}
               onValueChange={(value) => setQuickAddTab(value as QuickAddTab)}
               buttons={[
-                { value: "favorites", label: "Favourites", icon: "star" },
+                { value: "favourites", label: "Favourites", icon: "star" },
                 { value: "recent", label: "Recents", icon: "history" },
               ]}
             />
@@ -552,7 +556,7 @@ const QuickLogCard = memo(function QuickLogCard({
                   >
                     {activeQuickAdds.map((item) => {
                       const key = quickAddKey(item);
-                      const isFavorite = favoriteQuickAddKeys.has(key);
+                      const isFavourite = favouriteQuickAddKeys.has(key);
                       return (
                         <View key={key} style={styles.quickAddItem}>
                           <Chip
@@ -563,11 +567,11 @@ const QuickLogCard = memo(function QuickLogCard({
                             {item.title} ({item.calories})
                           </Chip>
                           <IconButton
-                            icon={isFavorite ? "star" : "star-outline"}
+                            icon={isFavourite ? "star" : "star-outline"}
                             size={18}
-                            onPress={() => onToggleFavoriteQuickAdd(item)}
+                            onPress={() => onToggleFavouriteQuickAdd(item)}
                             accessibilityLabel={
-                              isFavorite ? "Remove favourite" : "Add favourite"
+                              isFavourite ? "Remove favourite" : "Add favourite"
                             }
                           />
                         </View>
@@ -802,7 +806,9 @@ export default function LogScreen() {
         );
       // Refresh today's entries from DB on focus
       const key = getLocalDateKey(new Date());
-      getMealsForDay(key).then(setEntries).catch(() => {});
+      getMealsForDay(key)
+        .then(setEntries)
+        .catch(() => {});
     }, []),
   );
 
@@ -843,13 +849,13 @@ export default function LogScreen() {
     }
     return Array.from(unique.values());
   }, [entries]);
-  const favoriteQuickAdds = useMemo(
-    () => data.favoriteQuickAdds ?? [],
-    [data.favoriteQuickAdds],
+  const favouriteQuickAdds = useMemo(
+    () => data.favouriteQuickAdds ?? [],
+    [data.favouriteQuickAdds],
   );
-  const favoriteQuickAddKeys = useMemo(
-    () => new Set(favoriteQuickAdds.map(quickAddKey)),
-    [favoriteQuickAdds],
+  const favouriteQuickAddKeys = useMemo(
+    () => new Set(favouriteQuickAdds.map(quickAddKey)),
+    [favouriteQuickAdds],
   );
   const visibleEntries = useMemo(
     () => sortedTodayEntries.slice(0, MAX_VISIBLE_ENTRIES),
@@ -1031,7 +1037,11 @@ export default function LogScreen() {
   const addMeal = useCallback((item: QuickAddItem) => {
     const now = new Date().toISOString();
     const meal = {
-      id: makeMealId({ loggedAt: now, title: item.title, calories: item.calories }),
+      id: makeMealId({
+        loggedAt: now,
+        title: item.title,
+        calories: item.calories,
+      }),
       title: item.title,
       calories: item.calories,
       proteinGrams: item.proteinGrams ?? null,
@@ -1048,7 +1058,11 @@ export default function LogScreen() {
   const quickAddMeal = useCallback((item: QuickAddItem) => {
     const now = new Date().toISOString();
     const meal = {
-      id: makeMealId({ loggedAt: now, title: item.title, calories: item.calories }),
+      id: makeMealId({
+        loggedAt: now,
+        title: item.title,
+        calories: item.calories,
+      }),
       title: item.title,
       calories: item.calories,
       proteinGrams: item.proteinGrams ?? null,
@@ -1063,16 +1077,16 @@ export default function LogScreen() {
     Vibration.vibrate(10);
   }, []);
 
-  const toggleFavoriteQuickAdd = useCallback((item: QuickAddItem) => {
+  const toggleFavouriteQuickAdd = useCallback((item: QuickAddItem) => {
     Vibration.vibrate(10);
     const key = quickAddKey(item);
     setData((prev) => {
-      const current = prev.favoriteQuickAdds ?? [];
+      const current = prev.favouriteQuickAdds ?? [];
       const exists = current.some((fav) => quickAddKey(fav) === key);
-      const nextFavorites = exists
+      const nextFavourites = exists
         ? current.filter((fav) => quickAddKey(fav) !== key)
-        : [item, ...current].slice(0, MAX_FAVORITE_QUICK_ADDS);
-      return { ...prev, favoriteQuickAdds: nextFavorites };
+        : [item, ...current].slice(0, MAX_FAVOURITE_QUICK_ADDS);
+      return { ...prev, favouriteQuickAdds: nextFavourites };
     });
   }, []);
 
@@ -1144,8 +1158,7 @@ export default function LogScreen() {
     const updatedEntry = {
       title: editDraft.title.trim(),
       calories: Math.round(calories),
-      proteinGrams:
-        protein !== null ? Math.round(protein * 10) / 10 : null,
+      proteinGrams: protein !== null ? Math.round(protein * 10) / 10 : null,
       fatGrams: fat !== null ? Math.round(fat * 10) / 10 : null,
       carbsGrams: carbs !== null ? Math.round(carbs * 10) / 10 : null,
       fiberGrams: fiber !== null ? Math.round(fiber * 10) / 10 : null,
@@ -1154,9 +1167,7 @@ export default function LogScreen() {
     invalidateCachePrefix("meals:");
     setEntries((prev) =>
       prev.map((entry) =>
-        entry.id === editDraft.id
-          ? { ...entry, ...updatedEntry }
-          : entry,
+        entry.id === editDraft.id ? { ...entry, ...updatedEntry } : entry,
       ),
     );
     closeEditModal();
@@ -1175,7 +1186,7 @@ export default function LogScreen() {
         carbsGrams: entry.carbsGrams ?? null,
         fiberGrams: entry.fiberGrams ?? null,
       };
-      const isEntryFavorite = favoriteQuickAddKeys.has(
+      const isEntryFavourite = favouriteQuickAddKeys.has(
         quickAddKey(entryAsQuickAdd),
       );
 
@@ -1239,12 +1250,12 @@ export default function LogScreen() {
           </View>
           <View style={styles.entryActions}>
             <IconButton
-              icon={isEntryFavorite ? "star" : "star-outline"}
+              icon={isEntryFavourite ? "star" : "star-outline"}
               size={18}
               style={styles.entryActionIcon}
-              onPress={() => toggleFavoriteQuickAdd(entryAsQuickAdd)}
+              onPress={() => toggleFavouriteQuickAdd(entryAsQuickAdd)}
               accessibilityLabel={
-                isEntryFavorite ? "Remove favourite" : "Add favourite"
+                isEntryFavourite ? "Remove favourite" : "Add favourite"
               }
             />
             <IconButton
@@ -1268,7 +1279,7 @@ export default function LogScreen() {
     });
   }, [
     deleteEntry,
-    favoriteQuickAddKeys,
+    favouriteQuickAddKeys,
     openEditEntry,
     theme.colors.elevation.level1,
     theme.colors.error,
@@ -1276,7 +1287,7 @@ export default function LogScreen() {
     theme.colors.onSurfaceVariant,
     theme.colors.outlineVariant,
     theme.colors.primary,
-    toggleFavoriteQuickAdd,
+    toggleFavouriteQuickAdd,
     visibleEntries,
     data.calorieTolerancePercent,
   ]);
@@ -1557,15 +1568,15 @@ export default function LogScreen() {
 
         <QuickLogCard
           recentQuickAdds={recentQuickAdds}
-          favoriteQuickAdds={favoriteQuickAdds}
-          favoriteQuickAddKeys={favoriteQuickAddKeys}
+          favouriteQuickAdds={favouriteQuickAdds}
+          favouriteQuickAddKeys={favouriteQuickAddKeys}
           isMacrosExpanded={data.quickLogMacrosExpanded}
           onSetMacrosExpanded={(next) =>
             setData((prev) => ({ ...prev, quickLogMacrosExpanded: next }))
           }
           onAddMeal={addMeal}
           onQuickAddMeal={quickAddMeal}
-          onToggleFavoriteQuickAdd={toggleFavoriteQuickAdd}
+          onToggleFavouriteQuickAdd={toggleFavouriteQuickAdd}
           onOpenLlmEstimator={handleOpenLlmEstimator}
           data={data}
           isModelBlocked={isModelBlocked}

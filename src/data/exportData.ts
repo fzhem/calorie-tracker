@@ -1,7 +1,22 @@
 import { getCachedData, saveStoredData, DEFAULT_DATA } from "../data/storage";
-import type { StoredData, FavoriteQuickAdd, ModelConfig, GoalPhase, GoalAdjustmentType, MetabolismSex, ActivityLevel } from "../data/storage";
+import type {
+  StoredData,
+  FavouriteQuickAdd,
+  ModelConfig,
+  GoalPhase,
+  GoalAdjustmentType,
+  MetabolismSex,
+  ActivityLevel,
+} from "../data/storage";
 import type { Meal, Weight, BodyFat } from "../db/index";
-import { getAllMeals, getAllWeights, getAllBodyFats, importMealsBulk, importWeightsBulk, importBodyFatsBulk } from "../db/index";
+import {
+  getAllMeals,
+  getAllWeights,
+  getAllBodyFats,
+  importMealsBulk,
+  importWeightsBulk,
+  importBodyFatsBulk,
+} from "../db/index";
 
 export type ExportPayload = {
   settings: StoredData;
@@ -51,23 +66,37 @@ export async function importUserData(json: string) {
 
     const settings: StoredData = {
       ...DEFAULT_DATA,
-      favoriteQuickAdds: (data.favoriteQuickAdds as FavoriteQuickAdd[]) ?? [],
+      favouriteQuickAdds:
+        (data.favouriteQuickAdds as FavouriteQuickAdd[]) ?? [],
       modelPath: (data.modelPath as string | null) ?? null,
       systemPrompt: (data.systemPrompt as string) ?? DEFAULT_DATA.systemPrompt,
       quickLogMacrosExpanded: (data.quickLogMacrosExpanded as boolean) ?? false,
       baseTarget: (data.baseTarget as number) ?? DEFAULT_DATA.baseTarget,
-      caloriesPerKg: (data.caloriesPerKg as number) ?? DEFAULT_DATA.caloriesPerKg,
+      caloriesPerKg:
+        (data.caloriesPerKg as number) ?? DEFAULT_DATA.caloriesPerKg,
       goalPhase: (data.goalPhase as GoalPhase) ?? DEFAULT_DATA.goalPhase,
-      cutAdjustmentType: (data.cutAdjustmentType as GoalAdjustmentType) ?? DEFAULT_DATA.cutAdjustmentType,
-      cutCalorieAdjustment: (data.cutCalorieAdjustment as number) ?? DEFAULT_DATA.cutCalorieAdjustment,
-      cutPercentPerWeek: (data.cutPercentPerWeek as number) ?? DEFAULT_DATA.cutPercentPerWeek,
-      bulkAdjustmentType: (data.bulkAdjustmentType as GoalAdjustmentType) ?? DEFAULT_DATA.bulkAdjustmentType,
-      bulkCalorieAdjustment: (data.bulkCalorieAdjustment as number) ?? DEFAULT_DATA.bulkCalorieAdjustment,
-      bulkPercentPerWeek: (data.bulkPercentPerWeek as number) ?? DEFAULT_DATA.bulkPercentPerWeek,
-      metabolismSex: (data.metabolismSex as MetabolismSex) ?? DEFAULT_DATA.metabolismSex,
+      cutAdjustmentType:
+        (data.cutAdjustmentType as GoalAdjustmentType) ??
+        DEFAULT_DATA.cutAdjustmentType,
+      cutCalorieAdjustment:
+        (data.cutCalorieAdjustment as number) ??
+        DEFAULT_DATA.cutCalorieAdjustment,
+      cutPercentPerWeek:
+        (data.cutPercentPerWeek as number) ?? DEFAULT_DATA.cutPercentPerWeek,
+      bulkAdjustmentType:
+        (data.bulkAdjustmentType as GoalAdjustmentType) ??
+        DEFAULT_DATA.bulkAdjustmentType,
+      bulkCalorieAdjustment:
+        (data.bulkCalorieAdjustment as number) ??
+        DEFAULT_DATA.bulkCalorieAdjustment,
+      bulkPercentPerWeek:
+        (data.bulkPercentPerWeek as number) ?? DEFAULT_DATA.bulkPercentPerWeek,
+      metabolismSex:
+        (data.metabolismSex as MetabolismSex) ?? DEFAULT_DATA.metabolismSex,
       metabolismAgeYears: (data.metabolismAgeYears as number | null) ?? null,
       metabolismHeightCm: (data.metabolismHeightCm as number | null) ?? null,
-      activityLevel: (data.activityLevel as ActivityLevel) ?? DEFAULT_DATA.activityLevel,
+      activityLevel:
+        (data.activityLevel as ActivityLevel) ?? DEFAULT_DATA.activityLevel,
       manualWeightKg: (data.manualWeightKg as number | null) ?? null,
       lastWeightSyncAt: (data.lastWeightSyncAt as string | null) ?? null,
       lastBodyFatSyncAt: (data.lastBodyFatSyncAt as string | null) ?? null,
@@ -75,9 +104,14 @@ export async function importUserData(json: string) {
       fatGoalGrams: (data.fatGoalGrams as number | null) ?? null,
       carbsGoalGrams: (data.carbsGoalGrams as number | null) ?? null,
       fiberGoalGrams: (data.fiberGoalGrams as number | null) ?? null,
-      calorieTolerancePercent: (data.calorieTolerancePercent as number) ?? DEFAULT_DATA.calorieTolerancePercent,
-      graphToleranceCalories: (data.graphToleranceCalories as number) ?? DEFAULT_DATA.graphToleranceCalories,
-      perModelConfig: (data.perModelConfig as Record<string, ModelConfig>) ?? {},
+      calorieTolerancePercent:
+        (data.calorieTolerancePercent as number) ??
+        DEFAULT_DATA.calorieTolerancePercent,
+      graphToleranceCalories:
+        (data.graphToleranceCalories as number) ??
+        DEFAULT_DATA.graphToleranceCalories,
+      perModelConfig:
+        (data.perModelConfig as Record<string, ModelConfig>) ?? {},
       healthConnectAutoSync: (data.healthConnectAutoSync as boolean) ?? false,
     };
 

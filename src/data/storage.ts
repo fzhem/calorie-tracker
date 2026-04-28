@@ -18,8 +18,7 @@ import {
   ADJUSTMENT_TYPE_KCAL,
 } from "../constants";
 
-
-export type FavoriteQuickAdd = {
+export type FavouriteQuickAdd = {
   title: string;
   calories: number;
   proteinGrams?: number | null;
@@ -57,7 +56,7 @@ export type BodyFatPoint = {
 };
 
 export type StoredData = {
-  favoriteQuickAdds: FavoriteQuickAdd[];
+  favouriteQuickAdds: FavouriteQuickAdd[];
   modelPath: string | null;
   systemPrompt: string;
   quickLogMacrosExpanded: boolean;
@@ -106,7 +105,7 @@ export const DEFAULT_MODEL_CONFIG: ModelConfig = {
 export const STORAGE_KEY = CONST_STORAGE_KEY;
 
 export const DEFAULT_DATA: StoredData = {
-  favoriteQuickAdds: [],
+  favouriteQuickAdds: [],
   modelPath: null,
   systemPrompt: `You are a nutrition assistant.
 
@@ -158,7 +157,7 @@ function normalizeStoredData(parsed: Partial<StoredData>): StoredData {
   return {
     ...DEFAULT_DATA,
     ...parsed,
-    favoriteQuickAdds: parsed.favoriteQuickAdds ?? [],
+    favouriteQuickAdds: parsed.favouriteQuickAdds ?? [],
     perModelConfig: normalizePerModelConfig(parsed.perModelConfig),
   };
 }
@@ -197,7 +196,6 @@ export async function saveStoredData(next: StoredData) {
   cachedData = next;
   kvStore.set(STORAGE_KEY, JSON.stringify(next));
 }
-
 
 // ── MealEntry type (re-exported for screen use) ─────────────────────────
 export type MealEntry = {
