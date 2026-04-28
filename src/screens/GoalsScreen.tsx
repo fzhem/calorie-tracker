@@ -286,6 +286,9 @@ export default function GoalsScreen() {
       loadStoredData()
         .then((next) => {
           setData(next);
+          setMetabolismAgeInput(
+            next.metabolismAgeYears ? `${next.metabolismAgeYears}` : "",
+          );
           setManualWeightInput(
             next.manualWeightKg
               ? formatWeightForUnit(next.manualWeightKg, weightUnit)
