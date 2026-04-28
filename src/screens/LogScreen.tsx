@@ -2235,7 +2235,7 @@ const styles = StyleSheet.create({
   formArea: { gap: 12 },
   macroGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   macroInput: { minWidth: "47%", flexGrow: 1 },
-  quickAddSection: { gap: 8 },
+  quickAddSection: { gap: 8, marginBottom: 8 },
   quickAddScrollFrame: {
     borderWidth: 1,
     borderRadius: 10,
