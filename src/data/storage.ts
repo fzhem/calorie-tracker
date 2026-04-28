@@ -18,18 +18,7 @@ import {
   ADJUSTMENT_TYPE_KCAL,
 } from "../constants";
 
-export type MealEntry = {
-  id: string;
-  title: string;
-  calories: number;
-  proteinGrams?: number | null;
-  fatGrams?: number | null;
-  carbsGrams?: number | null;
-  fiberGrams?: number | null;
-  loggedAt: string;
-};
-
-export type FavoriteQuickAdd = {
+export type FavouriteQuickAdd = {
   title: string;
   calories: number;
   proteinGrams?: number | null;
@@ -67,8 +56,7 @@ export type BodyFatPoint = {
 };
 
 export type StoredData = {
-  entries: MealEntry[];
-  favoriteQuickAdds: FavoriteQuickAdd[];
+  favouriteQuickAdds: FavouriteQuickAdd[];
   modelPath: string | null;
   systemPrompt: string;
   quickLogMacrosExpanded: boolean;
@@ -86,8 +74,6 @@ export type StoredData = {
   metabolismHeightCm: number | null;
   activityLevel: ActivityLevel;
   manualWeightKg: number | null;
-  weightHistory: WeightPoint[];
-  bodyFatHistory: BodyFatPoint[];
   lastWeightSyncAt: string | null;
   lastBodyFatSyncAt: string | null;
   proteinGoalGrams: number | null;
@@ -119,8 +105,7 @@ export const DEFAULT_MODEL_CONFIG: ModelConfig = {
 export const STORAGE_KEY = CONST_STORAGE_KEY;
 
 export const DEFAULT_DATA: StoredData = {
-  entries: [],
-  favoriteQuickAdds: [],
+  favouriteQuickAdds: [],
   modelPath: null,
   systemPrompt: `You are a nutrition assistant.
 
@@ -154,8 +139,6 @@ export const DEFAULT_DATA: StoredData = {
   metabolismHeightCm: null,
   activityLevel: DEFAULT_ACTIVITY_LEVEL,
   manualWeightKg: null,
-  weightHistory: [],
-  bodyFatHistory: [],
   lastWeightSyncAt: null,
   lastBodyFatSyncAt: null,
   proteinGoalGrams: null,
@@ -174,10 +157,7 @@ function normalizeStoredData(parsed: Partial<StoredData>): StoredData {
   return {
     ...DEFAULT_DATA,
     ...parsed,
-    entries: parsed.entries ?? [],
-    favoriteQuickAdds: parsed.favoriteQuickAdds ?? [],
-    weightHistory: parsed.weightHistory ?? [],
-    bodyFatHistory: parsed.bodyFatHistory ?? [],
+    favouriteQuickAdds: parsed.favouriteQuickAdds ?? [],
     perModelConfig: normalizePerModelConfig(parsed.perModelConfig),
   };
 }
@@ -216,3 +196,15 @@ export async function saveStoredData(next: StoredData) {
   cachedData = next;
   kvStore.set(STORAGE_KEY, JSON.stringify(next));
 }
+
+// ── MealEntry type (re-exported for screen use) ─────────────────────────
+export type MealEntry = {
+  id: string;
+  title: string;
+  calories: number;
+  proteinGrams?: number | null;
+  fatGrams?: number | null;
+  carbsGrams?: number | null;
+  fiberGrams?: number | null;
+  loggedAt: string;
+};

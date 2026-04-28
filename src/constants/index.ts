@@ -6,7 +6,7 @@
 export const STORAGE_KEY = "calorie-tracker-storage-v1";
 export const MMKV_INSTANCE_ID = "calorie-tracker-mmkv-v1";
 export const THEME_MODE_STORAGE_KEY = "calorie-tracker-theme-mode-v1";
-export const SQLITE_DB_NAME = "myDB";
+export const SQLITE_DB_NAME = "calorie-tracker-db";
 export const EXPORT_FILENAME_PREFIX = "calorie-tracker-export_";
 
 // ── Database Table Names ─────────────────────────────────────
@@ -78,8 +78,8 @@ export const CALORIES_PER_GRAM_FAT = 9;
 // ── Default Macro Nutritient Ratios (by phase) ───────────────
 export const DEFAULT_MACRO_RATIOS = {
   [PHASE_MAINTAIN]: { protein: 0.3, carbs: 0.4, fat: 0.3 },
-  [PHASE_CUT]:      { protein: 0.35, carbs: 0.35, fat: 0.3 },
-  [PHASE_BULK]:     { protein: 0.3, carbs: 0.45, fat: 0.25 },
+  [PHASE_CUT]: { protein: 0.35, carbs: 0.35, fat: 0.3 },
+  [PHASE_BULK]: { protein: 0.3, carbs: 0.45, fat: 0.25 },
 } as const;
 
 // ── Default Numeric Values (correspond to StoredData defaults) ─
@@ -106,7 +106,7 @@ export const DEFAULT_MODEL_BACKEND = "cpu";
 // ── Truncation / Slice Limits ────────────────────────────────
 export const SLUG_MAX_LENGTH = 40;
 export const MAX_VISIBLE_ENTRIES = 40;
-export const MAX_FAVORITE_QUICK_ADDS = 24;
+export const MAX_FAVOURITE_QUICK_ADDS = 24;
 export const TREND_RECENT_POINTS = 5;
 
 // ── Animation & Timing ───────────────────────────────────────
@@ -138,6 +138,7 @@ export const ISO_DAY_END_SUFFIX = "T23:59:59.999Z";
 
 // ── Graph Defaults ───────────────────────────────────────────
 export const GRAPH_MAX_DAYS_SHORT = 7;
+export const GRAPH_MAX_DAYS_MEDIUM = 90;
 export const GRAPH_MAX_DAYS_LONG = 365;
 
 // ── Weight Trend EMA ─────────────────────────────────────────

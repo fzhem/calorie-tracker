@@ -12,7 +12,6 @@ import {
 } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
-  Alert,
   Modal,
   Platform,
   Pressable,
@@ -59,15 +58,19 @@ import {
   loadStoredData as readStoredData,
   saveStoredData,
 } from "../data/storage";
-import type {
-  BodyFatPoint,
-  ModelConfig,
-  StoredData,
-  WeightPoint,
-} from "../data/storage";
+import type { Weight, BodyFat } from "../db/index";
+import type { ModelConfig, StoredData } from "../data/storage";
 import { useThemeMode, type ThemeMode } from "../ui/themeMode";
+import { useM3Alert } from "../ui/m3Alert";
 
 import { AUTO_SYNC_INTERVAL_MS } from "../constants";
+import {
+  insertWeight,
+  insertBodyFat,
+  getLatestWeight,
+  getLatestBodyFat,
+} from "../db/index";
+import { invalidateCache, invalidateCachePrefix } from "../lib/queryCache";
 
 type HealthConnectModule = typeof import("react-native-health-connect");
 const healthConnect: HealthConnectModule | null =
@@ -443,32 +446,6 @@ function roundTo(value: number, digits = 1) {
   return Math.round(value * 10 ** digits) / 10 ** digits;
 }
 
-function mergeWeightHistory(
-  existing: WeightPoint[],
-  incoming: WeightPoint[],
-): WeightPoint[] {
-  const keyed = new Map<string, WeightPoint>();
-  for (const p of [...existing, ...incoming])
-    keyed.set(`${p.source}-${p.recordedAt}`, p);
-  return Array.from(keyed.values()).sort(
-    (a, b) =>
-      new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
-  );
-}
-
-function mergeBodyFatHistory(
-  existing: BodyFatPoint[],
-  incoming: BodyFatPoint[],
-): BodyFatPoint[] {
-  const keyed = new Map<string, BodyFatPoint>();
-  for (const p of [...existing, ...incoming])
-    keyed.set(`${p.source}-${p.recordedAt}`, p);
-  return Array.from(keyed.values()).sort(
-    (a, b) =>
-      new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
-  );
-}
-
 function formatDisplayDate(value: string) {
   return new Date(value).toLocaleString(undefined, {
     month: "short",
@@ -613,7 +590,7 @@ function extractHealthOrigin(record: unknown) {
     originAppId,
     originAppName: getKnownOriginAppName(originAppId) ?? originAppId,
     originDevice,
-  } as Pick<WeightPoint, "originAppId" | "originAppName" | "originDevice">;
+  } as Pick<Weight, "originAppId" | "originAppName" | "originDevice">;
 }
 
 function formatBytes(value: number | null) {
@@ -730,14 +707,21 @@ export default function SettingsScreen() {
       const fileUri = result.assets[0].uri;
       const file = new File(fileUri);
       if (!file.exists) {
-        Alert.alert("Import failed", "Selected file does not exist.");
+        m3Alert.alert("Import failed", "Selected file does not exist.");
         return;
       }
       const json = await file.text();
       await importUserData(json);
-      Alert.alert("Import successful", "Your data has been imported.");
+      // Refresh latest weight & body fat from DB after import
+      getLatestWeight().then((point) =>
+        setLatestWeight(point?.weightKg ?? null),
+      );
+      getLatestBodyFat().then((point) =>
+        setLatestBodyFat(point?.bodyFatPercentage ?? null),
+      );
+      m3Alert.alert("Import successful", "Your data has been imported.");
     } catch (error) {
-      Alert.alert(
+      m3Alert.alert(
         "Import failed",
         error instanceof Error ? error.message : String(error),
       );
@@ -747,7 +731,7 @@ export default function SettingsScreen() {
   const handleExportData = async () => {
     try {
       setIsExporting(true);
-      const json = exportUserData();
+      const json = await exportUserData();
       const now = new Date();
       const timestamp = now
         .toISOString()
@@ -763,7 +747,7 @@ export default function SettingsScreen() {
         dialogTitle: "Export Calorie Tracker Data",
       });
     } catch (error) {
-      Alert.alert(
+      m3Alert.alert(
         "Export failed",
         error instanceof Error ? error.message : String(error),
       );
@@ -787,6 +771,7 @@ export default function SettingsScreen() {
     nativeHeapBytes: number;
     availableMemoryBytes: number;
   } | null>(null);
+  const m3Alert = useM3Alert();
   const [showMemoryModal, setShowMemoryModal] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [showSnackbar, setShowSnackbar] = useState(false);
@@ -865,7 +850,7 @@ export default function SettingsScreen() {
     string | null
   >(null);
   const [activeModelTab, setActiveModelTab] = useState<"download" | "offline">(
-    "download",
+    "offline",
   );
 
   // Clear download error when switching from custom URL to built-in models
@@ -938,7 +923,7 @@ export default function SettingsScreen() {
     loadStoredData()
       .then(() => refreshDownloadedModels())
       .catch(() =>
-        Alert.alert("Storage error", "Saved data could not be loaded."),
+        m3Alert.alert("Storage error", "Saved data could not be loaded."),
       )
       .finally(() => setIsReady(true));
   }, [loadStoredData, refreshDownloadedModels]);
@@ -946,10 +931,10 @@ export default function SettingsScreen() {
   useFocusEffect(
     useCallback(() => {
       loadStoredData().catch(() => {
-        Alert.alert("Storage error", "Saved data could not be loaded.");
+        m3Alert.alert("Storage error", "Saved data could not be loaded.");
       });
       refreshDownloadedModels().catch(() => {
-        Alert.alert(
+        m3Alert.alert(
           "File error",
           "Downloaded model list could not be refreshed.",
         );
@@ -986,13 +971,13 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (!isReady) return;
     saveStoredData(data).catch(() =>
-      Alert.alert("Storage error", "Changes could not be saved."),
+      m3Alert.alert("Storage error", "Changes could not be saved."),
     );
   }, [data, isReady]);
 
   const ensureHealthConnectAvailable = async () => {
     if (!healthConnect) {
-      Alert.alert(
+      m3Alert.alert(
         "Unavailable",
         "Health Connect requires an Android development build.",
       );
@@ -1017,7 +1002,7 @@ export default function SettingsScreen() {
 
   const syncWeight = async () => {
     if (!healthConnect) {
-      Alert.alert(
+      m3Alert.alert(
         "Unavailable",
         "Health Connect requires an Android development build.",
       );
@@ -1044,10 +1029,9 @@ export default function SettingsScreen() {
       if (!hasWeightPermission && !hasBodyFatPermission) {
         setHealthStatus("error");
 
-        Alert.alert(
+        m3Alert.alert(
           "Body Data Permission Needed",
           "This app needs Health Connect permission to read Weight and Body Fat data. In Health Connect, enable Weight and Body Fat under app permissions, then tap Sync body data again.",
-          [{ text: "OK" }],
         );
         return;
       }
@@ -1114,14 +1098,14 @@ export default function SettingsScreen() {
         } while (pageToken);
       }
 
-      const synced: WeightPoint[] = allRecords.map((r) => ({
+      const synced: Omit<Weight, "id">[] = allRecords.map((r) => ({
         recordedAt: r.time,
         weightKg: roundTo(r.weight.inKilograms, 2),
         source: "health-connect",
         ...extractHealthOrigin(r),
       }));
 
-      const syncedBodyFat: BodyFatPoint[] = allBodyFatRecords
+      const syncedBodyFat: Omit<BodyFat, "id">[] = allBodyFatRecords
         .map((r) => {
           const raw =
             typeof r.percentage === "number"
@@ -1139,26 +1123,30 @@ export default function SettingsScreen() {
         })
         .filter((point) => Number.isFinite(point.bodyFatPercentage));
 
+      // Insert synced records into SQLite
+      for (const w of synced) {
+        await insertWeight(w).catch(() => {});
+      }
+      for (const bf of syncedBodyFat) {
+        await insertBodyFat(bf).catch(() => {});
+      }
       setData((prev) => ({
         ...prev,
-        weightHistory: mergeWeightHistory(
-          prev.weightHistory.filter((p) => p.source !== "health-connect"),
-          synced,
-        ),
-        bodyFatHistory: mergeBodyFatHistory(
-          prev.bodyFatHistory.filter((p) => p.source !== "health-connect"),
-          syncedBodyFat,
-        ),
         lastWeightSyncAt: new Date().toISOString(),
         lastBodyFatSyncAt: new Date().toISOString(),
       }));
+      // Invalidate cached weight/body-fat so GraphsScreen picks up the fresh data
+      invalidateCachePrefix("weightSeries:");
+      invalidateCachePrefix("bodyFatSeries:");
+      invalidateCache("latestWeight");
+      invalidateCache("latestBodyFat");
 
       setHealthStatus("available");
     } catch (error) {
       const reason = getErrorMessage(error);
       setHealthStatus("error");
 
-      Alert.alert("Sync Failed", `Could not sync body data. ${reason}`);
+      m3Alert.alert("Sync Failed", `Could not sync body data. ${reason}`);
     } finally {
       setIsSyncingWeight(false);
     }
@@ -1166,14 +1154,14 @@ export default function SettingsScreen() {
 
   const openHealthSettings = () => {
     if (!healthConnect) {
-      Alert.alert(
+      m3Alert.alert(
         "Unavailable",
         "Health Connect requires an Android development build.",
       );
       return;
     }
     if (typeof healthConnect.openHealthConnectSettings !== "function") {
-      Alert.alert(
+      m3Alert.alert(
         "Unavailable",
         "Health Connect settings cannot be opened on this device.",
       );
@@ -1183,13 +1171,13 @@ export default function SettingsScreen() {
     try {
       healthConnect.openHealthConnectSettings();
     } catch (error) {
-      Alert.alert("Could not open settings", getErrorMessage(error));
+      m3Alert.alert("Could not open settings", getErrorMessage(error));
     }
   };
 
   const onPressSyncWeight = () => {
     if (healthStatus === "unavailable" || healthStatus === "update-required") {
-      Alert.alert(
+      m3Alert.alert(
         "Health Connect Unavailable",
         healthStatus === "update-required"
           ? "Please install or update Health Connect first, then try syncing again."
@@ -1334,7 +1322,7 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteModel = (model: DownloadedModel) => {
-    Alert.alert("Delete model?", `Remove ${model.name} from local storage?`, [
+    m3Alert.alert("Delete model?", `Remove ${model.name} from local storage?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
@@ -1351,7 +1339,7 @@ export default function SettingsScreen() {
               }));
               await refreshDownloadedModels();
             } catch (error) {
-              Alert.alert("Delete failed", getErrorMessage(error));
+              m3Alert.alert("Delete failed", getErrorMessage(error));
             }
           })();
         },
@@ -1359,8 +1347,17 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const latestWeight = data.weightHistory[0]?.weightKg ?? data.manualWeightKg;
-  const latestBodyFat = data.bodyFatHistory[0]?.bodyFatPercentage ?? null;
+  useEffect(() => {
+    getLatestWeight().then((point) =>
+      setLatestWeight(point?.weightKg ?? data.manualWeightKg),
+    );
+    getLatestBodyFat().then((point) =>
+      setLatestBodyFat(point?.bodyFatPercentage ?? null),
+    );
+  }, [data.manualWeightKg, data.lastWeightSyncAt, data.lastBodyFatSyncAt]);
+
+  const [latestWeight, setLatestWeight] = useState<number | null>(null);
+  const [latestBodyFat, setLatestBodyFat] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isReady || !data.modelPath) return;
@@ -2240,6 +2237,7 @@ export default function SettingsScreen() {
         onSave={handleSaveModelConfig}
         onClose={() => setActiveModelConfigUri(null)}
       />
+      {m3Alert.alertDialog}
       <Snackbar
         visible={showSnackbar}
         onDismiss={() => setShowSnackbar(false)}

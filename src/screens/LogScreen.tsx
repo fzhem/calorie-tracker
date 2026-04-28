@@ -10,7 +10,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import {
-  Alert,
   AppState,
   Modal,
   Platform,
@@ -33,6 +32,7 @@ import {
   TextInput,
   useTheme,
 } from "react-native-paper";
+import { useM3Alert } from "../ui/m3Alert";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -54,13 +54,24 @@ import {
   loadStoredData,
   saveStoredData,
 } from "../data/storage";
-import type { MealEntry, StoredData } from "../data/storage";
+import type { StoredData } from "../data/storage";
+import type { Meal } from "../db/index";
 
 import {
   MAX_VISIBLE_ENTRIES,
-  MAX_FAVORITE_QUICK_ADDS,
+  MAX_FAVOURITE_QUICK_ADDS,
   LOG_ENTRY_MAX_WIDTH,
 } from "../constants";
+
+import {
+  insertMeal,
+  getMealsForDay,
+  deleteMeal,
+  updateMeal,
+  getLatestWeightBySource,
+} from "../db/index";
+import { makeMealId } from "../db/helpers";
+import { invalidateCachePrefix } from "../lib/queryCache";
 
 export type NutritionResult = {
   calories: number;
@@ -105,7 +116,7 @@ type QuickAddItem = {
 };
 
 type SortMode = "newest" | "oldest";
-type QuickAddTab = "recent" | "favorites";
+type QuickAddTab = "recent" | "favourites";
 
 type EditEntryDraft = {
   id: string;
@@ -136,10 +147,6 @@ function formatDisplayDate(value: string) {
 function parseNumberInput(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function createId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function quickAddKey(item: QuickAddItem) {
@@ -201,13 +208,13 @@ const QUICK_LOG_INPUT_THEME = { animation: { scale: 0 } };
 
 type QuickLogCardProps = {
   recentQuickAdds: QuickAddItem[];
-  favoriteQuickAdds: QuickAddItem[];
-  favoriteQuickAddKeys: Set<string>;
+  favouriteQuickAdds: QuickAddItem[];
+  favouriteQuickAddKeys: Set<string>;
   isMacrosExpanded: boolean;
   onSetMacrosExpanded: (next: boolean) => void;
   onAddMeal: (item: QuickAddItem) => void;
   onQuickAddMeal: (item: QuickAddItem) => void;
-  onToggleFavoriteQuickAdd: (item: QuickAddItem) => void;
+  onToggleFavouriteQuickAdd: (item: QuickAddItem) => void;
   onOpenLlmEstimator: () => void;
   data: StoredData;
   isModelBlocked?: boolean;
@@ -217,13 +224,13 @@ type QuickLogCardProps = {
 
 const QuickLogCard = memo(function QuickLogCard({
   recentQuickAdds,
-  favoriteQuickAdds,
-  favoriteQuickAddKeys,
+  favouriteQuickAdds,
+  favouriteQuickAddKeys,
   isMacrosExpanded,
   onSetMacrosExpanded,
   onAddMeal,
   onQuickAddMeal,
-  onToggleFavoriteQuickAdd,
+  onToggleFavouriteQuickAdd,
   onOpenLlmEstimator,
   data,
   isModelBlocked,
@@ -238,11 +245,12 @@ const QuickLogCard = memo(function QuickLogCard({
   const [mealCarbs, setMealCarbs] = useState("");
   const [mealFiber, setMealFiber] = useState("");
   const [mealMultiplier, setMealMultiplier] = useState("1"); // New state for multiplier
-  const [quickAddTab, setQuickAddTab] = useState<QuickAddTab>("recent");
+  const [quickAddTab, setQuickAddTab] = useState<QuickAddTab>("favourites");
 
   const activeQuickAdds =
-    quickAddTab === "favorites" ? favoriteQuickAdds : recentQuickAdds;
+    quickAddTab === "favourites" ? favouriteQuickAdds : recentQuickAdds;
 
+  const m3Alert = useM3Alert();
   const addDraftMismatch = useMemo(() => {
     const calories = parseNumberInput(mealCalories);
     if (!calories || calories <= 0) return null;
@@ -268,7 +276,7 @@ const QuickLogCard = memo(function QuickLogCard({
   const handleAddMeal = useCallback(() => {
     const multiplier = parseNumberInput(mealMultiplier);
     if (!multiplier || multiplier <= 0) {
-      Alert.alert(
+      m3Alert.alert(
         "Invalid multiplier",
         "Multiplier must be a positive number.",
       );
@@ -282,27 +290,27 @@ const QuickLogCard = memo(function QuickLogCard({
     const fiber = mealFiber.trim() ? parseNumberInput(mealFiber) : null;
 
     if (!mealTitle.trim()) {
-      Alert.alert("Missing meal name", "Add a label.");
+      m3Alert.alert("Missing meal name", "Add a label.");
       return;
     }
     if (!calories || calories <= 0) {
-      Alert.alert("Invalid calories", "Enter a positive number.");
+      m3Alert.alert("Invalid calories", "Enter a positive number.");
       return;
     }
     if (protein !== null && protein < 0) {
-      Alert.alert("Invalid protein", "Protein must be 0 or more.");
+      m3Alert.alert("Invalid protein", "Protein must be 0 or more.");
       return;
     }
     if (fat !== null && fat < 0) {
-      Alert.alert("Invalid fat", "Fat must be 0 or more.");
+      m3Alert.alert("Invalid fat", "Fat must be 0 or more.");
       return;
     }
     if (carbs !== null && carbs < 0) {
-      Alert.alert("Invalid carbs", "Carbs must be 0 or more.");
+      m3Alert.alert("Invalid carbs", "Carbs must be 0 or more.");
       return;
     }
     if (fiber !== null && fiber < 0) {
-      Alert.alert("Invalid fibre", "Fibre must be 0 or more.");
+      m3Alert.alert("Invalid fibre", "Fibre must be 0 or more.");
       return;
     }
 
@@ -522,13 +530,13 @@ const QuickLogCard = memo(function QuickLogCard({
         <Button mode="contained" icon="plus" onPress={handleAddMeal}>
           Add entry
         </Button>
-        {recentQuickAdds.length || favoriteQuickAdds.length ? (
+        {recentQuickAdds.length || favouriteQuickAdds.length ? (
           <View style={styles.quickAddSection}>
             <SegmentedButtons
               value={quickAddTab}
               onValueChange={(value) => setQuickAddTab(value as QuickAddTab)}
               buttons={[
-                { value: "favorites", label: "Favourites", icon: "star" },
+                { value: "favourites", label: "Favourites", icon: "star" },
                 { value: "recent", label: "Recents", icon: "history" },
               ]}
             />
@@ -549,7 +557,7 @@ const QuickLogCard = memo(function QuickLogCard({
                   >
                     {activeQuickAdds.map((item) => {
                       const key = quickAddKey(item);
-                      const isFavorite = favoriteQuickAddKeys.has(key);
+                      const isFavourite = favouriteQuickAddKeys.has(key);
                       return (
                         <View key={key} style={styles.quickAddItem}>
                           <Chip
@@ -560,11 +568,11 @@ const QuickLogCard = memo(function QuickLogCard({
                             {item.title} ({item.calories})
                           </Chip>
                           <IconButton
-                            icon={isFavorite ? "star" : "star-outline"}
+                            icon={isFavourite ? "star" : "star-outline"}
                             size={18}
-                            onPress={() => onToggleFavoriteQuickAdd(item)}
+                            onPress={() => onToggleFavouriteQuickAdd(item)}
                             accessibilityLabel={
-                              isFavorite ? "Remove favourite" : "Add favourite"
+                              isFavourite ? "Remove favourite" : "Add favourite"
                             }
                           />
                         </View>
@@ -599,6 +607,7 @@ const QuickLogCard = memo(function QuickLogCard({
           </View>
         ) : null}
       </Card.Content>
+      {m3Alert.alertDialog}
     </Card>
   );
 });
@@ -744,11 +753,16 @@ export default function LogScreen() {
       setLlmStageStartedAt(null);
     }
   };
+  const m3Alert = useM3Alert();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const [data, setData] = useState<StoredData>(
     () => getCachedData() ?? DEFAULT_DATA,
   );
+
+  const todayKey = getLocalDateKey(new Date());
+  const [entries, setEntries] = useState<Meal[]>([]);
+  const [latestHCWeightKg, setLatestHCWeightKg] = useState<number | null>(null);
   const [isReady, setIsReady] = useState(false);
   const hasCompletedInitialLoad = useRef(false);
   const [sortMode, setSortMode] = useState<SortMode>("newest");
@@ -761,7 +775,7 @@ export default function LogScreen() {
     loadStoredData()
       .then((next) => setData(next))
       .catch(() =>
-        Alert.alert("Storage error", "Saved data could not be loaded."),
+        m3Alert.alert("Storage error", "Saved data could not be loaded."),
       )
       .finally(() => {
         hasCompletedInitialLoad.current = true;
@@ -769,32 +783,48 @@ export default function LogScreen() {
       });
   }, []);
 
+  // Load today's entries from DB
+  useEffect(() => {
+    if (!isReady) return;
+    getMealsForDay(todayKey)
+      .then(setEntries)
+      .catch(() => {});
+  }, [isReady, todayKey]);
+
+  // Load latest health-connect weight for calorie target calculation
+  useEffect(() => {
+    if (!isReady) return;
+    getLatestWeightBySource("health-connect")
+      .then((point) => setLatestHCWeightKg(point?.weightKg ?? null))
+      .catch(() => {});
+  }, [isReady]);
+
   useFocusEffect(
     useCallback(() => {
       if (!hasCompletedInitialLoad.current) return;
       loadStoredData()
         .then((next) => setData(next))
         .catch(() =>
-          Alert.alert("Storage error", "Saved data could not be loaded."),
+          m3Alert.alert("Storage error", "Saved data could not be loaded."),
         );
+      // Refresh today's entries from DB on focus
+      const key = getLocalDateKey(new Date());
+      getMealsForDay(key)
+        .then(setEntries)
+        .catch(() => {});
     }, []),
   );
 
+  // Persist settings (but not meal entries – those are in SQLite)
   useEffect(() => {
     if (!isReady) return;
     saveStoredData(data).catch(() =>
-      Alert.alert("Storage error", "Changes could not be saved."),
+      m3Alert.alert("Storage error", "Changes could not be saved."),
     );
   }, [data, isReady]);
 
-  const todayKey = getLocalDateKey(new Date());
-  const todayEntries = useMemo(
-    () =>
-      data.entries.filter(
-        (e) => getLocalDateKey(new Date(e.loggedAt)) === todayKey,
-      ),
-    [data.entries, todayKey],
-  );
+  // todayKey computed earlier above the state declarations
+  const todayEntries = entries;
   const sortedTodayEntries = useMemo(() => {
     const list = [...todayEntries];
     list.sort((a, b) => {
@@ -806,7 +836,7 @@ export default function LogScreen() {
   }, [sortMode, todayEntries]);
   const recentQuickAdds = useMemo(() => {
     const unique = new Map<string, QuickAddItem>();
-    for (const entry of data.entries) {
+    for (const entry of entries) {
       const key = quickAddKey({ title: entry.title, calories: entry.calories });
       if (!unique.has(key)) {
         unique.set(key, {
@@ -821,14 +851,14 @@ export default function LogScreen() {
       if (unique.size >= 8) break;
     }
     return Array.from(unique.values());
-  }, [data.entries]);
-  const favoriteQuickAdds = useMemo(
-    () => data.favoriteQuickAdds ?? [],
-    [data.favoriteQuickAdds],
+  }, [entries]);
+  const favouriteQuickAdds = useMemo(
+    () => data.favouriteQuickAdds ?? [],
+    [data.favouriteQuickAdds],
   );
-  const favoriteQuickAddKeys = useMemo(
-    () => new Set(favoriteQuickAdds.map(quickAddKey)),
-    [favoriteQuickAdds],
+  const favouriteQuickAddKeys = useMemo(
+    () => new Set(favouriteQuickAdds.map(quickAddKey)),
+    [favouriteQuickAdds],
   );
   const visibleEntries = useMemo(
     () => sortedTodayEntries.slice(0, MAX_VISIBLE_ENTRIES),
@@ -836,8 +866,8 @@ export default function LogScreen() {
   );
   const todayCalories = todayEntries.reduce((sum, e) => sum + e.calories, 0);
   const { adjustedTarget, goalDelta, metabolism } = useMemo(
-    () => getAdjustedCalorieTarget(data),
-    [data],
+    () => getAdjustedCalorieTarget(data, latestHCWeightKg),
+    [data, latestHCWeightKg],
   );
   const remaining = adjustedTarget - todayCalories;
   const progress = Math.min(todayCalories / Math.max(adjustedTarget, 1), 1);
@@ -1008,65 +1038,68 @@ export default function LogScreen() {
   );
 
   const addMeal = useCallback((item: QuickAddItem) => {
-    setData((prev) => ({
-      ...prev,
-      entries: [
-        {
-          id: createId(),
-          title: item.title,
-          calories: item.calories,
-          proteinGrams: item.proteinGrams ?? null,
-          fatGrams: item.fatGrams ?? null,
-          carbsGrams: item.carbsGrams ?? null,
-          fiberGrams: item.fiberGrams ?? null,
-          loggedAt: new Date().toISOString(),
-        },
-        ...prev.entries,
-      ],
-    }));
+    const now = new Date().toISOString();
+    const meal = {
+      id: makeMealId({
+        loggedAt: now,
+        title: item.title,
+        calories: item.calories,
+      }),
+      title: item.title,
+      calories: item.calories,
+      proteinGrams: item.proteinGrams ?? null,
+      fatGrams: item.fatGrams ?? null,
+      carbsGrams: item.carbsGrams ?? null,
+      fiberGrams: item.fiberGrams ?? null,
+      loggedAt: now,
+    };
+    insertMeal(meal).catch(() => {});
+    invalidateCachePrefix("meals:");
+    setEntries((prev) => [meal, ...prev]);
   }, []);
 
   const quickAddMeal = useCallback((item: QuickAddItem) => {
-    setData((prev) => ({
-      ...prev,
-      entries: [
-        {
-          id: createId(),
-          title: item.title,
-          calories: item.calories,
-          proteinGrams: item.proteinGrams ?? null,
-          fatGrams: item.fatGrams ?? null,
-          carbsGrams: item.carbsGrams ?? null,
-          fiberGrams: item.fiberGrams ?? null,
-          loggedAt: new Date().toISOString(),
-        },
-        ...prev.entries,
-      ],
-    }));
+    const now = new Date().toISOString();
+    const meal = {
+      id: makeMealId({
+        loggedAt: now,
+        title: item.title,
+        calories: item.calories,
+      }),
+      title: item.title,
+      calories: item.calories,
+      proteinGrams: item.proteinGrams ?? null,
+      fatGrams: item.fatGrams ?? null,
+      carbsGrams: item.carbsGrams ?? null,
+      fiberGrams: item.fiberGrams ?? null,
+      loggedAt: now,
+    };
+    insertMeal(meal).catch(() => {});
+    invalidateCachePrefix("meals:");
+    setEntries((prev) => [meal, ...prev]);
     Vibration.vibrate(10);
   }, []);
 
-  const toggleFavoriteQuickAdd = useCallback((item: QuickAddItem) => {
+  const toggleFavouriteQuickAdd = useCallback((item: QuickAddItem) => {
     Vibration.vibrate(10);
     const key = quickAddKey(item);
     setData((prev) => {
-      const current = prev.favoriteQuickAdds ?? [];
+      const current = prev.favouriteQuickAdds ?? [];
       const exists = current.some((fav) => quickAddKey(fav) === key);
-      const nextFavorites = exists
+      const nextFavourites = exists
         ? current.filter((fav) => quickAddKey(fav) !== key)
-        : [item, ...current].slice(0, MAX_FAVORITE_QUICK_ADDS);
-      return { ...prev, favoriteQuickAdds: nextFavorites };
+        : [item, ...current].slice(0, MAX_FAVOURITE_QUICK_ADDS);
+      return { ...prev, favouriteQuickAdds: nextFavourites };
     });
   }, []);
 
   const deleteEntry = useCallback((id: string) => {
-    setData((prev) => ({
-      ...prev,
-      entries: prev.entries.filter((e) => e.id !== id),
-    }));
+    deleteMeal(id).catch(() => {});
+    invalidateCachePrefix("meals:");
+    setEntries((prev) => prev.filter((e) => e.id !== id));
   }, []);
 
-  const openEditEntry = useCallback((entry: MealEntry) => {
+  const openEditEntry = useCallback((entry: Meal) => {
     Vibration.vibrate(10);
     setShowEditMacros(false);
     setEditDraft({
@@ -1101,47 +1134,45 @@ export default function LogScreen() {
       : null;
 
     if (!editDraft.title.trim()) {
-      Alert.alert("Missing meal name", "Add a label.");
+      m3Alert.alert("Missing meal name", "Add a label.");
       return;
     }
     if (!calories || calories <= 0) {
-      Alert.alert("Invalid calories", "Enter a positive number.");
+      m3Alert.alert("Invalid calories", "Enter a positive number.");
       return;
     }
     if (protein !== null && protein < 0) {
-      Alert.alert("Invalid protein", "Protein must be 0 or more.");
+      m3Alert.alert("Invalid protein", "Protein must be 0 or more.");
       return;
     }
     if (fat !== null && fat < 0) {
-      Alert.alert("Invalid fat", "Fat must be 0 or more.");
+      m3Alert.alert("Invalid fat", "Fat must be 0 or more.");
       return;
     }
     if (carbs !== null && carbs < 0) {
-      Alert.alert("Invalid carbs", "Carbs must be 0 or more.");
+      m3Alert.alert("Invalid carbs", "Carbs must be 0 or more.");
       return;
     }
     if (fiber !== null && fiber < 0) {
-      Alert.alert("Invalid fibre", "Fibre must be 0 or more.");
+      m3Alert.alert("Invalid fibre", "Fibre must be 0 or more.");
       return;
     }
 
-    setData((prev) => ({
-      ...prev,
-      entries: prev.entries.map((entry) =>
-        entry.id === editDraft.id
-          ? {
-              ...entry,
-              title: editDraft.title.trim(),
-              calories: Math.round(calories),
-              proteinGrams:
-                protein !== null ? Math.round(protein * 10) / 10 : null,
-              fatGrams: fat !== null ? Math.round(fat * 10) / 10 : null,
-              carbsGrams: carbs !== null ? Math.round(carbs * 10) / 10 : null,
-              fiberGrams: fiber !== null ? Math.round(fiber * 10) / 10 : null,
-            }
-          : entry,
+    const updatedEntry = {
+      title: editDraft.title.trim(),
+      calories: Math.round(calories),
+      proteinGrams: protein !== null ? Math.round(protein * 10) / 10 : null,
+      fatGrams: fat !== null ? Math.round(fat * 10) / 10 : null,
+      carbsGrams: carbs !== null ? Math.round(carbs * 10) / 10 : null,
+      fiberGrams: fiber !== null ? Math.round(fiber * 10) / 10 : null,
+    };
+    updateMeal(editDraft.id, updatedEntry).catch(() => {});
+    invalidateCachePrefix("meals:");
+    setEntries((prev) =>
+      prev.map((entry) =>
+        entry.id === editDraft.id ? { ...entry, ...updatedEntry } : entry,
       ),
-    }));
+    );
     closeEditModal();
   }, [closeEditModal, editDraft]);
 
@@ -1158,7 +1189,7 @@ export default function LogScreen() {
         carbsGrams: entry.carbsGrams ?? null,
         fiberGrams: entry.fiberGrams ?? null,
       };
-      const isEntryFavorite = favoriteQuickAddKeys.has(
+      const isEntryFavourite = favouriteQuickAddKeys.has(
         quickAddKey(entryAsQuickAdd),
       );
 
@@ -1222,12 +1253,12 @@ export default function LogScreen() {
           </View>
           <View style={styles.entryActions}>
             <IconButton
-              icon={isEntryFavorite ? "star" : "star-outline"}
+              icon={isEntryFavourite ? "star" : "star-outline"}
               size={18}
               style={styles.entryActionIcon}
-              onPress={() => toggleFavoriteQuickAdd(entryAsQuickAdd)}
+              onPress={() => toggleFavouriteQuickAdd(entryAsQuickAdd)}
               accessibilityLabel={
-                isEntryFavorite ? "Remove favourite" : "Add favourite"
+                isEntryFavourite ? "Remove favourite" : "Add favourite"
               }
             />
             <IconButton
@@ -1251,7 +1282,7 @@ export default function LogScreen() {
     });
   }, [
     deleteEntry,
-    favoriteQuickAddKeys,
+    favouriteQuickAddKeys,
     openEditEntry,
     theme.colors.elevation.level1,
     theme.colors.error,
@@ -1259,7 +1290,7 @@ export default function LogScreen() {
     theme.colors.onSurfaceVariant,
     theme.colors.outlineVariant,
     theme.colors.primary,
-    toggleFavoriteQuickAdd,
+    toggleFavouriteQuickAdd,
     visibleEntries,
     data.calorieTolerancePercent,
   ]);
@@ -1324,7 +1355,7 @@ export default function LogScreen() {
       ToastAndroid.show(message, ToastAndroid.SHORT);
       return;
     }
-    Alert.alert("Model status", message);
+    m3Alert.alert("Model status", message);
   }, [isModelInMemory]);
 
   // Determine which model key is currently selected and check if it's blocked
@@ -1346,10 +1377,9 @@ export default function LogScreen() {
 
   const handleOpenLlmEstimator = useCallback(() => {
     if (isModelBlocked) {
-      Alert.alert(
+      m3Alert.alert(
         "Low Device Memory",
         `The selected model (${selectedModelKey}) requires ${memoryCheck?.usagePercent ?? "?"}% of available RAM, which exceeds the 60% safety threshold. This may cause device instability.\n\nPlease select a smaller model or free up device memory, then try again.`,
-        [{ text: "OK" }],
       );
       return;
     }
@@ -1540,15 +1570,15 @@ export default function LogScreen() {
 
         <QuickLogCard
           recentQuickAdds={recentQuickAdds}
-          favoriteQuickAdds={favoriteQuickAdds}
-          favoriteQuickAddKeys={favoriteQuickAddKeys}
+          favouriteQuickAdds={favouriteQuickAdds}
+          favouriteQuickAddKeys={favouriteQuickAddKeys}
           isMacrosExpanded={data.quickLogMacrosExpanded}
           onSetMacrosExpanded={(next) =>
             setData((prev) => ({ ...prev, quickLogMacrosExpanded: next }))
           }
           onAddMeal={addMeal}
           onQuickAddMeal={quickAddMeal}
-          onToggleFavoriteQuickAdd={toggleFavoriteQuickAdd}
+          onToggleFavouriteQuickAdd={toggleFavouriteQuickAdd}
           onOpenLlmEstimator={handleOpenLlmEstimator}
           data={data}
           isModelBlocked={isModelBlocked}
@@ -2121,6 +2151,7 @@ export default function LogScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+      {m3Alert.alertDialog}
     </View>
   );
 }
