@@ -46,3 +46,4 @@ yarn-error.*
 *.db
 *.json
 *.mjs
+!src/drizzle/meta/*.json
