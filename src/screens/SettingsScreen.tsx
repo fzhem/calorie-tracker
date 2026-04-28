@@ -848,7 +848,7 @@ export default function SettingsScreen() {
     string | null
   >(null);
   const [activeModelTab, setActiveModelTab] = useState<"download" | "offline">(
-    "download",
+    "offline",
   );
 
   // Clear download error when switching from custom URL to built-in models
