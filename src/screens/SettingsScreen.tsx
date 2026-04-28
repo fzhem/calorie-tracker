@@ -2160,19 +2160,19 @@ export default function SettingsScreen() {
               mode="outlined"
               icon="import"
               onPress={handleImportData}
-              style={{ marginBottom: 16 }}
+              style={{ marginBottom: 10 }}
             >
               Import data
             </Button>
             <Text
               variant="bodyMedium"
-              style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}
+              style={{ color: theme.colors.onSurfaceVariant, marginBottom: 0 }}
             >
               Macro mismatch tolerance
             </Text>
             <Text
               variant="labelSmall"
-              style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}
+              style={{ color: theme.colors.onSurfaceVariant, marginBottom: 0 }}
             >
               Percentage of logged calories allowed to differ from calculated
               macros (default: 12%)
@@ -2197,15 +2197,15 @@ export default function SettingsScreen() {
               variant="labelSmall"
               style={{
                 color: theme.colors.onSurfaceVariant,
-                marginTop: 12,
-                marginBottom: 8,
+                marginTop: 0,
+                marginBottom: 0,
               }}
             >
               Graph status tolerance
             </Text>
             <Text
               variant="labelSmall"
-              style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}
+              style={{ color: theme.colors.onSurfaceVariant, marginBottom: 0 }}
             >
               How close you need to be to your goal to show On target (default:
               100 kcal)
