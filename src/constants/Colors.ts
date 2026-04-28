@@ -37,7 +37,7 @@ export const APP_DARK_THEME: MD3Theme = {
     surfaceVariant: "#1c1f1d",
     onSurfaceVariant: "#c3c9c4",
     outline: "#7b837d",
-    error: "#f44336",
+    error: "#d32f2f",
     inversePrimary: "#4f378b",
     elevation: {
       level0: "#000000",
