@@ -117,8 +117,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "fiber_g": {
-          "name": "fiber_g",
+        "fibre_g": {
+          "name": "fibre_g",
           "type": "real",
           "primaryKey": false,
           "notNull": false,
