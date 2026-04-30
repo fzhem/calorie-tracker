@@ -653,10 +653,10 @@ export default function GraphsScreen() {
       readStoredData(),
       // Fetch meals for the last 30 days so the calorie chart has data to show
       getCachedOrFetch("meals:30d", () => getMealsSince(daysAgo(30))),
-      // Cache weight + body-fat series so we don't re-query the entire history on every focus
-      getCachedOrFetch("weightSeries:all", () => getWeightSeries(new Date(0).toISOString())),
+      // Cache weight + body-fat series for last 365 days (avoid querying entire history)
+      getCachedOrFetch("weightSeries:365d", () => getWeightSeries(daysAgo(365))),
 
-      getCachedOrFetch("bodyFatSeries:all", () => getBodyFatSeries(new Date(0).toISOString())),
+      getCachedOrFetch("bodyFatSeries:365d", () => getBodyFatSeries(daysAgo(365))),
 
     ]).then(([next, todaysMeals, weightData, bodyFatData]) => {
       setData(next);
@@ -743,13 +743,22 @@ export default function GraphsScreen() {
     );
   }, [calorieSeries.values.length, chartWidth]);
 
+  // Sort once, reuse across all time ranges
+  const sortedWeightHistory = useMemo(
+    () => [...weightHistory].sort(
+      (a, b) =>
+        new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+    ),
+    [weightHistory],
+  );
+
   const allWeightSeries = useMemo(
     () => ({
-      7: buildWeightSeries(weightHistory, 7),
-      90: buildWeightSeries(weightHistory, 90),
-      365: buildWeightSeries(weightHistory, 365),
+      7: buildWeightSeries(sortedWeightHistory, 7),
+      90: buildWeightSeries(sortedWeightHistory, 90),
+      365: buildWeightSeries(sortedWeightHistory, 365),
     }),
-    [weightHistory],
+    [sortedWeightHistory],
   );
 
   const bodyFatAsWeightPoints = useMemo<Weight[]>(
