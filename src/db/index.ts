@@ -279,49 +279,55 @@ export async function getAllBodyFats(): Promise<BodyFat[]> {
 
 /** Bulk import meals (INSERT OR IGNORE for idempotency) */
 export async function importMealsBulk(mealsData: Meal[]): Promise<number> {
-  let count = 0;
-  for (const meal of mealsData) {
-    try {
-      const row = meal.id ? meal : { ...meal, id: makeMealId(meal) };
-      await db.insert(schema.meals).values(row).onConflictDoNothing();
-      count++;
-    } catch {
-      // skip problematic rows
+  return db.transaction(async (tx) => {
+    let count = 0;
+    for (const meal of mealsData) {
+      try {
+        const row = meal.id ? meal : { ...meal, id: makeMealId(meal) };
+        await tx.insert(schema.meals).values(row).onConflictDoNothing();
+        count++;
+      } catch {
+        // skip problematic rows
+      }
     }
-  }
-  return count;
+    return count;
+  });
 }
 
 /** Bulk import weight history (INSERT OR IGNORE for idempotency) */
 export async function importWeightsBulk(
   weightsData: Weight[],
 ): Promise<number> {
-  let count = 0;
-  for (const w of weightsData) {
-    try {
-      const row = (w as any).id ? w : { ...w, id: makeWeightId(w) };
-      await db.insert(schema.weightHistory).values(row).onConflictDoNothing();
-      count++;
-    } catch {
-      // skip problematic rows
+  return db.transaction(async (tx) => {
+    let count = 0;
+    for (const w of weightsData) {
+      try {
+        const row = (w as any).id ? w : { ...w, id: makeWeightId(w) };
+        await tx.insert(schema.weightHistory).values(row).onConflictDoNothing();
+        count++;
+      } catch {
+        // skip problematic rows
+      }
     }
-  }
-  return count;
+    return count;
+  });
 }
 
 /** Bulk import body fat history (INSERT OR IGNORE for idempotency) */
 export async function importBodyFatsBulk(
   bodyFatsData: BodyFat[],
 ): Promise<number> {
-  let count = 0;
-  for (const bf of bodyFatsData) {
-    try {
-      const row = (bf as any).id ? bf : { ...bf, id: makeBodyFatId(bf) };
-      await db.insert(schema.bodyFatHistory).values(row).onConflictDoNothing();
-      count++;
-    } catch {
-      // skip problematic rows
+  return db.transaction(async (tx) => {
+    let count = 0;
+    for (const bf of bodyFatsData) {
+      try {
+        const row = (bf as any).id ? bf : { ...bf, id: makeBodyFatId(bf) };
+        await tx.insert(schema.bodyFatHistory).values(row).onConflictDoNothing();
+        count++;
+      } catch {
+        // skip problematic rows
+      }
     }
-  }
-  return count;
+    return count;
+  });
 }
