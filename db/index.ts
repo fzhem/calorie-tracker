@@ -4,7 +4,7 @@ import {
   ISO_DAY_END_SUFFIX,
   SOURCE_MANUAL,
   SOURCE_HEALTH_CONNECT,
-} from "../constants";
+} from "@/constants";
 
 import { drizzle } from "drizzle-orm/op-sqlite";
 import { and, asc, gte, lte, desc, eq, sql } from "drizzle-orm";
@@ -322,7 +322,10 @@ export async function importBodyFatsBulk(
     for (const bf of bodyFatsData) {
       try {
         const row = (bf as any).id ? bf : { ...bf, id: makeBodyFatId(bf) };
-        await tx.insert(schema.bodyFatHistory).values(row).onConflictDoNothing();
+        await tx
+          .insert(schema.bodyFatHistory)
+          .values(row)
+          .onConflictDoNothing();
         count++;
       } catch {
         // skip problematic rows

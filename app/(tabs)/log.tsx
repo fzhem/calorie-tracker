@@ -32,36 +32,36 @@ import {
   TextInput,
   useTheme,
 } from "react-native-paper";
-import { useM3Alert } from "../ui/m3Alert";
+import { useM3Alert } from "@/ui/m3Alert";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   getAdjustedCalorieTarget,
   getAutoMacroTargets,
-} from "../domain/metabolism";
+} from "@/domain/metabolism";
 import {
   clearModelCache,
   getModelInstance,
   setModelCache,
   subscribeModelCache,
   getModelKeySnapshot,
-} from "../lib/modelCache";
-import { checkModelMemory } from "../lib/memoryUtils";
+} from "@/lib/modelCache";
+import { checkModelMemory } from "@/lib/memoryUtils";
 import {
   DEFAULT_DATA,
   DEFAULT_MODEL_CONFIG,
   getCachedData,
   loadStoredData,
   saveStoredData,
-} from "../data/storage";
-import type { StoredData } from "../data/storage";
-import type { Meal } from "../db/index";
+} from "@/data/storage";
+import type { StoredData } from "@/data/storage";
+import type { Meal } from "@/db/index";
 
 import {
   MAX_VISIBLE_ENTRIES,
   MAX_FAVOURITE_QUICK_ADDS,
   LOG_ENTRY_MAX_WIDTH,
-} from "../constants";
+} from "@/constants";
 
 import {
   insertMeal,
@@ -69,9 +69,9 @@ import {
   deleteMeal,
   updateMeal,
   getLatestWeightBySource,
-} from "../db/index";
-import { makeMealId } from "../db/helpers";
-import { invalidateCachePrefix } from "../lib/queryCache";
+} from "@/db/index";
+import { makeMealId } from "@/db/helpers";
+import { invalidateCachePrefix } from "@/lib/queryCache";
 
 export type NutritionResult = {
   calories: number;

@@ -1,4 +1,4 @@
-import { getCachedData, saveStoredData, DEFAULT_DATA } from "../data/storage";
+import { getCachedData, saveStoredData, DEFAULT_DATA } from "@/data/storage";
 import type {
   StoredData,
   FavouriteQuickAdd,
@@ -7,8 +7,8 @@ import type {
   GoalAdjustmentType,
   MetabolismSex,
   ActivityLevel,
-} from "../data/storage";
-import type { Meal, Weight, BodyFat } from "../db/index";
+} from "@/data/storage";
+import type { Meal, Weight, BodyFat } from "@/db/index";
 import {
   getAllMeals,
   getAllWeights,
@@ -16,7 +16,7 @@ import {
   importMealsBulk,
   importWeightsBulk,
   importBodyFatsBulk,
-} from "../db/index";
+} from "@/db/index";
 
 export type ExportPayload = {
   settings: StoredData;

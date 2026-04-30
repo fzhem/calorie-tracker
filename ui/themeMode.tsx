@@ -7,16 +7,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { kvStore } from "../lib/kvStore";
+import { kvStore } from "@/lib/kvStore";
 import {
   THEME_MODE_STORAGE_KEY,
   THEME_MODE_SYSTEM,
   THEME_MODE_LIGHT,
   THEME_MODE_DARK,
-} from "../constants";
+} from "@/constants";
 
 export type ThemeMode = "system" | "light" | "dark";
-
 
 type ThemeModeContextValue = {
   mode: ThemeMode;
@@ -31,7 +30,11 @@ export function ThemeModeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const stored = kvStore.getString(THEME_MODE_STORAGE_KEY);
-      if (stored === THEME_MODE_LIGHT || stored === THEME_MODE_DARK || stored === THEME_MODE_SYSTEM) {
+      if (
+        stored === THEME_MODE_LIGHT ||
+        stored === THEME_MODE_DARK ||
+        stored === THEME_MODE_SYSTEM
+      ) {
         setModeState(stored);
       }
     } catch {

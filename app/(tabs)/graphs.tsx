@@ -25,16 +25,14 @@ import {
 } from "react-native-paper";
 import Svg, { G, Line, Rect, Text as SvgText, Circle } from "react-native-svg";
 
-import { getAdjustedCalorieTarget } from "../domain/metabolism";
+import { getAdjustedCalorieTarget } from "@/domain/metabolism";
 import {
   DEFAULT_DATA,
   getCachedData,
   loadStoredData as readStoredData,
-} from "../data/storage";
-import type {
-  StoredData,
-} from "../data/storage";
-import type { Weight, BodyFat, Meal } from "../db/index";
+} from "@/data/storage";
+import type { StoredData } from "@/data/storage";
+import type { Weight, BodyFat, Meal } from "@/db/index";
 
 import {
   TREND_RECENT_POINTS,
@@ -43,11 +41,10 @@ import {
   GRAPH_MAX_DAYS_SHORT,
   GRAPH_MAX_DAYS_MEDIUM,
   GRAPH_MAX_DAYS_LONG,
-} from "../constants";
+} from "@/constants";
 
-import { getLatestWeightBySource, getMealsSince, getWeightSeries, getBodyFatSeries } from "../db/index";
-import { getWeeklyAverageWeight, getLatestBodyFat } from "../db/index";
-import { getCachedOrFetch } from "../lib/queryCache";
+import { getMealsSince, getWeightSeries, getBodyFatSeries } from "@/db/index";
+import { getCachedOrFetch } from "@/lib/queryCache";
 
 const WEIGHT_CHART_HEIGHT = 220;
 const WEIGHT_GUIDE_BOTTOM = WEIGHT_CHART_HEIGHT - 40;
@@ -71,7 +68,6 @@ function daysAgo(n: number): string {
   d.setDate(d.getDate() - n);
   return d.toISOString();
 }
-
 
 function formatDayLabel(dateKey: string) {
   const [year, month, day] = dateKey.split("-").map(Number);
@@ -527,7 +523,10 @@ function buildWeightSeries(
 
   if (days <= 31) {
     // Keep the short-range mode readable by capping to recent daily points.
-    const cap = days <= GRAPH_MAX_DAYS_SHORT ? GRAPH_MAX_DAYS_MEDIUM : GRAPH_MAX_DAYS_LONG;
+    const cap =
+      days <= GRAPH_MAX_DAYS_SHORT
+        ? GRAPH_MAX_DAYS_MEDIUM
+        : GRAPH_MAX_DAYS_LONG;
     const cutoff = toStartOfDay(addDays(new Date(), -(cap - 1)));
     const byDay = new Map<string, WeightTrendPoint>();
     for (const point of sorted) {
@@ -654,10 +653,13 @@ export default function GraphsScreen() {
       // Fetch meals for the last 30 days so the calorie chart has data to show
       getCachedOrFetch("meals:30d", () => getMealsSince(daysAgo(30))),
       // Cache weight + body-fat series for last 365 days (avoid querying entire history)
-      getCachedOrFetch("weightSeries:365d", () => getWeightSeries(daysAgo(365))),
+      getCachedOrFetch("weightSeries:365d", () =>
+        getWeightSeries(daysAgo(365)),
+      ),
 
-      getCachedOrFetch("bodyFatSeries:365d", () => getBodyFatSeries(daysAgo(365))),
-
+      getCachedOrFetch("bodyFatSeries:365d", () =>
+        getBodyFatSeries(daysAgo(365)),
+      ),
     ]).then(([next, todaysMeals, weightData, bodyFatData]) => {
       setData(next);
       setEntries(todaysMeals);
@@ -745,10 +747,11 @@ export default function GraphsScreen() {
 
   // Sort once, reuse across all time ranges
   const sortedWeightHistory = useMemo(
-    () => [...weightHistory].sort(
-      (a, b) =>
-        new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
-    ),
+    () =>
+      [...weightHistory].sort(
+        (a, b) =>
+          new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+      ),
     [weightHistory],
   );
 
@@ -980,16 +983,24 @@ export default function GraphsScreen() {
     ? Math.max(10, selectedBodyFatMetrics.y - 54)
     : 0;
 
-  const latestWeightPoint = weightHistory.length > 0 ? weightHistory[weightHistory.length - 1] : null;
+  const latestWeightPoint =
+    weightHistory.length > 0 ? weightHistory[weightHistory.length - 1] : null;
   const latestWeight = latestWeightPoint?.weightKg ?? null;
-  const latestHealthConnectWeight = weightHistory
-    .filter((w) => w.source === "health-connect")
-    .sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime())[0]?.weightKg ?? null;
+  const latestHealthConnectWeight =
+    weightHistory
+      .filter((w) => w.source === "health-connect")
+      .sort(
+        (a, b) =>
+          new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+      )[0]?.weightKg ?? null;
   const { adjustedTarget } = useMemo(
     () => getAdjustedCalorieTarget(data, latestHealthConnectWeight),
     [data, latestHealthConnectWeight],
   );
-  const latestBodyFatPoint = bodyFatHistory.length > 0 ? bodyFatHistory[bodyFatHistory.length - 1] : null;
+  const latestBodyFatPoint =
+    bodyFatHistory.length > 0
+      ? bodyFatHistory[bodyFatHistory.length - 1]
+      : null;
   const latestBodyFat = latestBodyFatPoint?.bodyFatPercentage ?? null;
   const latestCalorieEntry = useMemo(
     () =>
@@ -1574,11 +1585,9 @@ export default function GraphsScreen() {
                         variant="labelSmall"
                         style={{
                           color:
-                            calculateWeightTrend(weightHistory) ===
-                            "gaining"
+                            calculateWeightTrend(weightHistory) === "gaining"
                               ? theme.colors.error
-                              : calculateWeightTrend(weightHistory) ===
-                                  "losing"
+                              : calculateWeightTrend(weightHistory) === "losing"
                                 ? theme.colors.primary
                                 : theme.colors.onSurfaceVariant,
                           fontWeight: "600",
@@ -1586,8 +1595,7 @@ export default function GraphsScreen() {
                       >
                         {calculateWeightTrend(weightHistory) === "gaining"
                           ? "↑ Gaining"
-                          : calculateWeightTrend(weightHistory) ===
-                              "losing"
+                          : calculateWeightTrend(weightHistory) === "losing"
                             ? "↓ Losing"
                             : "→ Maintaining"}
                       </Text>

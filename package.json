@@ -1,6 +1,6 @@
 {
   "name": "calorie-tracker",
-  "main": "src/app/index.tsx",
+  "main": "expo-router/entry",
   "scripts": {
     "start": "expo start --dev-client",
     "postinstall": "patch-package && cd node_modules/react-native-litert-lm && npx nitrogen@0.35.3",
@@ -26,6 +26,7 @@
     "expo-document-picker": "^55.0.13",
     "expo-file-system": "^55.0.17",
     "expo-font": "^55.0.6",
+    "expo-router": "^55.0.13",
     "expo-sharing": "^55.0.18",
     "expo-splash-screen": "^55.0.19",
     "react": "~19.2.5",

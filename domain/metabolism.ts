@@ -4,7 +4,7 @@ import type {
   GoalPhase,
   MetabolismSex,
   StoredData,
-} from "../data/storage";
+} from "@/data/storage";
 import {
   KCAL_PER_KG_BODY_WEIGHT,
   ACTIVITY_FACTOR_BY_LEVEL,
@@ -26,11 +26,7 @@ import {
   ADJUSTMENT_TYPE_PERCENT,
   SEX_UNSPECIFIED,
   SEX_MALE,
-  SEX_FEMALE,
-  SOURCE_HEALTH_CONNECT,
-} from "../constants";
-
-
+} from "@/constants";
 
 type MetabolismInput = {
   weightKg: number | null;
@@ -73,7 +69,10 @@ export function getGoalCalorieDelta(
     0,
     Math.round(options?.adjustmentKcal ?? DEFAULT_CALORIE_ADJUSTMENT),
   );
-  const safePercentPerWeek = Math.max(0, options?.percentPerWeek ?? DEFAULT_PERCENT_PER_WEEK);
+  const safePercentPerWeek = Math.max(
+    0,
+    options?.percentPerWeek ?? DEFAULT_PERCENT_PER_WEEK,
+  );
   const weightKg = options?.weightKg;
 
   let dailyDelta = safeAdjustmentKcal;
@@ -106,7 +105,11 @@ export function estimateMetabolism(input: MetabolismInput): MetabolismMetrics {
   }
 
   const sexOffset = sex === SEX_MALE ? BMR_MALE_OFFSET : BMR_FEMALE_OFFSET;
-  const bmr = BMR_WEIGHT_COEFF * weightKg + BMR_HEIGHT_COEFF * heightCm - BMR_AGE_COEFF * ageYears + sexOffset;
+  const bmr =
+    BMR_WEIGHT_COEFF * weightKg +
+    BMR_HEIGHT_COEFF * heightCm -
+    BMR_AGE_COEFF * ageYears +
+    sexOffset;
   const tdee = bmr * getActivityFactor(activityLevel);
 
   return {
@@ -120,7 +123,8 @@ export function getAdjustedCalorieTarget(
   data: StoredData,
   latestHealthConnectWeightKg?: number | null,
 ) {
-  const effectiveWeightKg = data.manualWeightKg ?? latestHealthConnectWeightKg ?? null;
+  const effectiveWeightKg =
+    data.manualWeightKg ?? latestHealthConnectWeightKg ?? null;
 
   const metabolism = estimateMetabolism({
     weightKg: effectiveWeightKg,
@@ -176,15 +180,20 @@ export function getAutoMacroTargets(
 
   // Use a simple phase-aware split with slightly higher protein for cuts
   // and higher carbs for bulks.
-  const ratio = goalPhase === PHASE_CUT
-    ? DEFAULT_MACRO_RATIOS.cut
-    : goalPhase === PHASE_BULK
-      ? DEFAULT_MACRO_RATIOS.bulk
-      : DEFAULT_MACRO_RATIOS.maintain;
+  const ratio =
+    goalPhase === PHASE_CUT
+      ? DEFAULT_MACRO_RATIOS.cut
+      : goalPhase === PHASE_BULK
+        ? DEFAULT_MACRO_RATIOS.bulk
+        : DEFAULT_MACRO_RATIOS.maintain;
 
   return {
-    proteinGrams: Math.round((safeCalories * ratio.protein) / CALORIES_PER_GRAM_PROTEIN),
-    carbsGrams: Math.round((safeCalories * ratio.carbs) / CALORIES_PER_GRAM_CARBS),
+    proteinGrams: Math.round(
+      (safeCalories * ratio.protein) / CALORIES_PER_GRAM_PROTEIN,
+    ),
+    carbsGrams: Math.round(
+      (safeCalories * ratio.carbs) / CALORIES_PER_GRAM_CARBS,
+    ),
     fatGrams: Math.round((safeCalories * ratio.fat) / CALORIES_PER_GRAM_FAT),
   };
 }

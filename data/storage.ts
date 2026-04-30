@@ -1,4 +1,4 @@
-import { kvStore } from "../lib/kvStore";
+import { kvStore } from "@/lib/kvStore";
 import {
   STORAGE_KEY as CONST_STORAGE_KEY,
   DEFAULT_BASE_TARGET_CALORIES,
@@ -16,7 +16,7 @@ import {
   DEFAULT_MODEL_BACKEND,
   PHASE_MAINTAIN,
   ADJUSTMENT_TYPE_KCAL,
-} from "../constants";
+} from "@/constants";
 
 export type FavouriteQuickAdd = {
   title: string;

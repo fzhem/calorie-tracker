@@ -34,4 +34,4 @@ export function makeBodyFatId(point: {
   return `${epochMs(point.recordedAt)}-${point.bodyFatPercentage}`;
 }
 
-import { SLUG_MAX_LENGTH } from "../constants";
+import { SLUG_MAX_LENGTH } from "@/constants";

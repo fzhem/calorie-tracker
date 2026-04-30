@@ -1,7 +1,7 @@
-import { exportUserData } from "../data/exportData";
+import { exportUserData } from "@/data/exportData";
 import * as Sharing from "expo-sharing";
 import { getDocumentAsync } from "expo-document-picker";
-import { importUserData } from "../data/exportData";
+import { importUserData } from "@/data/exportData";
 import {
   memo,
   useCallback,
@@ -47,8 +47,8 @@ import {
   getModelMemoryUsageBytes,
   getModelMemoryUsageDetails,
   subscribeModelCache,
-} from "../lib/modelCache";
-import { checkModelMemory } from "../lib/memoryUtils";
+} from "@/lib/modelCache";
+import { checkModelMemory } from "@/lib/memoryUtils";
 
 import { ToastAndroid } from "react-native";
 import {
@@ -57,20 +57,20 @@ import {
   getCachedData,
   loadStoredData as readStoredData,
   saveStoredData,
-} from "../data/storage";
-import type { Weight, BodyFat } from "../db/index";
-import type { ModelConfig, StoredData } from "../data/storage";
-import { useThemeMode, type ThemeMode } from "../ui/themeMode";
-import { useM3Alert } from "../ui/m3Alert";
+} from "@/data/storage";
+import type { Weight, BodyFat } from "@/db/index";
+import type { ModelConfig, StoredData } from "@/data/storage";
+import { useThemeMode, type ThemeMode } from "@/ui/themeMode";
+import { useM3Alert } from "@/ui/m3Alert";
 
-import { AUTO_SYNC_INTERVAL_MS } from "../constants";
+import { AUTO_SYNC_INTERVAL_MS } from "@/constants";
 import {
   insertWeight,
   insertBodyFat,
   getLatestWeight,
   getLatestBodyFat,
-} from "../db/index";
-import { invalidateCache, invalidateCachePrefix } from "../lib/queryCache";
+} from "@/db/index";
+import { invalidateCache, invalidateCachePrefix } from "@/lib/queryCache";
 
 type HealthConnectModule = typeof import("react-native-health-connect");
 const healthConnect: HealthConnectModule | null =
@@ -874,7 +874,7 @@ export default function SettingsScreen() {
       },
     }));
     setActiveModelConfigUri(null);
-    const modelWasLoaded = !!require("../lib/modelCache").getModelInstance();
+    const modelWasLoaded = !!require("@/lib/modelCache").getModelInstance();
     clearModelCache();
     if (Platform.OS === "android") {
       if (modelWasLoaded) {

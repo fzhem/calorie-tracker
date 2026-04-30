@@ -21,43 +21,33 @@ import {
   TextInput,
   useTheme,
 } from "react-native-paper";
-import { useM3Alert } from "../ui/m3Alert";
+import { useM3Alert } from "@/ui/m3Alert";
 
 import {
   DEFAULT_DATA,
   getCachedData,
   loadStoredData,
   saveStoredData,
-} from "../data/storage";
-import type {
-  GoalAdjustmentType,
-  GoalPhase,
-  StoredData,
-} from "../data/storage";
-import type { Weight } from "../db/index";
+} from "@/data/storage";
+import type { GoalAdjustmentType, GoalPhase, StoredData } from "@/data/storage";
+import type { Weight } from "@/db/index";
 import {
   estimateMetabolism,
   getActivityFactor,
   getGoalCalorieDelta,
-} from "../domain/metabolism";
+} from "@/domain/metabolism";
 
 import {
   DEFAULT_BASE_TARGET_CALORIES,
   DEFAULT_CALORIES_PER_KG,
-} from "../constants";
+} from "@/constants";
 
 import {
   insertWeight,
   getLatestWeightBySource,
-  getLatestBodyFat,
   deleteWeightBySource,
-} from "../db/index";
-import { makeWeightId } from "../db/helpers";
-import {
-  getCachedOrFetch,
-  invalidateCache,
-  invalidateCachePrefix,
-} from "../lib/queryCache";
+} from "@/db/index";
+import { invalidateCache, invalidateCachePrefix } from "@/lib/queryCache";
 
 const KG_PER_LB = 0.45359237;
 const CM_PER_IN = 2.54;

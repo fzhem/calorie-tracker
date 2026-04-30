@@ -16,7 +16,7 @@ import {
   IDX_BODYFAT_RECORDED_AT,
   SOURCE_MANUAL,
   SOURCE_HEALTH_CONNECT,
-} from "../constants";
+} from "@/constants";
 
 export const meals = sqliteTable(
   DB_TABLE_MEALS,
