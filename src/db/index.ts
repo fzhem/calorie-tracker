@@ -8,12 +8,22 @@ import {
 
 import { drizzle } from "drizzle-orm/op-sqlite";
 import { and, asc, gte, lte, desc, eq, sql } from "drizzle-orm";
-import { open } from "@op-engineering/op-sqlite";
+import { Platform } from "react-native";
+import {
+  IOS_LIBRARY_PATH, // Default iOS
+  ANDROID_DATABASE_PATH, // Default Android
+  ANDROID_EXTERNAL_FILES_PATH, // Android SD Card
+  open,
+} from "@op-engineering/op-sqlite";
 import * as schema from "./schema";
 import { makeWeightId, makeBodyFatId, makeMealId } from "./helpers";
 
 const sqlite = open({
   name: SQLITE_DB_NAME,
+  location:
+    Platform.OS === "ios"
+      ? IOS_LIBRARY_PATH
+      : (ANDROID_EXTERNAL_FILES_PATH ?? ANDROID_DATABASE_PATH),
 });
 const db = drizzle(sqlite, { schema });
 export { db as database };
