@@ -4,6 +4,7 @@
   "scripts": {
     "start": "expo start --dev-client",
     "test": "tsx --test tests/**/*.test.ts",
+    "typecheck": "tsc --noEmit",
     "postinstall": "patch-package && cd node_modules/react-native-litert-lm && npx nitrogen@0.35.3",
     "android": "expo run:android",
     "android:sync": "npm run android:icons && npm run android:gradle && npm run android:manifest",
@@ -12,7 +13,7 @@
     "android:manifest": "node scripts/sync-android-manifest.js",
     "prebuild": "expo prebuild --platform android && npm run android:sync",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node -r esbuild-register ./src/db/migrate.ts",
+    "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "web": "expo start --web"
   },
