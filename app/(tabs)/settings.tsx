@@ -77,7 +77,10 @@ import {
   getLatestWeight,
   getLatestBodyFat,
 } from "@/db/index";
-import { invalidateCache, invalidateCachePrefix } from "@/lib/queryCache";
+import {
+  invalidateBodyFatCaches,
+  invalidateWeightCaches,
+} from "@/lib/queryCache";
 import { parseAppDate, toLocalISOString } from "@/lib/dateKey";
 
 type HealthConnectModule = typeof import("react-native-health-connect");
@@ -879,7 +882,6 @@ export default function SettingsScreen() {
   const downloadTaskRef = useRef<DownloadResumable | null>(null);
   const downloadCancelRequestedRef = useRef(false);
   const lastFocusRefreshAtRef = useRef(0);
-  const saveDataTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeModelConfigUri, setActiveModelConfigUri] = useState<
     string | null
   >(null);
@@ -1010,20 +1012,9 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (!isReady) return;
-    if (saveDataTimerRef.current) {
-      clearTimeout(saveDataTimerRef.current);
-    }
-    saveDataTimerRef.current = setTimeout(() => {
-      saveStoredData(data).catch(() =>
-        m3Alert.alert("Storage error", "Changes could not be saved."),
-      );
-    }, 350);
-
-    return () => {
-      if (saveDataTimerRef.current) {
-        clearTimeout(saveDataTimerRef.current);
-      }
-    };
+    saveStoredData(data).catch(() =>
+      m3Alert.alert("Storage error", "Changes could not be saved."),
+    );
   }, [data, isReady]);
 
   const ensureHealthConnectAvailable = async () => {
@@ -1187,10 +1178,8 @@ export default function SettingsScreen() {
         lastBodyFatSyncAt: toLocalISOString(new Date()),
       }));
       // Invalidate cached weight/body-fat so GraphsScreen picks up the fresh data
-      invalidateCachePrefix("weightSeries:");
-      invalidateCachePrefix("bodyFatSeries:");
-      invalidateCache("latestWeight");
-      invalidateCache("latestBodyFat");
+      invalidateWeightCaches();
+      invalidateBodyFatCaches();
 
       setHealthStatus("available");
     } catch (error) {

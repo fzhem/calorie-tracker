@@ -10,11 +10,50 @@
 type CacheEntry<T> = {
   data: T;
   expiry: number;
+  tags: string[];
 };
 
 const store = new Map<string, CacheEntry<unknown>>();
 
 const DEFAULT_TTL_MS = 30_000; // 30 seconds
+
+export const CACHE_TAGS = {
+  meals: "meals",
+  weight: "weight",
+  bodyFat: "bodyFat",
+  settings: "settings",
+} as const;
+
+export const CACHE_TTL_MS = {
+  mealsRecent: 5 * 60_000,
+  weightSeries: 10 * 60_000,
+  bodyFatSeries: 10 * 60_000,
+  latestMetric: 60_000,
+} as const;
+
+type CacheTag = (typeof CACHE_TAGS)[keyof typeof CACHE_TAGS];
+
+type CacheOptions = {
+  ttlMs?: number;
+  tags?: CacheTag[];
+};
+
+export const queryKeys = {
+  recentMeals(days: number) {
+    return `meals:recent:${days}d`;
+  },
+  dayMeals(dateKey: string) {
+    return `meals:day:${dateKey}`;
+  },
+  weightSeries(days: number) {
+    return `weight:series:${days}d`;
+  },
+  bodyFatSeries(days: number) {
+    return `bodyFat:series:${days}d`;
+  },
+  latestWeight: "weight:latest",
+  latestBodyFat: "bodyFat:latest",
+} as const;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -26,6 +65,17 @@ function isAlive<T>(entry: CacheEntry<T> | undefined): entry is CacheEntry<T> {
   return entry !== undefined && entry.expiry > now();
 }
 
+function resolveCacheOptions(ttlOrOptions: number | CacheOptions | undefined) {
+  if (typeof ttlOrOptions === "number") {
+    return { ttlMs: ttlOrOptions, tags: [] as CacheTag[] };
+  }
+
+  return {
+    ttlMs: ttlOrOptions?.ttlMs ?? DEFAULT_TTL_MS,
+    tags: ttlOrOptions?.tags ?? [],
+  };
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /**
@@ -35,15 +85,16 @@ function isAlive<T>(entry: CacheEntry<T> | undefined): entry is CacheEntry<T> {
 export async function getCachedOrFetch<T>(
   key: string,
   fetchFn: () => Promise<T>,
-  ttlMs: number = DEFAULT_TTL_MS,
+  ttlOrOptions: number | CacheOptions = DEFAULT_TTL_MS,
 ): Promise<T> {
+  const { ttlMs, tags } = resolveCacheOptions(ttlOrOptions);
   const existing = store.get(key);
   if (isAlive(existing)) {
     return existing.data as T;
   }
 
   const data = await fetchFn();
-  store.set(key, { data, expiry: now() + ttlMs });
+  store.set(key, { data, expiry: now() + ttlMs, tags });
   return data;
 }
 
@@ -80,6 +131,34 @@ export function invalidateCachePrefix(prefix: string): void {
       store.delete(key);
     }
   }
+}
+
+export function invalidateCacheTag(tag: CacheTag): void {
+  for (const [key, entry] of store.entries()) {
+    if (entry.tags.includes(tag)) {
+      store.delete(key);
+    }
+  }
+}
+
+export function invalidateCacheTags(tags: CacheTag[]): void {
+  for (const [key, entry] of store.entries()) {
+    if (tags.some((tag) => entry.tags.includes(tag))) {
+      store.delete(key);
+    }
+  }
+}
+
+export function invalidateMealCaches(): void {
+  invalidateCacheTag(CACHE_TAGS.meals);
+}
+
+export function invalidateWeightCaches(): void {
+  invalidateCacheTag(CACHE_TAGS.weight);
+}
+
+export function invalidateBodyFatCaches(): void {
+  invalidateCacheTag(CACHE_TAGS.bodyFat);
 }
 
 /**

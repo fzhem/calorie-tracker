@@ -296,7 +296,7 @@ export async function importUserData(json: string): Promise<ImportSummary> {
       healthConnectAutoSync: (data.healthConnectAutoSync as boolean) ?? false,
     };
 
-    await saveStoredData(settings);
+    await saveStoredData(settings, { immediate: true });
 
     if (Array.isArray(data.entries)) {
       const meals = sanitizeMeals(data.entries);
@@ -323,7 +323,7 @@ export async function importUserData(json: string): Promise<ImportSummary> {
   const payload = parsed as ExportPayload;
 
   if (payload.settings) {
-    await saveStoredData(payload.settings);
+    await saveStoredData(payload.settings, { immediate: true });
   }
   if (Array.isArray(payload.meals)) {
     const meals = sanitizeMeals(payload.meals);

@@ -3,7 +3,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useEffect, useMemo, useState } from "react";
 import * as SplashScreen from "expo-splash-screen";
 import * as Font from "expo-font";
-import { StatusBar, useColorScheme } from "react-native";
+import { AppState, StatusBar, useColorScheme } from "react-native";
 import { PaperProvider } from "react-native-paper";
 import {
   DarkTheme as NavigationDarkTheme,
@@ -11,7 +11,7 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 
-import { loadStoredData } from "@/data/storage";
+import { flushPendingStoredDataWrites, loadStoredData } from "@/data/storage";
 import { ThemeModeProvider, useThemeMode } from "@/ui/themeMode";
 import { useMigrations } from "drizzle-orm/op-sqlite/migrator";
 import migrations from "@/drizzle/migrations";
@@ -46,6 +46,18 @@ export default function RootLayout() {
       }
     }
     prepare();
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "background" || nextState === "inactive") {
+        void flushPendingStoredDataWrites();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   if (!assetsReady) {

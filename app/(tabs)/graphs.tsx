@@ -42,7 +42,12 @@ import {
 } from "@/constants";
 
 import { getMealsSince, getWeightSeries, getBodyFatSeries } from "@/db/index";
-import { getCachedOrFetch } from "@/lib/queryCache";
+import {
+  CACHE_TAGS,
+  CACHE_TTL_MS,
+  getCachedOrFetch,
+  queryKeys,
+} from "@/lib/queryCache";
 import { getLocalDateKey, parseAppDate, toLocalISOString } from "@/lib/dateKey";
 import { calculateBodyFatTrend, calculateWeightTrend } from "@/lib/trend";
 
@@ -602,14 +607,31 @@ export default function GraphsScreen() {
     return Promise.all([
       readStoredData(),
       // Fetch meals for the last 30 days so the calorie chart has data to show
-      getCachedOrFetch("meals:30d", () => getMealsSince(daysAgo(30))),
+      getCachedOrFetch(
+        queryKeys.recentMeals(30),
+        () => getMealsSince(daysAgo(30)),
+        {
+          ttlMs: CACHE_TTL_MS.mealsRecent,
+          tags: [CACHE_TAGS.meals],
+        },
+      ),
       // Cache weight + body-fat series for last 365 days (avoid querying entire history)
-      getCachedOrFetch("weightSeries:365d", () =>
-        getWeightSeries(daysAgo(365)),
+      getCachedOrFetch(
+        queryKeys.weightSeries(365),
+        () => getWeightSeries(daysAgo(365)),
+        {
+          ttlMs: CACHE_TTL_MS.weightSeries,
+          tags: [CACHE_TAGS.weight],
+        },
       ),
 
-      getCachedOrFetch("bodyFatSeries:365d", () =>
-        getBodyFatSeries(daysAgo(365)),
+      getCachedOrFetch(
+        queryKeys.bodyFatSeries(365),
+        () => getBodyFatSeries(daysAgo(365)),
+        {
+          ttlMs: CACHE_TTL_MS.bodyFatSeries,
+          tags: [CACHE_TAGS.bodyFat],
+        },
       ),
     ]).then(([next, todaysMeals, weightData, bodyFatData]) => {
       setData(next);

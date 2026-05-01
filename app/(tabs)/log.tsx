@@ -73,7 +73,7 @@ import {
   getLatestWeightBySource,
 } from "@/db/index";
 import { makeMealId } from "@/db/helpers";
-import { invalidateCachePrefix } from "@/lib/queryCache";
+import { invalidateMealCaches } from "@/lib/queryCache";
 
 export type NutritionResult = {
   calories: number;
@@ -1056,7 +1056,7 @@ export default function LogScreen() {
       loggedAt: now,
     };
     insertMeal(meal).catch(() => {});
-    invalidateCachePrefix("meals:");
+    invalidateMealCaches();
     setEntries((prev) => [meal, ...prev]);
   }, []);
 
@@ -1077,7 +1077,7 @@ export default function LogScreen() {
       loggedAt: now,
     };
     insertMeal(meal).catch(() => {});
-    invalidateCachePrefix("meals:");
+    invalidateMealCaches();
     setEntries((prev) => [meal, ...prev]);
     Vibration.vibrate(10);
   }, []);
@@ -1097,7 +1097,7 @@ export default function LogScreen() {
 
   const deleteEntry = useCallback((id: string) => {
     deleteMeal(id).catch(() => {});
-    invalidateCachePrefix("meals:");
+    invalidateMealCaches();
     setEntries((prev) => prev.filter((e) => e.id !== id));
   }, []);
 
@@ -1169,7 +1169,7 @@ export default function LogScreen() {
       fibreGrams: fibre !== null ? Math.round(fibre * 10) / 10 : null,
     };
     updateMeal(editDraft.id, updatedEntry).catch(() => {});
-    invalidateCachePrefix("meals:");
+    invalidateMealCaches();
     setEntries((prev) =>
       prev.map((entry) =>
         entry.id === editDraft.id ? { ...entry, ...updatedEntry } : entry,

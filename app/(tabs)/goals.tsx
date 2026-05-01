@@ -48,7 +48,7 @@ import {
   getLatestWeightBySource,
   deleteWeightBySource,
 } from "@/db/index";
-import { invalidateCache, invalidateCachePrefix } from "@/lib/queryCache";
+import { invalidateWeightCaches } from "@/lib/queryCache";
 import { parseAppDate, toLocalISOString } from "@/lib/dateKey";
 
 const KG_PER_LB = 0.45359237;
@@ -654,8 +654,7 @@ export default function GoalsScreen() {
       );
     }
     // Invalidate caches so other screens (Graphs) pick up the new manual weight
-    invalidateCachePrefix("weightSeries:");
-    invalidateCache("latestWeight");
+    invalidateWeightCaches();
 
     setData((prev) => ({
       ...prev,
@@ -713,8 +712,7 @@ export default function GoalsScreen() {
       ),
     );
     // Invalidate caches when manual weight is cleared
-    invalidateCachePrefix("weightSeries:");
-    invalidateCache("latestWeight");
+    invalidateWeightCaches();
     setData((prev) => ({
       ...prev,
       manualWeightKg: null,

@@ -1,4 +1,5 @@
 import { kvStore } from "@/lib/kvStore";
+import { createDeferredWriter } from "@/lib/deferredWrite";
 import {
   STORAGE_KEY as CONST_STORAGE_KEY,
   DEFAULT_BASE_TARGET_CALORIES,
@@ -152,6 +153,17 @@ export const DEFAULT_DATA: StoredData = {
 };
 
 let cachedData: StoredData | null = null;
+const DEFAULT_WRITE_DEBOUNCE_MS = 400;
+
+type LoadStoredDataOptions = {
+  forceReload?: boolean;
+  flushPendingWrites?: boolean;
+};
+
+type SaveStoredDataOptions = {
+  immediate?: boolean;
+  debounceMs?: number;
+};
 
 function normalizeStoredData(parsed: Partial<StoredData>): StoredData {
   return {
@@ -183,7 +195,31 @@ export function getCachedData() {
   return cachedData;
 }
 
-export async function loadStoredData() {
+function commitStoredData(next: StoredData) {
+  kvStore.set(STORAGE_KEY, JSON.stringify(next));
+}
+
+const deferredStoredDataWriter = createDeferredWriter(
+  commitStoredData,
+  DEFAULT_WRITE_DEBOUNCE_MS,
+);
+
+export async function flushPendingStoredDataWrites() {
+  if (!deferredStoredDataWriter.hasPendingWrite()) return;
+  await deferredStoredDataWriter.flush();
+}
+
+export async function loadStoredData(options: LoadStoredDataOptions = {}) {
+  const { forceReload = false, flushPendingWrites = false } = options;
+
+  if (flushPendingWrites) {
+    await flushPendingStoredDataWrites();
+  }
+
+  if (!forceReload && cachedData) {
+    return cachedData;
+  }
+
   const stored = kvStore.getString(STORAGE_KEY) ?? null;
   let next = DEFAULT_DATA;
   if (stored) {
@@ -197,9 +233,14 @@ export async function loadStoredData() {
   return next;
 }
 
-export async function saveStoredData(next: StoredData) {
+export async function saveStoredData(
+  next: StoredData,
+  options: SaveStoredDataOptions = {},
+) {
+  const { immediate = false, debounceMs = DEFAULT_WRITE_DEBOUNCE_MS } = options;
+
   cachedData = next;
-  kvStore.set(STORAGE_KEY, JSON.stringify(next));
+  await deferredStoredDataWriter.schedule(next, { immediate, debounceMs });
 }
 
 // ── MealEntry type (re-exported for screen use) ─────────────────────────
