@@ -302,7 +302,9 @@ export default function GoalsScreen() {
             setLatestHealthConnectWeightKg(point?.weightKg ?? null);
           });
         })
-        .catch(() => {});
+        .catch(() =>
+          m3Alert.alert("Storage error", "Saved data could not be refreshed."),
+        );
     }, [weightUnit]),
   );
 
@@ -635,7 +637,12 @@ export default function GoalsScreen() {
         originAppId: null,
         originAppName: null,
         originDevice: null,
-      }).catch(() => {});
+      }).catch(() =>
+        m3Alert.alert(
+          "Save failed",
+          "Manual weight could not be saved. Please try again.",
+        ),
+      );
     }
     // Invalidate caches so other screens (Graphs) pick up the new manual weight
     invalidateCachePrefix("weightSeries:");
@@ -690,7 +697,12 @@ export default function GoalsScreen() {
   const clearManualWeight = () => {
     Vibration.vibrate(40); // Vibrate for 40ms
     setManualWeightInput("");
-    deleteWeightBySource("manual").catch(() => {});
+    deleteWeightBySource("manual").catch(() =>
+      m3Alert.alert(
+        "Delete failed",
+        "Manual weight could not be removed. Please try again.",
+      ),
+    );
     // Invalidate caches when manual weight is cleared
     invalidateCachePrefix("weightSeries:");
     invalidateCache("latestWeight");
