@@ -615,7 +615,10 @@ function extractHealthOrigin(record: unknown) {
 }
 
 function formatBytes(value: number | null) {
-  if (!value || value <= 0) return "Unknown size";
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "Unknown size";
+  }
+  if (value < 0) return "Unknown size";
   const units = ["B", "KB", "MB", "GB"];
   let size = value;
   let unitIndex = 0;
@@ -807,6 +810,7 @@ export default function SettingsScreen() {
   const [showMemoryModal, setShowMemoryModal] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [showSnackbar, setShowSnackbar] = useState(false);
+  const [showSnackbarViewAction, setShowSnackbarViewAction] = useState(false);
 
   // Poll memory usage when a model is loaded
   useEffect(() => {
@@ -875,6 +879,9 @@ export default function SettingsScreen() {
   const [downloadedBytes, setDownloadedBytes] = useState(0);
   const [totalBytes, setTotalBytes] = useState<number | null>(null);
   const [downloadSpeed, setDownloadSpeed] = useState<number | null>(null);
+  const [activeDownloadLabel, setActiveDownloadLabel] = useState<string | null>(
+    null,
+  );
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadedModels, setDownloadedModels] = useState<DownloadedModel[]>(
     [],
@@ -1292,6 +1299,7 @@ export default function SettingsScreen() {
       setDownloadedBytes(0);
       setTotalBytes(null);
       setDownloadSpeed(null);
+      setActiveDownloadLabel(source.label);
 
       if (!MODEL_DIRECTORY.exists) {
         MODEL_DIRECTORY.create({ intermediates: true, idempotent: true });
@@ -1357,6 +1365,7 @@ export default function SettingsScreen() {
           destFile.delete();
         }
         setSnackbarMessage("Model download cancelled");
+        setShowSnackbarViewAction(false);
         setShowSnackbar(true);
         return;
       }
@@ -1375,12 +1384,14 @@ export default function SettingsScreen() {
       setData((prev) => ({ ...prev, modelPath: destFile.uri }));
       await refreshDownloadedModels();
       setSnackbarMessage(`${source.label} downloaded and selected`);
+      setShowSnackbarViewAction(true);
       setShowSnackbar(true);
     } catch (error) {
       if (downloadCancelRequestedRef.current) {
         const partialFile = new File(MODEL_DIRECTORY, source.fileName);
         if (partialFile.exists) partialFile.delete();
         setSnackbarMessage("Model download cancelled");
+        setShowSnackbarViewAction(false);
         setShowSnackbar(true);
       } else {
         setDownloadError(`Download failed: ${getErrorMessage(error)}`);
@@ -1390,6 +1401,7 @@ export default function SettingsScreen() {
       downloadCancelRequestedRef.current = false;
       setIsDownloading(false);
       setIsCancellingDownload(false);
+      setActiveDownloadLabel(null);
     }
   };
 
@@ -1719,6 +1731,53 @@ export default function SettingsScreen() {
               ]}
             />
 
+            {isDownloading ? (
+              <View
+                style={[
+                  styles.downloadStatusBar,
+                  {
+                    backgroundColor: theme.colors.elevation.level2,
+                    borderColor: theme.colors.outlineVariant,
+                  },
+                ]}
+              >
+                <View style={styles.downloadStatusHeader}>
+                  <View style={flex1Style}>
+                    <Text variant="labelLarge" style={{ fontWeight: "700" }}>
+                      Downloading {activeDownloadLabel ?? "model"}
+                    </Text>
+                    <Text
+                      variant="labelSmall"
+                      style={{ color: theme.colors.onSurfaceVariant }}
+                    >
+                      {totalBytes
+                        ? `${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)} (${Math.round(downloadProgress * 100)}%)`
+                        : formatBytes(downloadedBytes)}
+                      {downloadSpeed !== null
+                        ? ` • ${formatBytes(Math.round(downloadSpeed))}/s`
+                        : ""}
+                    </Text>
+                  </View>
+                  <Button
+                    mode="text"
+                    icon="close"
+                    compact
+                    loading={isCancellingDownload}
+                    disabled={isCancellingDownload}
+                    onPress={handleCancelDownload}
+                    textColor={theme.colors.error}
+                  >
+                    {isCancellingDownload ? "Cancelling..." : "Cancel"}
+                  </Button>
+                </View>
+                <ProgressBar
+                  progress={totalBytes ? downloadProgress : undefined}
+                  indeterminate={!totalBytes}
+                  style={styles.progressBar}
+                />
+              </View>
+            ) : null}
+
             {/* Download Tab Content */}
             {activeModelTab === "download" && (
               <>
@@ -1890,36 +1949,25 @@ export default function SettingsScreen() {
                   />
                 ) : null}
 
-                {!isDownloading ? (
-                  <Button
-                    mode="contained"
-                    icon={isSelectedModelDownloaded ? "check" : "download"}
-                    onPress={handleDownloadModel}
-                    disabled={
-                      (selectedModelKey === "custom" &&
-                        !customModelUrl.trim()) ||
-                      isSelectedModelDownloaded ||
-                      (selectedModelKey !== "custom" &&
-                        checkModelMemory(selectedModelKey).status === "blocked")
-                    }
-                  >
-                    {isSelectedModelDownloaded
-                      ? "Already downloaded"
+                <Button
+                  mode="contained"
+                  icon={isSelectedModelDownloaded ? "check" : "download"}
+                  loading={isDownloading}
+                  onPress={handleDownloadModel}
+                  disabled={
+                    isDownloading ||
+                    (selectedModelKey === "custom" && !customModelUrl.trim()) ||
+                    isSelectedModelDownloaded ||
+                    (selectedModelKey !== "custom" &&
+                      checkModelMemory(selectedModelKey).status === "blocked")
+                  }
+                >
+                  {isSelectedModelDownloaded
+                    ? "Already downloaded"
+                    : isDownloading
+                      ? "Downloading..."
                       : "Download selected model"}
-                  </Button>
-                ) : (
-                  <Button
-                    mode="contained"
-                    icon="close"
-                    loading={isCancellingDownload}
-                    disabled={isCancellingDownload}
-                    onPress={handleCancelDownload}
-                    buttonColor={theme.colors.errorContainer}
-                    textColor={theme.colors.onErrorContainer}
-                  >
-                    {isCancellingDownload ? "Cancelling..." : "Cancel download"}
-                  </Button>
-                )}
+                </Button>
                 {selectedModelKey !== "custom" &&
                   (() => {
                     const check = checkModelMemory(selectedModelKey);
@@ -1948,34 +1996,6 @@ export default function SettingsScreen() {
                     }
                     return null;
                   })()}
-
-                {isDownloading ? (
-                  <View style={styles.downloadProgressArea}>
-                    <ProgressBar
-                      progress={totalBytes ? downloadProgress : undefined}
-                      indeterminate={!totalBytes}
-                      style={styles.progressBar}
-                    />
-                    <View style={styles.downloadProgressRow}>
-                      <Text
-                        variant="labelMedium"
-                        style={{ color: theme.colors.onSurfaceVariant }}
-                      >
-                        {totalBytes
-                          ? `${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)} (${Math.round(downloadProgress * 100)}%)`
-                          : formatBytes(downloadedBytes)}
-                      </Text>
-                      {downloadSpeed !== null ? (
-                        <Text
-                          variant="labelMedium"
-                          style={{ color: theme.colors.onSurfaceVariant }}
-                        >
-                          {formatBytes(Math.round(downloadSpeed))}/s
-                        </Text>
-                      ) : null}
-                    </View>
-                  </View>
-                ) : null}
 
                 {downloadError ? (
                   <Text
@@ -2397,10 +2417,14 @@ export default function SettingsScreen() {
         visible={showSnackbar}
         onDismiss={() => setShowSnackbar(false)}
         duration={3000}
-        action={{
-          label: "View",
-          onPress: () => setActiveModelTab("offline"),
-        }}
+        action={
+          showSnackbarViewAction
+            ? {
+                label: "View",
+                onPress: () => setActiveModelTab("offline"),
+              }
+            : undefined
+        }
       >
         {snackbarMessage}
       </Snackbar>
@@ -2487,9 +2511,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 24,
   },
-  downloadProgressArea: { gap: 6 },
-  downloadProgressRow: {
+  downloadStatusBar: {
+    gap: 8,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  downloadStatusHeader: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
   },
   progressBar: { height: 10, borderRadius: 6 },
