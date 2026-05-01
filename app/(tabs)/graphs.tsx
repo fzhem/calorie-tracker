@@ -53,6 +53,7 @@ import { calculateBodyFatTrend, calculateWeightTrend } from "@/lib/trend";
 
 const WEIGHT_CHART_HEIGHT = 220;
 const WEIGHT_GUIDE_BOTTOM = WEIGHT_CHART_HEIGHT - 40;
+const GRAPH_FOCUS_REFRESH_INTERVAL_MS = 30_000;
 
 function addDays(date: Date, days: number) {
   const next = new Date(date);
@@ -192,27 +193,26 @@ function getWeeklyData(history: Weight[]): {
   if (history.length === 0)
     return { values: [], dayLabels: [], todayIndex: -1 };
 
-  const sorted = [...history].sort(
-    (a, b) =>
-      parseAppDate(a.recordedAt).getTime() -
-      parseAppDate(b.recordedAt).getTime(),
-  );
+  const latestByDay = new Map<string, number>();
+  for (const point of history) {
+    const key = getLocalDateKey(parseAppDate(point.recordedAt));
+    // History is sorted asc by recordedAt, so later points win for same day.
+    latestByDay.set(key, point.weightKg);
+  }
 
-  const latestDate = parseAppDate(sorted[sorted.length - 1].recordedAt);
+  const latestDate = parseAppDate(history[history.length - 1].recordedAt);
   const dayLabels: string[] = [];
   const weekData: Array<number | null> = [];
 
   let steps = 0;
-  let currentDate = latestDate;
+  let currentDate = new Date(latestDate);
 
   while (steps < 7) {
     const dateKey = getLocalDateKey(currentDate);
-    const point = sorted.find(
-      (p) => getLocalDateKey(parseAppDate(p.recordedAt)) === dateKey,
-    );
+    const value = latestByDay.get(dateKey);
 
-    if (point) {
-      weekData.unshift(point.weightKg);
+    if (typeof value === "number") {
+      weekData.unshift(value);
       dayLabels.unshift(
         currentDate
           .toLocaleDateString(undefined, { weekday: "short" })
@@ -462,11 +462,7 @@ function buildWeightSeries(
   weightHistory: Weight[],
   days: number,
 ): WeightTrendPoint[] {
-  const sorted = [...weightHistory].sort(
-    (a, b) =>
-      parseAppDate(a.recordedAt).getTime() -
-      parseAppDate(b.recordedAt).getTime(),
-  );
+  const sorted = weightHistory;
   if (!sorted.length) return [];
 
   if (days <= 31) {
@@ -597,6 +593,7 @@ export default function GraphsScreen() {
   const [showCalorieChart, setShowCalorieChart] = useState(false);
   const [showWeightChart, setShowWeightChart] = useState(false);
   const [showBodyFatChart, setShowBodyFatChart] = useState(false);
+  const lastGraphLoadAtRef = useRef(0);
   const calorieTimelineRef = useRef<ScrollView | null>(null);
   const weightTimelineRef = useRef<ScrollView | null>(null);
   const bodyFatTimelineRef = useRef<ScrollView | null>(null);
@@ -638,6 +635,7 @@ export default function GraphsScreen() {
       setEntries(todaysMeals);
       setWeightHistory(weightData);
       setBodyFatHistory(bodyFatData);
+      lastGraphLoadAtRef.current = Date.now();
     });
   }, []);
 
@@ -650,6 +648,10 @@ export default function GraphsScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!hasCompletedInitialLoad.current) return undefined;
+      const now = Date.now();
+      if (now - lastGraphLoadAtRef.current < GRAPH_FOCUS_REFRESH_INTERVAL_MS) {
+        return undefined;
+      }
       loadScreenData();
       return undefined;
     }, [loadScreenData]),
@@ -738,15 +740,6 @@ export default function GraphsScreen() {
     [weightHistory],
   );
 
-  const allWeightSeries = useMemo(
-    () => ({
-      7: buildWeightSeries(sortedWeightHistory, 7),
-      90: buildWeightSeries(sortedWeightHistory, 90),
-      365: buildWeightSeries(sortedWeightHistory, 365),
-    }),
-    [sortedWeightHistory],
-  );
-
   const bodyFatAsWeightPoints = useMemo<Weight[]>(
     () =>
       bodyFatHistory.map((point: BodyFat) => ({
@@ -761,17 +754,20 @@ export default function GraphsScreen() {
     [bodyFatHistory],
   );
 
-  const allBodyFatSeries = useMemo(
-    () => ({
-      7: buildWeightSeries(bodyFatAsWeightPoints, 7),
-      90: buildWeightSeries(bodyFatAsWeightPoints, 90),
-      365: buildWeightSeries(bodyFatAsWeightPoints, 365),
-    }),
+  const sortedBodyFatAsWeightPoints = useMemo(
+    () =>
+      [...bodyFatAsWeightPoints].sort(
+        (a, b) =>
+          parseAppDate(a.recordedAt).getTime() -
+          parseAppDate(b.recordedAt).getTime(),
+      ),
     [bodyFatAsWeightPoints],
   );
 
-  const weightSeries =
-    allWeightSeries[weightDays as 7 | 90 | 365] ?? allWeightSeries[7];
+  const weightSeries = useMemo(
+    () => buildWeightSeries(sortedWeightHistory, weightDays as 7 | 90 | 365),
+    [sortedWeightHistory, weightDays],
+  );
   const weightChartSeries = useMemo(() => {
     const points = weightSeries;
     return {
@@ -788,8 +784,14 @@ export default function GraphsScreen() {
     return Math.max(chartWidth, weightChartSeries.values.length * pointWidth);
   }, [chartWidth, weightChartSeries.values.length, weightDays]);
 
-  const bodyFatSeries =
-    allBodyFatSeries[bodyFatDays as 7 | 90 | 365] ?? allBodyFatSeries[7];
+  const bodyFatSeries = useMemo(
+    () =>
+      buildWeightSeries(
+        sortedBodyFatAsWeightPoints,
+        bodyFatDays as 7 | 90 | 365,
+      ),
+    [bodyFatDays, sortedBodyFatAsWeightPoints],
+  );
   const bodyFatChartSeries = useMemo(() => {
     const points = bodyFatSeries;
     return {
@@ -969,13 +971,15 @@ export default function GraphsScreen() {
   const latestWeightPoint =
     weightHistory.length > 0 ? weightHistory[weightHistory.length - 1] : null;
   const latestWeight = latestWeightPoint?.weightKg ?? null;
-  const latestHealthConnectWeight =
-    weightHistory
-      .filter((w) => w.source === "health-connect")
-      .sort(
-        (a, b) =>
-          new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
-      )[0]?.weightKg ?? null;
+  const latestHealthConnectWeight = useMemo(() => {
+    for (let i = sortedWeightHistory.length - 1; i >= 0; i -= 1) {
+      const point = sortedWeightHistory[i];
+      if (point.source === "health-connect") {
+        return point.weightKg;
+      }
+    }
+    return null;
+  }, [sortedWeightHistory]);
   const { adjustedTarget } = useMemo(
     () => getAdjustedCalorieTarget(data, latestHealthConnectWeight),
     [data, latestHealthConnectWeight],
@@ -1028,8 +1032,8 @@ export default function GraphsScreen() {
     return Math.max(300, max);
   }, [calorieWeeklyData.values]);
   const weeklyData = useMemo(
-    () => getWeeklyData(weightHistory),
-    [weightHistory],
+    () => getWeeklyData(sortedWeightHistory),
+    [sortedWeightHistory],
   );
   const hasWeeklyData = useMemo(
     () => weeklyData.values.some((value) => typeof value === "number"),
@@ -1047,8 +1051,18 @@ export default function GraphsScreen() {
   }, [weeklyData.values]);
 
   const bodyFatWeeklyData = useMemo(
-    () => getWeeklyData(bodyFatAsWeightPoints),
-    [bodyFatAsWeightPoints],
+    () => getWeeklyData(sortedBodyFatAsWeightPoints),
+    [sortedBodyFatAsWeightPoints],
+  );
+
+  const weightTrend = useMemo(
+    () => calculateWeightTrend(sortedWeightHistory),
+    [sortedWeightHistory],
+  );
+
+  const bodyFatTrend = useMemo(
+    () => calculateBodyFatTrend(sortedBodyFatAsWeightPoints),
+    [sortedBodyFatAsWeightPoints],
   );
   const hasBodyFatWeeklyData = useMemo(
     () => bodyFatWeeklyData.values.some((value) => typeof value === "number"),
@@ -1568,17 +1582,17 @@ export default function GraphsScreen() {
                         variant="labelSmall"
                         style={{
                           color:
-                            calculateWeightTrend(weightHistory) === "gaining"
+                            weightTrend === "gaining"
                               ? theme.colors.error
-                              : calculateWeightTrend(weightHistory) === "losing"
+                              : weightTrend === "losing"
                                 ? theme.colors.primary
                                 : theme.colors.onSurfaceVariant,
                           fontWeight: "600",
                         }}
                       >
-                        {calculateWeightTrend(weightHistory) === "gaining"
+                        {weightTrend === "gaining"
                           ? "↑ Gaining"
-                          : calculateWeightTrend(weightHistory) === "losing"
+                          : weightTrend === "losing"
                             ? "↓ Losing"
                             : "→ Maintaining"}
                       </Text>
@@ -1771,26 +1785,22 @@ export default function GraphsScreen() {
                     >
                       {latestBodyFat !== null ? `${latestBodyFat}%` : "— %"}
                     </Text>
-                    {bodyFatAsWeightPoints.length > 1 ? (
+                    {sortedBodyFatAsWeightPoints.length > 1 ? (
                       <Text
                         variant="labelSmall"
                         style={{
                           color:
-                            calculateBodyFatTrend(bodyFatAsWeightPoints) ===
-                            "gaining"
+                            bodyFatTrend === "gaining"
                               ? theme.colors.error
-                              : calculateBodyFatTrend(bodyFatAsWeightPoints) ===
-                                  "losing"
+                              : bodyFatTrend === "losing"
                                 ? theme.colors.primary
                                 : theme.colors.onSurfaceVariant,
                           fontWeight: "600",
                         }}
                       >
-                        {calculateBodyFatTrend(bodyFatAsWeightPoints) ===
-                        "gaining"
+                        {bodyFatTrend === "gaining"
                           ? "↑ Gaining"
-                          : calculateBodyFatTrend(bodyFatAsWeightPoints) ===
-                              "losing"
+                          : bodyFatTrend === "losing"
                             ? "↓ Losing"
                             : "→ Maintaining"}
                       </Text>
