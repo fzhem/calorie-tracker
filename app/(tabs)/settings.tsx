@@ -712,7 +712,7 @@ export default function SettingsScreen() {
         return;
       }
       const json = await file.text();
-      await importUserData(json);
+      const summary = await importUserData(json);
       // Refresh latest weight & body fat from DB after import
       getLatestWeight().then((point) =>
         setLatestWeight(point?.weightKg ?? null),
@@ -720,7 +720,19 @@ export default function SettingsScreen() {
       getLatestBodyFat().then((point) =>
         setLatestBodyFat(point?.bodyFatPercentage ?? null),
       );
-      m3Alert.alert("Import successful", "Your data has been imported.");
+      const importedTotal =
+        summary.meals.imported +
+        summary.weightHistory.imported +
+        summary.bodyFatHistory.imported;
+      const failedTotal =
+        summary.meals.failed +
+        summary.weightHistory.failed +
+        summary.bodyFatHistory.failed;
+      const detail =
+        failedTotal > 0
+          ? `Imported ${importedTotal} item(s). Skipped ${failedTotal} invalid item(s).`
+          : `Imported ${importedTotal} item(s).`;
+      m3Alert.alert("Import successful", detail);
     } catch (error) {
       m3Alert.alert(
         "Import failed",

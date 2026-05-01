@@ -185,9 +185,14 @@ export function getCachedData() {
 
 export async function loadStoredData() {
   const stored = kvStore.getString(STORAGE_KEY) ?? null;
-  const next = stored
-    ? normalizeStoredData(JSON.parse(stored) as Partial<StoredData>)
-    : DEFAULT_DATA;
+  let next = DEFAULT_DATA;
+  if (stored) {
+    try {
+      next = normalizeStoredData(JSON.parse(stored) as Partial<StoredData>);
+    } catch (error) {
+      console.warn("Failed to parse stored settings, using defaults.", error);
+    }
+  }
   cachedData = next;
   return next;
 }

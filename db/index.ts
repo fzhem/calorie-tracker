@@ -275,59 +275,76 @@ export async function getAllBodyFats(): Promise<BodyFat[]> {
 }
 
 /** Bulk import meals (INSERT OR IGNORE for idempotency) */
-export async function importMealsBulk(mealsData: Meal[]): Promise<number> {
+export async function importMealsBulk(
+  mealsData: Meal[],
+): Promise<{ imported: number; failed: number }> {
   return db.transaction(async (tx) => {
-    let count = 0;
+    let imported = 0;
+    let failed = 0;
     for (const meal of mealsData) {
       try {
         const row = meal.id ? meal : { ...meal, id: makeMealId(meal) };
         await tx.insert(schema.meals).values(row).onConflictDoNothing();
-        count++;
+        imported++;
       } catch {
-        // skip problematic rows
+        failed++;
       }
     }
-    return count;
+    return { imported, failed };
   });
 }
 
 /** Bulk import weight history (INSERT OR IGNORE for idempotency) */
 export async function importWeightsBulk(
-  weightsData: Weight[],
-): Promise<number> {
+  weightsData: Array<Weight | Omit<Weight, "id">>,
+): Promise<{ imported: number; failed: number }> {
   return db.transaction(async (tx) => {
-    let count = 0;
+    let imported = 0;
+    let failed = 0;
     for (const w of weightsData) {
       try {
-        const row = (w as any).id ? w : { ...w, id: makeWeightId(w) };
+        const row: Weight =
+          "id" in w && typeof w.id === "string"
+            ? (w as Weight)
+            : {
+                ...(w as Omit<Weight, "id">),
+                id: makeWeightId(w as Omit<Weight, "id">),
+              };
         await tx.insert(schema.weightHistory).values(row).onConflictDoNothing();
-        count++;
+        imported++;
       } catch {
-        // skip problematic rows
+        failed++;
       }
     }
-    return count;
+    return { imported, failed };
   });
 }
 
 /** Bulk import body fat history (INSERT OR IGNORE for idempotency) */
 export async function importBodyFatsBulk(
-  bodyFatsData: BodyFat[],
-): Promise<number> {
+  bodyFatsData: Array<BodyFat | Omit<BodyFat, "id">>,
+): Promise<{ imported: number; failed: number }> {
   return db.transaction(async (tx) => {
-    let count = 0;
+    let imported = 0;
+    let failed = 0;
     for (const bf of bodyFatsData) {
       try {
-        const row = (bf as any).id ? bf : { ...bf, id: makeBodyFatId(bf) };
+        const row: BodyFat =
+          "id" in bf && typeof bf.id === "string"
+            ? (bf as BodyFat)
+            : {
+                ...(bf as Omit<BodyFat, "id">),
+                id: makeBodyFatId(bf as Omit<BodyFat, "id">),
+              };
         await tx
           .insert(schema.bodyFatHistory)
           .values(row)
           .onConflictDoNothing();
-        count++;
+        imported++;
       } catch {
-        // skip problematic rows
+        failed++;
       }
     }
-    return count;
+    return { imported, failed };
   });
 }
