@@ -836,11 +836,29 @@ export default function LogScreen() {
   );
 
   // Persist settings (but not meal entries – those are in SQLite)
+  // Debounce storage writes: batch rapid data changes
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!isReady) return;
-    saveStoredData(data).catch(() =>
-      m3Alert.alert("Storage error", "Changes could not be saved."),
-    );
+
+    // Clear any pending save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Schedule save for 500ms after last change
+    saveTimeoutRef.current = setTimeout(() => {
+      saveStoredData(data).catch(() =>
+        m3Alert.alert("Storage error", "Changes could not be saved."),
+      );
+      saveTimeoutRef.current = null;
+    }, 500);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
   }, [data, isReady]);
 
   // todayKey computed earlier above the state declarations

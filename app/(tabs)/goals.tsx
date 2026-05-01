@@ -286,47 +286,40 @@ export default function GoalsScreen() {
     });
   }, []);
 
+  // Debounce storage writes: batch rapid data changes
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!isReady) return;
-    saveStoredData(data).catch(() =>
-      m3Alert.alert("Storage error", "Changes could not be saved."),
-    );
+
+    // Clear any pending save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Schedule save for 500ms after last change
+    saveTimeoutRef.current = setTimeout(() => {
+      saveStoredData(data).catch(() =>
+        m3Alert.alert("Storage error", "Changes could not be saved."),
+      );
+      saveTimeoutRef.current = null;
+    }, 500);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
   }, [data, isReady]);
 
   useFocusEffect(
     useCallback(() => {
       if (!hasCompletedInitialLoad.current) return;
-      loadStoredData()
-        .then((next) => {
-          setData(next);
-          setMetabolismAgeInput(
-            next.metabolismAgeYears ? `${next.metabolismAgeYears}` : "",
-          );
-          setManualWeightInput(
-            next.manualWeightKg
-              ? formatWeightForUnit(next.manualWeightKg, weightUnit)
-              : "",
-          );
-          setSelectedHeightCm(next.metabolismHeightCm ?? null);
-          setProteinGoalInput(
-            next.proteinGoalGrams ? `${next.proteinGoalGrams}` : "",
-          );
-          setFatGoalInput(next.fatGoalGrams ? `${next.fatGoalGrams}` : "");
-          setCarbsGoalInput(
-            next.carbsGoalGrams ? `${next.carbsGoalGrams}` : "",
-          );
-          setFibreGoalInput(
-            next.fibreGoalGrams ? `${next.fibreGoalGrams}` : "",
-          );
-          // Re-fetch latest health-connect weight so the metabolism display is up to date
-          getLatestWeightBySource("health-connect").then((point) => {
-            setLatestHealthConnectWeightKg(point?.weightKg ?? null);
-          });
-        })
-        .catch(() =>
-          m3Alert.alert("Storage error", "Saved data could not be refreshed."),
-        );
-    }, [weightUnit]),
+      // Only refresh health connect weight on focus, not the entire form
+      // (data is now persisted with debounced saves)
+      getLatestWeightBySource("health-connect").then((point) => {
+        setLatestHealthConnectWeightKg(point?.weightKg ?? null);
+      });
+    }, []),
   );
 
   useEffect(() => {
