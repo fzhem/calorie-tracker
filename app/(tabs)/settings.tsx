@@ -7,6 +7,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -40,6 +41,11 @@ import {
 } from "react-native-paper";
 import Slider from "@react-native-community/slider";
 import { Directory, File, Paths } from "expo-file-system";
+import {
+  createDownloadResumable,
+  type DownloadProgressData,
+  type DownloadResumable,
+} from "expo-file-system/legacy";
 
 import {
   clearModelCache,
@@ -62,6 +68,7 @@ import type { Weight, BodyFat } from "@/db/index";
 import type { ModelConfig, StoredData } from "@/data/storage";
 import { useThemeMode, type ThemeMode } from "@/ui/themeMode";
 import { useM3Alert } from "@/ui/m3Alert";
+import { getAppSegmentedButtonsTheme } from "@/ui/segmentedButtons";
 
 import { AUTO_SYNC_INTERVAL_MS } from "@/constants";
 import {
@@ -152,6 +159,17 @@ type ModelConfigModalProps = {
 type Accelerator = "cpu" | "gpu" | "npu";
 
 const flex1Style = { flex: 1 };
+const FOCUS_REFRESH_INTERVAL_MS = 12_000;
+
+function isModelConfigEqual(a: ModelConfig, b: ModelConfig) {
+  return (
+    a.temperature === b.temperature &&
+    a.maxTokens === b.maxTokens &&
+    a.topK === b.topK &&
+    a.topP === b.topP &&
+    a.backend === b.backend
+  );
+}
 
 // Use StyleSheet for row styles to avoid type errors and ensure compatibility
 const modalRow = {
@@ -301,8 +319,7 @@ const ModelConfigModal = memo(function ModelConfigModal({
   );
 
   useEffect(() => {
-    if (config && JSON.stringify(config) !== JSON.stringify(draft))
-      setDraft(config);
+    if (config && !isModelConfigEqual(config, draft)) setDraft(config);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config]);
 
@@ -804,7 +821,7 @@ export default function SettingsScreen() {
     };
 
     updateMemoryUsage();
-    const interval = setInterval(updateMemoryUsage, 2000);
+    const interval = setInterval(updateMemoryUsage, 5000);
     return () => clearInterval(interval);
   }, [loadedModelKey]);
 
@@ -850,6 +867,7 @@ export default function SettingsScreen() {
   >("GEMMA_4_E2B_IT");
   const [customModelUrl, setCustomModelUrl] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isCancellingDownload, setIsCancellingDownload] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadedBytes, setDownloadedBytes] = useState(0);
   const [totalBytes, setTotalBytes] = useState<number | null>(null);
@@ -858,6 +876,10 @@ export default function SettingsScreen() {
   const [downloadedModels, setDownloadedModels] = useState<DownloadedModel[]>(
     [],
   );
+  const downloadTaskRef = useRef<DownloadResumable | null>(null);
+  const downloadCancelRequestedRef = useRef(false);
+  const lastFocusRefreshAtRef = useRef(0);
+  const saveDataTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeModelConfigUri, setActiveModelConfigUri] = useState<
     string | null
   >(null);
@@ -942,6 +964,12 @@ export default function SettingsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      const now = Date.now();
+      if (now - lastFocusRefreshAtRef.current < FOCUS_REFRESH_INTERVAL_MS) {
+        return undefined;
+      }
+      lastFocusRefreshAtRef.current = now;
+
       loadStoredData().catch(() => {
         m3Alert.alert("Storage error", "Saved data could not be loaded.");
       });
@@ -982,9 +1010,20 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (!isReady) return;
-    saveStoredData(data).catch(() =>
-      m3Alert.alert("Storage error", "Changes could not be saved."),
-    );
+    if (saveDataTimerRef.current) {
+      clearTimeout(saveDataTimerRef.current);
+    }
+    saveDataTimerRef.current = setTimeout(() => {
+      saveStoredData(data).catch(() =>
+        m3Alert.alert("Storage error", "Changes could not be saved."),
+      );
+    }, 350);
+
+    return () => {
+      if (saveDataTimerRef.current) {
+        clearTimeout(saveDataTimerRef.current);
+      }
+    };
   }, [data, isReady]);
 
   const ensureHealthConnectAvailable = async () => {
@@ -1238,6 +1277,7 @@ export default function SettingsScreen() {
   }, [selectedModelKey, customModelUrl, downloadedModels]);
 
   const handleDownloadModel = async () => {
+    if (isDownloading) return;
     setDownloadError(null);
 
     const source = resolveDownloadSource();
@@ -1256,7 +1296,9 @@ export default function SettingsScreen() {
     }
 
     try {
+      downloadCancelRequestedRef.current = false;
       setIsDownloading(true);
+      setIsCancellingDownload(false);
       setDownloadProgress(0);
       setDownloadedBytes(0);
       setTotalBytes(null);
@@ -1270,6 +1312,7 @@ export default function SettingsScreen() {
       if (destFile.exists) destFile.delete();
       destFile.create();
       let knownTotalBytes: number | null = null;
+      let wasCancelled = false;
 
       // Try to get file size with a short timeout first
       knownTotalBytes = await resolveRemoteFileSize(source.url);
@@ -1277,14 +1320,15 @@ export default function SettingsScreen() {
         setTotalBytes(knownTotalBytes);
       }
 
-      // Use File.downloadFileAsync directly - it handles large files better on mobile
-      let pollTimer: ReturnType<typeof setInterval> | null = null;
+      // Use a cancellable network task so the UI can expose a true Cancel action.
       let lastBytes = 0;
       let lastTime = Date.now();
 
-      pollTimer = setInterval(() => {
-        if (!destFile.exists) return;
-        const currentBytes = destFile.size;
+      const onProgress = ({
+        totalBytesExpectedToWrite,
+        totalBytesWritten,
+      }: DownloadProgressData) => {
+        const currentBytes = totalBytesWritten;
         const now = Date.now();
         const elapsed = (now - lastTime) / 1000;
         if (elapsed > 0) {
@@ -1293,17 +1337,39 @@ export default function SettingsScreen() {
         lastBytes = currentBytes;
         lastTime = now;
         setDownloadedBytes(currentBytes);
+
+        if (totalBytesExpectedToWrite && totalBytesExpectedToWrite > 0) {
+          knownTotalBytes = totalBytesExpectedToWrite;
+          setTotalBytes(totalBytesExpectedToWrite);
+          setDownloadProgress(currentBytes / totalBytesExpectedToWrite);
+          return;
+        }
+
         if (knownTotalBytes && knownTotalBytes > 0) {
           setDownloadProgress(currentBytes / knownTotalBytes);
         }
-      }, 500);
+      };
 
-      try {
-        await File.downloadFileAsync(source.url, destFile, {
-          idempotent: true,
-        });
-      } finally {
-        if (pollTimer) clearInterval(pollTimer);
+      const downloadTask = createDownloadResumable(
+        source.url,
+        destFile.uri,
+        {},
+        onProgress,
+      );
+      downloadTaskRef.current = downloadTask;
+
+      const result = await downloadTask.downloadAsync();
+      if (!result || downloadCancelRequestedRef.current) {
+        wasCancelled = true;
+      }
+
+      if (wasCancelled) {
+        if (destFile.exists) {
+          destFile.delete();
+        }
+        setSnackbarMessage("Model download cancelled");
+        setShowSnackbar(true);
+        return;
       }
 
       if (destFile.exists) {
@@ -1322,9 +1388,32 @@ export default function SettingsScreen() {
       setSnackbarMessage(`${source.label} downloaded and selected`);
       setShowSnackbar(true);
     } catch (error) {
-      setDownloadError(`Download failed: ${getErrorMessage(error)}`);
+      if (downloadCancelRequestedRef.current) {
+        const partialFile = new File(MODEL_DIRECTORY, source.fileName);
+        if (partialFile.exists) partialFile.delete();
+        setSnackbarMessage("Model download cancelled");
+        setShowSnackbar(true);
+      } else {
+        setDownloadError(`Download failed: ${getErrorMessage(error)}`);
+      }
     } finally {
+      downloadTaskRef.current = null;
+      downloadCancelRequestedRef.current = false;
       setIsDownloading(false);
+      setIsCancellingDownload(false);
+    }
+  };
+
+  const handleCancelDownload = async () => {
+    if (!downloadTaskRef.current || !isDownloading) return;
+    try {
+      downloadCancelRequestedRef.current = true;
+      setIsCancellingDownload(true);
+      await downloadTaskRef.current.cancelAsync();
+    } catch (error) {
+      setDownloadError(`Cancel failed: ${getErrorMessage(error)}`);
+      setIsCancellingDownload(false);
+      downloadCancelRequestedRef.current = false;
     }
   };
 
@@ -1392,6 +1481,15 @@ export default function SettingsScreen() {
     return "No model selected.";
   }, [data.modelPath, downloadedModels]);
 
+  const segmentedButtonsTheme = useMemo(
+    () => getAppSegmentedButtonsTheme(theme),
+    [
+      theme.colors.onPrimaryContainer,
+      theme.colors.outlineVariant,
+      theme.colors.primaryContainer,
+    ],
+  );
+
   return (
     <View
       style={[
@@ -1410,12 +1508,29 @@ export default function SettingsScreen() {
               Theme follows your system preference by default.
             </Text>
             <SegmentedButtons
+              style={[
+                styles.segmentedControl,
+                { backgroundColor: theme.colors.elevation.level2 },
+              ]}
+              theme={segmentedButtonsTheme}
               value={mode}
               onValueChange={(value) => setMode(value as ThemeMode)}
               buttons={[
-                { value: "system", label: "System", icon: "theme-light-dark" },
-                { value: "light", label: "Light", icon: "weather-sunny" },
-                { value: "dark", label: "Dark", icon: "weather-night" },
+                {
+                  value: "system",
+                  label: "System",
+                  icon: "theme-light-dark",
+                },
+                {
+                  value: "light",
+                  label: "Light",
+                  icon: "weather-sunny",
+                },
+                {
+                  value: "dark",
+                  label: "Dark",
+                  icon: "weather-night",
+                },
               ]}
             />
           </Card.Content>
@@ -1589,6 +1704,11 @@ export default function SettingsScreen() {
 
             {/* Tab navigation for Offline / Download Models */}
             <SegmentedButtons
+              style={[
+                styles.segmentedControl,
+                { backgroundColor: theme.colors.elevation.level2 },
+              ]}
+              theme={segmentedButtonsTheme}
               value={activeModelTab}
               onValueChange={(value) =>
                 setActiveModelTab(value as "download" | "offline")
@@ -1644,7 +1764,15 @@ export default function SettingsScreen() {
                                   : undefined
                             }
                             style={
-                              isBlocked ? styles.modelBlockedButton : undefined
+                              isBlocked
+                                ? [
+                                    styles.modelBlockedButton,
+                                    {
+                                      backgroundColor:
+                                        theme.colors.surfaceVariant,
+                                    },
+                                  ]
+                                : undefined
                             }
                             textColor={
                               isBlocked
@@ -1673,14 +1801,20 @@ export default function SettingsScreen() {
                                   isBlocked ? "alert-circle-outline" : "alert"
                                 }
                                 size={12}
-                                color="#000000"
+                                color={
+                                  isBlocked
+                                    ? theme.colors.onError
+                                    : theme.colors.onTertiary
+                                }
                               />
                               <Text
                                 variant="labelSmall"
                                 style={{
                                   fontSize: 10,
                                   fontWeight: "700",
-                                  color: "#000000",
+                                  color: isBlocked
+                                    ? theme.colors.onError
+                                    : theme.colors.onTertiary,
                                   textShadowRadius: 1,
                                 }}
                               >
@@ -1758,25 +1892,36 @@ export default function SettingsScreen() {
                   />
                 ) : null}
 
-                <Button
-                  mode="contained"
-                  icon={isSelectedModelDownloaded ? "check" : "download"}
-                  onPress={handleDownloadModel}
-                  loading={isDownloading}
-                  disabled={
-                    isDownloading ||
-                    (selectedModelKey === "custom" && !customModelUrl.trim()) ||
-                    isSelectedModelDownloaded ||
-                    (selectedModelKey !== "custom" &&
-                      checkModelMemory(selectedModelKey).status === "blocked")
-                  }
-                >
-                  {isDownloading
-                    ? "Downloading model..."
-                    : isSelectedModelDownloaded
+                {!isDownloading ? (
+                  <Button
+                    mode="contained"
+                    icon={isSelectedModelDownloaded ? "check" : "download"}
+                    onPress={handleDownloadModel}
+                    disabled={
+                      (selectedModelKey === "custom" &&
+                        !customModelUrl.trim()) ||
+                      isSelectedModelDownloaded ||
+                      (selectedModelKey !== "custom" &&
+                        checkModelMemory(selectedModelKey).status === "blocked")
+                    }
+                  >
+                    {isSelectedModelDownloaded
                       ? "Already downloaded"
                       : "Download selected model"}
-                </Button>
+                  </Button>
+                ) : (
+                  <Button
+                    mode="contained"
+                    icon="close"
+                    loading={isCancellingDownload}
+                    disabled={isCancellingDownload}
+                    onPress={handleCancelDownload}
+                    buttonColor={theme.colors.errorContainer}
+                    textColor={theme.colors.onErrorContainer}
+                  >
+                    {isCancellingDownload ? "Cancelling..." : "Cancel download"}
+                  </Button>
+                )}
                 {selectedModelKey !== "custom" &&
                   (() => {
                     const check = checkModelMemory(selectedModelKey);
@@ -1860,10 +2005,10 @@ export default function SettingsScreen() {
                     {downloadedModels.map((model) => {
                       const isActive = data.modelPath === model.uri;
                       const inMemory = isInMemory(model.uri);
+                      const savedConfig = data.perModelConfig?.[model.uri];
                       const hasCustomConfig =
-                        !!data.perModelConfig?.[model.uri] &&
-                        JSON.stringify(data.perModelConfig[model.uri]) !==
-                          JSON.stringify(DEFAULT_MODEL_CONFIG);
+                        !!savedConfig &&
+                        !isModelConfigEqual(savedConfig, DEFAULT_MODEL_CONFIG);
 
                       // Determine model key from filename
                       const modelKey = model.name.includes("gemma-4-E2B")
@@ -1912,7 +2057,7 @@ export default function SettingsScreen() {
                                 {inMemory ? (
                                   <Icon
                                     source="memory"
-                                    color={theme.dark ? "#7bd88f" : "#2e7d32"}
+                                    color={theme.colors.primary}
                                     size={20}
                                   />
                                 ) : null}
@@ -2270,6 +2415,10 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, gap: 16 },
   card: { borderRadius: 24 },
   formArea: { gap: 10 },
+  segmentedControl: {
+    borderRadius: 14,
+    overflow: "hidden",
+  },
   buttonRow: { flexDirection: "row", gap: 10, marginTop: -8 },
   button: { flex: 1 },
   autoSyncRow: {
@@ -2317,7 +2466,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   modelBlockedButton: {
-    backgroundColor: "#e0e0e0",
+    opacity: 0.95,
   },
   memoryWarningBadge: {
     position: "absolute",

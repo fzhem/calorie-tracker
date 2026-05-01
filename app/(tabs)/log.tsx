@@ -34,6 +34,7 @@ import {
   useTheme,
 } from "react-native-paper";
 import { useM3Alert } from "@/ui/m3Alert";
+import { getAppSegmentedButtonsTheme } from "@/ui/segmentedButtons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -232,6 +233,14 @@ const QuickLogCard = memo(function QuickLogCard({
   memoryUsagePercent,
 }: QuickLogCardProps) {
   const theme = useTheme();
+  const segmentedButtonsTheme = useMemo(
+    () => getAppSegmentedButtonsTheme(theme),
+    [
+      theme.colors.onPrimaryContainer,
+      theme.colors.outlineVariant,
+      theme.colors.primaryContainer,
+    ],
+  );
   const [mealTitle, setMealTitle] = useState("");
   const [mealCalories, setMealCalories] = useState("");
   const [mealProtein, setMealProtein] = useState("");
@@ -358,9 +367,14 @@ const QuickLogCard = memo(function QuickLogCard({
                 <MaterialCommunityIcons
                   name="alert"
                   size={10}
-                  color="#000000"
+                  color={theme.colors.onTertiary}
                 />
-                <Text style={styles.memoryStatusText}>
+                <Text
+                  style={[
+                    styles.memoryStatusText,
+                    { color: theme.colors.onTertiary },
+                  ]}
+                >
                   {memoryUsagePercent}% RAM
                 </Text>
               </View>
@@ -375,9 +389,16 @@ const QuickLogCard = memo(function QuickLogCard({
                 <MaterialCommunityIcons
                   name="alert-circle-outline"
                   size={10}
-                  color="#000000"
+                  color={theme.colors.onError}
                 />
-                <Text style={styles.memoryStatusText}>Blocked</Text>
+                <Text
+                  style={[
+                    styles.memoryStatusText,
+                    { color: theme.colors.onError },
+                  ]}
+                >
+                  Blocked
+                </Text>
               </View>
             )}
             <Button
@@ -533,6 +554,11 @@ const QuickLogCard = memo(function QuickLogCard({
                 { value: "favourites", label: "Favourites", icon: "star" },
                 { value: "recent", label: "Recents", icon: "history" },
               ]}
+              style={[
+                styles.segmentedControl,
+                { backgroundColor: theme.colors.elevation.level2 },
+              ]}
+              theme={segmentedButtonsTheme}
             />
             {activeQuickAdds.length ? (
               <View>
@@ -968,40 +994,22 @@ export default function LogScreen() {
         : "target";
   const goalModeTint =
     data.goalPhase === "cut"
-      ? theme.dark
-        ? "#ff8f70"
-        : "#b93815"
+      ? theme.colors.error
       : data.goalPhase === "bulk"
-        ? theme.dark
-          ? "#88d9b2"
-          : "#116b4e"
-        : theme.dark
-          ? "#9fc9ff"
-          : "#1d5fa8";
+        ? theme.colors.primary
+        : theme.colors.secondary;
   const goalModeBg =
     data.goalPhase === "cut"
-      ? theme.dark
-        ? "#4a2217"
-        : "#ffe2d8"
+      ? theme.colors.errorContainer
       : data.goalPhase === "bulk"
-        ? theme.dark
-          ? "#17392e"
-          : "#daf5e8"
-        : theme.dark
-          ? "#1c314d"
-          : "#dcecff";
+        ? theme.colors.primaryContainer
+        : theme.colors.secondaryContainer;
   const goalModeOnBg =
     data.goalPhase === "cut"
-      ? theme.dark
-        ? "#ffd8cd"
-        : "#7f240d"
+      ? theme.colors.onErrorContainer
       : data.goalPhase === "bulk"
-        ? theme.dark
-          ? "#d7f8e7"
-          : "#0a513b"
-        : theme.dark
-          ? "#d8e8ff"
-          : "#174a84";
+        ? theme.colors.onPrimaryContainer
+        : theme.colors.onSecondaryContainer;
   const goalModeDetail =
     data.goalPhase === "maintain"
       ? "Maintenance calories"
@@ -1673,11 +1681,7 @@ export default function LogScreen() {
                 <TextInput.Icon
                   icon={isModelInMemory ? "memory" : "circle-outline"}
                   color={
-                    isModelInMemory
-                      ? theme.dark
-                        ? "#7bd88f"
-                        : "#2e7d32"
-                      : theme.colors.error
+                    isModelInMemory ? theme.colors.primary : theme.colors.error
                   }
                   onPress={showModelStatusHint}
                   style={{ alignSelf: "center" }}
@@ -2153,6 +2157,10 @@ export default function LogScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { padding: 16, gap: 16 },
+  segmentedControl: {
+    borderRadius: 14,
+    overflow: "hidden",
+  },
   heroCard: { borderRadius: 24, padding: 16, gap: 14 },
   eyebrow: { textTransform: "uppercase", letterSpacing: 1 },
   progressSection: { gap: 8 },
@@ -2271,7 +2279,6 @@ const styles = StyleSheet.create({
   memoryStatusText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#000000",
   },
   llmMemoryWarning: {
     flexDirection: "row",

@@ -24,6 +24,7 @@ import {
   useTheme,
 } from "react-native-paper";
 import Svg, { G, Line, Rect, Text as SvgText, Circle } from "react-native-svg";
+import { getAppSegmentedButtonsTheme } from "@/ui/segmentedButtons";
 
 import { getAdjustedCalorieTarget } from "@/domain/metabolism";
 import {
@@ -565,6 +566,14 @@ function buildWeightSeries(
 export default function GraphsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  const segmentedButtonsTheme = useMemo(
+    () => getAppSegmentedButtonsTheme(theme),
+    [
+      theme.colors.onPrimaryContainer,
+      theme.colors.outlineVariant,
+      theme.colors.primaryContainer,
+    ],
+  );
   const [data, setData] = useState<StoredData>(
     () => getCachedData() ?? DEFAULT_DATA,
   );
@@ -626,6 +635,9 @@ export default function GraphsScreen() {
 
   const screenWidth = Dimensions.get("window").width;
   const chartWidth = Math.max(screenWidth - 56, 280);
+  const chartAccent = theme.colors.primary;
+  const chartAccentContainer = theme.colors.primaryContainer;
+  const chartOnAccentContainer = theme.colors.onPrimaryContainer;
   const chartConfig = useMemo(
     () => ({
       backgroundGradientFrom: theme.colors.elevation.level1,
@@ -639,36 +651,42 @@ export default function GraphsScreen() {
         if (theme.dark) return `rgba(195, 201, 196, ${opacity})`;
         return `rgba(52, 79, 64, ${opacity})`;
       },
-      fillShadowGradientFrom: theme.dark ? "#7fd8a5" : "#4caf50",
-      fillShadowGradientTo: theme.dark ? "#2b5f44" : "#2e7d32",
+      fillShadowGradientFrom: chartAccent,
+      fillShadowGradientTo: chartAccentContainer,
       fillShadowGradientFromOpacity: 1,
       fillShadowGradientToOpacity: 0.75,
       propsForDots: {
         r: "5",
         strokeWidth: "2",
-        stroke: theme.dark ? "#7fd8a5" : "#146c43",
+        stroke: chartAccent,
       },
       propsForBackgroundLines: {
         strokeDasharray: "",
-        stroke: theme.dark ? "#2a322d" : "#d7e1d8",
+        stroke: theme.colors.outlineVariant,
       },
       propsForLabels: {
         fontSize: 11,
       },
       barPercentage: 0.7,
     }),
-    [theme.colors.elevation.level1, theme.dark],
+    [
+      chartAccent,
+      chartAccentContainer,
+      theme.colors.elevation.level1,
+      theme.colors.outlineVariant,
+      theme.dark,
+    ],
   );
 
   const weightChartConfig = useMemo(
     () => ({
       ...chartConfig,
-      fillShadowGradientFrom: theme.dark ? "#7fd8a5" : "#4caf50",
+      fillShadowGradientFrom: chartAccent,
       fillShadowGradientTo: theme.colors.elevation.level1,
       fillShadowGradientFromOpacity: 0.16,
       fillShadowGradientToOpacity: 0,
     }),
-    [chartConfig, theme.colors.elevation.level1, theme.dark],
+    [chartAccent, chartConfig, theme.colors.elevation.level1],
   );
 
   const calorieSeries = useMemo(
@@ -1121,7 +1139,7 @@ export default function GraphsScreen() {
                           key={`wlabel-${index}`}
                           x={pos.x}
                           y={above ? pos.y - 10 : pos.y + 18}
-                          fill={theme.dark ? "#7fd8a5" : "#146c43"}
+                          fill={chartAccent}
                           fontSize="9"
                           fontWeight="500"
                           textAnchor="middle"
@@ -1137,7 +1155,7 @@ export default function GraphsScreen() {
                           y1="0"
                           x2={String(selectedWeightMetrics.x)}
                           y2={String(WEIGHT_GUIDE_BOTTOM)}
-                          stroke={theme.dark ? "#7fd8a5" : "#146c43"}
+                          stroke={chartAccent}
                           strokeWidth="1"
                           strokeDasharray="4 4"
                         />
@@ -1147,12 +1165,12 @@ export default function GraphsScreen() {
                           width={bubbleWidth}
                           height={bubbleHeight}
                           rx={12}
-                          fill={theme.dark ? "#173326" : "#146c43"}
+                          fill={chartAccentContainer}
                         />
                         <SvgText
                           x={bubbleX + bubbleWidth / 2}
                           y={bubbleY + 18}
-                          fill="#ffffff"
+                          fill={chartOnAccentContainer}
                           fontSize="11"
                           fontWeight="500"
                           textAnchor="middle"
@@ -1162,7 +1180,7 @@ export default function GraphsScreen() {
                         <SvgText
                           x={bubbleX + bubbleWidth / 2}
                           y={bubbleY + 34}
-                          fill="#ffffff"
+                          fill={chartOnAccentContainer}
                           fontSize="12"
                           fontWeight="600"
                           textAnchor="middle"
@@ -1262,7 +1280,7 @@ export default function GraphsScreen() {
                           key={`bf-label-${index}`}
                           x={pos.x}
                           y={above ? pos.y - 10 : pos.y + 18}
-                          fill={theme.dark ? "#7fd8a5" : "#146c43"}
+                          fill={chartAccent}
                           fontSize="9"
                           fontWeight="500"
                           textAnchor="middle"
@@ -1278,7 +1296,7 @@ export default function GraphsScreen() {
                           y1="0"
                           x2={String(selectedBodyFatMetrics.x)}
                           y2={String(WEIGHT_GUIDE_BOTTOM)}
-                          stroke={theme.dark ? "#7fd8a5" : "#146c43"}
+                          stroke={chartAccent}
                           strokeWidth="1"
                           strokeDasharray="4 4"
                         />
@@ -1288,12 +1306,12 @@ export default function GraphsScreen() {
                           width={bodyFatBubbleWidth}
                           height={bodyFatBubbleHeight}
                           rx={12}
-                          fill={theme.dark ? "#173326" : "#146c43"}
+                          fill={chartAccentContainer}
                         />
                         <SvgText
                           x={bodyFatBubbleX + bodyFatBubbleWidth / 2}
                           y={bodyFatBubbleY + 18}
-                          fill="#ffffff"
+                          fill={chartOnAccentContainer}
                           fontSize="11"
                           fontWeight="500"
                           textAnchor="middle"
@@ -1303,7 +1321,7 @@ export default function GraphsScreen() {
                         <SvgText
                           x={bodyFatBubbleX + bodyFatBubbleWidth / 2}
                           y={bodyFatBubbleY + 34}
-                          fill="#ffffff"
+                          fill={chartOnAccentContainer}
                           fontSize="12"
                           fontWeight="600"
                           textAnchor="middle"
@@ -1423,7 +1441,7 @@ export default function GraphsScreen() {
                             const y = 38 - barHeight;
                             const isToday =
                               index === calorieWeeklyData.todayIndex;
-                            const barColor = theme.dark ? "#7fd8a5" : "#146c43";
+                            const barColor = chartAccent;
                             return (
                               <Rect
                                 key={`mini-cal-bar-${index}`}
@@ -1600,7 +1618,7 @@ export default function GraphsScreen() {
                                   y1={String(y1)}
                                   x2={String(x2)}
                                   y2={String(y2)}
-                                  stroke={theme.dark ? "#7fd8a5" : "#146c43"}
+                                  stroke={chartAccent}
                                   strokeWidth="1.5"
                                 />,
                               );
@@ -1617,7 +1635,7 @@ export default function GraphsScreen() {
                                   1)) *
                                 32;
                             const isToday = index === weeklyData.todayIndex;
-                            const dotColor = theme.dark ? "#7fd8a5" : "#146c43";
+                            const dotColor = chartAccent;
                             return (
                               <Circle
                                 key={`mini-dot-${index}`}
@@ -1687,7 +1705,12 @@ export default function GraphsScreen() {
                   });
                 }}
                 buttons={WEIGHT_FILTER_OPTIONS}
-                style={styles.filterButtons}
+                style={[
+                  styles.filterButtons,
+                  styles.segmentedControl,
+                  { backgroundColor: theme.colors.elevation.level2 },
+                ]}
+                theme={segmentedButtonsTheme}
               />
               {weightChartEl}
             </Card.Content>
@@ -1808,7 +1831,7 @@ export default function GraphsScreen() {
                                   y1={String(y1)}
                                   x2={String(x2)}
                                   y2={String(y2)}
-                                  stroke={theme.dark ? "#7fd8a5" : "#146c43"}
+                                  stroke={chartAccent}
                                   strokeWidth="1.5"
                                 />,
                               );
@@ -1826,7 +1849,7 @@ export default function GraphsScreen() {
                                 32;
                             const isToday =
                               index === bodyFatWeeklyData.todayIndex;
-                            const dotColor = theme.dark ? "#7fd8a5" : "#146c43";
+                            const dotColor = chartAccent;
                             return (
                               <Circle
                                 key={`mini-bf-dot-${index}`}
@@ -1896,7 +1919,12 @@ export default function GraphsScreen() {
                   });
                 }}
                 buttons={WEIGHT_FILTER_OPTIONS}
-                style={styles.filterButtons}
+                style={[
+                  styles.filterButtons,
+                  styles.segmentedControl,
+                  { backgroundColor: theme.colors.elevation.level2 },
+                ]}
+                theme={segmentedButtonsTheme}
               />
               {bodyFatChartEl}
             </Card.Content>
@@ -1911,6 +1939,10 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { padding: 16, gap: 16 },
   card: { borderRadius: 24 },
+  segmentedControl: {
+    borderRadius: 14,
+    overflow: "hidden",
+  },
   supportingText: { marginBottom: 10 },
   chartPage: { overflow: "hidden" },
   chart: { borderRadius: 18, marginLeft: -10, marginBottom: 6 },

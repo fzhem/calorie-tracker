@@ -22,6 +22,7 @@ import {
   useTheme,
 } from "react-native-paper";
 import { useM3Alert } from "@/ui/m3Alert";
+import { getAppSegmentedButtonsTheme } from "@/ui/segmentedButtons";
 
 import {
   DEFAULT_DATA,
@@ -160,6 +161,14 @@ function formatFeetInches(totalInches: number) {
 export default function GoalsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  const segmentedButtonsTheme = useMemo(
+    () => getAppSegmentedButtonsTheme(theme),
+    [
+      theme.colors.onPrimaryContainer,
+      theme.colors.outlineVariant,
+      theme.colors.primaryContainer,
+    ],
+  );
   const initialData = getCachedData() ?? DEFAULT_DATA;
   const [data, setData] = useState<StoredData>(initialData);
   const [isReady, setIsReady] = useState(false);
@@ -777,7 +786,14 @@ export default function GoalsScreen() {
                 { value: "profile", label: "Profile", icon: "account" },
                 { value: "overrides", label: "Overrides", icon: "tune" },
               ]}
-              style={{ marginBottom: 8 }}
+              style={[
+                styles.segmentedControl,
+                {
+                  marginBottom: 8,
+                  backgroundColor: theme.colors.elevation.level2,
+                },
+              ]}
+              theme={segmentedButtonsTheme}
             />
 
             {goalsTab === "profile" ? (
@@ -831,6 +847,11 @@ export default function GoalsScreen() {
                         { value: "cm", label: "cm" },
                         { value: "ft", label: "ft" },
                       ]}
+                      style={[
+                        styles.segmentedControl,
+                        { backgroundColor: theme.colors.elevation.level2 },
+                      ]}
+                      theme={segmentedButtonsTheme}
                     />
                     <View style={styles.heightPickerWrapper}>
                       <View
@@ -1384,6 +1405,11 @@ export default function GoalsScreen() {
                 { value: "kcal", label: "kcal/day" },
                 { value: "percent", label: "%/week" },
               ]}
+              style={[
+                styles.segmentedControl,
+                { backgroundColor: theme.colors.elevation.level2 },
+              ]}
+              theme={segmentedButtonsTheme}
             />
 
             <View style={styles.goalAdjustChipRow}>
@@ -1536,6 +1562,10 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, gap: 16 },
   card: { borderRadius: 24 },
   formArea: { gap: 4 },
+  segmentedControl: {
+    borderRadius: 14,
+    overflow: "hidden",
+  },
   supportingText: {},
   goalModeLabelRow: {
     flexDirection: "row",
