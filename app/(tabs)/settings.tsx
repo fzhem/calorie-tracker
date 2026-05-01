@@ -1771,6 +1771,27 @@ export default function SettingsScreen() {
                           >
                             {model.label} ({model.sizeLabel})
                           </Button>
+                          {model.recommended && !isBlocked && (
+                            <View
+                              style={[
+                                styles.recommendedTag,
+                                {
+                                  backgroundColor:
+                                    theme.colors.primaryContainer,
+                                },
+                              ]}
+                            >
+                              <Text
+                                variant="labelSmall"
+                                style={{
+                                  color: theme.colors.onPrimaryContainer,
+                                  fontWeight: "700",
+                                }}
+                              >
+                                Recommended for most devices
+                              </Text>
+                            </View>
+                          )}
                           {(isBlocked || isWarning) && (
                             <View
                               style={[
@@ -1809,18 +1830,6 @@ export default function SettingsScreen() {
                               >
                                 {isBlocked ? "Low RAM" : "Warning"}
                               </Text>
-                            </View>
-                          )}
-                          {model.recommended && !isBlocked && (
-                            <View
-                              style={[
-                                styles.recommendedBadge,
-                                {
-                                  backgroundColor: theme.colors.inversePrimary,
-                                },
-                              ]}
-                            >
-                              <Text style={styles.recommendedBadgeText}>★</Text>
                             </View>
                           )}
                           {isBlocked && (
@@ -2436,20 +2445,13 @@ const styles = StyleSheet.create({
     height: 40,
   },
   modelSelector: { gap: 8 },
-  recommendedBadge: {
-    position: "absolute",
-    top: -8,
-    right: -8,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  recommendedBadgeText: {
-    fontSize: 12,
-    color: "white",
-    fontWeight: "bold",
+  recommendedTag: {
+    marginTop: 4,
+    marginLeft: 4,
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
   },
   modelBlockedContainer: {
     opacity: 0.6,
