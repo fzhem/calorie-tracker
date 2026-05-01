@@ -158,6 +158,19 @@ function formatFeetInches(totalInches: number) {
   return `${feet}' ${inches}"`;
 }
 
+function findNearestIndex(items: HeightPickerItem[], heightCm: number): number {
+  let index = 0;
+  let nearestDelta = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < items.length; i += 1) {
+    const delta = Math.abs(items[i].cm - heightCm);
+    if (delta < nearestDelta) {
+      nearestDelta = delta;
+      index = i;
+    }
+  }
+  return index;
+}
+
 export default function GoalsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
@@ -217,12 +230,11 @@ export default function GoalsScreen() {
   const [activityMenuVisible, setActivityMenuVisible] = useState(false);
   const [weightUnlocked, setWeightUnlocked] = useState(false);
   const [goalsTab, setGoalsTab] = useState<"profile" | "overrides">("profile");
-  const heightListRef = useRef<ScrollView | null>(null);
+  const cmListRef = useRef<ScrollView | null>(null);
+  const ftListRef = useRef<ScrollView | null>(null);
   const isUserScrollingRef = useRef(false);
   const lastScrollIndexRef = useRef(-1);
-  const suppressEffectScrollRef = useRef(false);
   const isUnitSwitchingRef = useRef(false);
-  const pendingUnitTargetIndexRef = useRef<number | null>(null);
   const m3Alert = useM3Alert();
   const hasCompletedInitialLoad = useRef(false);
 
@@ -361,75 +373,27 @@ export default function GoalsScreen() {
       return;
     }
 
-    suppressEffectScrollRef.current = true;
     isUnitSwitchingRef.current = true;
 
-    // Build the new items list for the target unit
-    let newItems: HeightPickerItem[];
-    if (nextUnit === "cm") {
-      newItems = Array.from(
-        { length: HEIGHT_MAX_CM - HEIGHT_MIN_CM + 1 },
-        (_, index) => {
-          const cm = HEIGHT_MIN_CM + index;
-          return { key: `cm-${cm}`, cm, label: `${cm} cm` };
-        },
-      );
-    } else {
-      newItems = Array.from(
-        { length: HEIGHT_MAX_IN - HEIGHT_MIN_IN + 1 },
-        (_, index) => {
-          const inches = HEIGHT_MIN_IN + index;
-          const cm = inches * CM_PER_IN;
-          return { key: `in-${inches}`, cm, label: formatFeetInches(inches) };
-        },
-      );
-    }
-
-    // Find nearest item in new list matching current height
-    let targetIndex = 0;
-    let nearestDelta = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < newItems.length; i += 1) {
-      const delta = Math.abs(newItems[i].cm - selectedHeightCm);
-      if (delta < nearestDelta) {
-        nearestDelta = delta;
-        targetIndex = i;
-      }
-    }
+    const newItems = nextUnit === "cm" ? cmPickerItems : ftPickerItems;
+    const targetIndex = findNearestIndex(newItems, selectedHeightCm);
     const targetItem = newItems[targetIndex];
 
-    // Now update the unit
     setHeightUnit(nextUnit);
     if (targetItem) {
       setSelectedHeightCm(targetItem.cm);
     }
-    pendingUnitTargetIndexRef.current = targetIndex;
 
-    if (!heightPickerOpen) {
-      suppressEffectScrollRef.current = false;
-      isUnitSwitchingRef.current = false;
-      pendingUnitTargetIndexRef.current = null;
-    }
-  };
-
-  useEffect(() => {
-    const pending = pendingUnitTargetIndexRef.current;
-    if (!heightPickerOpen || pending === null) return;
-
-    const timer = setTimeout(() => {
-      heightListRef.current?.scrollTo({
-        y: pending * HEIGHT_ROW_HEIGHT,
+    const newRef = nextUnit === "cm" ? cmListRef : ftListRef;
+    setTimeout(() => {
+      newRef.current?.scrollTo({
+        y: targetIndex * HEIGHT_ROW_HEIGHT,
         animated: false,
       });
-      lastScrollIndexRef.current = pending;
-      pendingUnitTargetIndexRef.current = null;
-      setTimeout(() => {
-        suppressEffectScrollRef.current = false;
-        isUnitSwitchingRef.current = false;
-      }, 180);
-    }, 60);
-
-    return () => clearTimeout(timer);
-  }, [heightUnit, heightPickerOpen]);
+      lastScrollIndexRef.current = targetIndex;
+      isUnitSwitchingRef.current = false;
+    }, 0);
+  };
 
   const onGoalPhasePress = (phase: GoalPhase) => {
     setData((prev) => ({ ...prev, goalPhase: phase }));
@@ -472,104 +436,114 @@ export default function GoalsScreen() {
   };
 
   const onPressHeightField = () => {
-    if (!heightPickerOpen && selectedHeightCm === null) {
+    const isOpening = !heightPickerOpen;
+    let heightToScroll = selectedHeightCm;
+    if (isOpening && selectedHeightCm === null) {
+      heightToScroll = DEFAULT_HEIGHT_CM;
       setSelectedHeightCm(DEFAULT_HEIGHT_CM);
       setMetabolismHeightInput(
         formatHeightForUnit(DEFAULT_HEIGHT_CM, heightUnit),
       );
     }
-    if (!heightPickerOpen) {
-      Vibration.vibrate(20); // Stronger vibration when opening
-    } else {
-      Vibration.vibrate(20); // Vibration when closing
+    if (isOpening && heightToScroll !== null) {
+      const items = heightUnit === "cm" ? cmPickerItems : ftPickerItems;
+      const idx = findNearestIndex(items, heightToScroll);
+      const activeRef = heightUnit === "cm" ? cmListRef : ftListRef;
+      setTimeout(() => {
+        activeRef.current?.scrollTo({
+          y: idx * HEIGHT_ROW_HEIGHT,
+          animated: false,
+        });
+        lastScrollIndexRef.current = idx;
+      }, 0);
     }
+    Vibration.vibrate(20);
     setHeightPickerOpen((v) => !v);
   };
 
-  const heightPickerItems = useMemo<HeightPickerItem[]>(() => {
-    if (heightUnit === "cm") {
-      return Array.from(
-        { length: HEIGHT_MAX_CM - HEIGHT_MIN_CM + 1 },
-        (_, index) => {
-          const cm = HEIGHT_MIN_CM + index;
-          return {
-            key: `cm-${cm}`,
-            cm,
-            label: `${cm} cm`,
-          };
-        },
-      );
-    }
+  const cmPickerItems = useMemo<HeightPickerItem[]>(
+    () =>
+      Array.from({ length: HEIGHT_MAX_CM - HEIGHT_MIN_CM + 1 }, (_, index) => {
+        const cm = HEIGHT_MIN_CM + index;
+        return { key: `cm-${cm}`, cm, label: `${cm} cm` };
+      }),
+    [],
+  );
 
-    return Array.from(
-      { length: HEIGHT_MAX_IN - HEIGHT_MIN_IN + 1 },
-      (_, index) => {
+  const ftPickerItems = useMemo<HeightPickerItem[]>(
+    () =>
+      Array.from({ length: HEIGHT_MAX_IN - HEIGHT_MIN_IN + 1 }, (_, index) => {
         const inches = HEIGHT_MIN_IN + index;
         const cm = inches * CM_PER_IN;
-        return {
-          key: `in-${inches}`,
-          cm,
-          label: formatFeetInches(inches),
-        };
-      },
-    );
-  }, [heightUnit]);
+        return { key: `in-${inches}`, cm, label: formatFeetInches(inches) };
+      }),
+    [],
+  );
 
-  useEffect(() => {
-    if (
-      suppressEffectScrollRef.current ||
-      !heightPickerOpen ||
-      selectedHeightCm === null
-    )
-      return;
-    let index = 0;
-    let nearestDelta = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < heightPickerItems.length; i += 1) {
-      const delta = Math.abs(heightPickerItems[i].cm - selectedHeightCm);
-      if (delta < nearestDelta) {
-        nearestDelta = delta;
-        index = i;
-      }
-    }
-    const timer = setTimeout(() => {
-      heightListRef.current?.scrollTo({
-        y: index * HEIGHT_ROW_HEIGHT,
-        animated: false,
-      });
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [heightPickerItems, heightPickerOpen, selectedHeightCm]);
+  const cmInitialOffset = useMemo(() => {
+    const h = initialData.metabolismHeightCm;
+    return h !== null
+      ? findNearestIndex(cmPickerItems, h) * HEIGHT_ROW_HEIGHT
+      : 0;
+  }, [cmPickerItems]);
+
+  const ftInitialOffset = useMemo(() => {
+    const h = initialData.metabolismHeightCm;
+    return h !== null
+      ? findNearestIndex(ftPickerItems, h) * HEIGHT_ROW_HEIGHT
+      : 0;
+  }, [ftPickerItems]);
 
   const onHeightScroll = useCallback(
     (offsetY: number) => {
       if (isUnitSwitchingRef.current) return;
+      const items = heightUnit === "cm" ? cmPickerItems : ftPickerItems;
       const index = Math.round(offsetY / HEIGHT_ROW_HEIGHT);
-      const clamped = Math.max(
-        0,
-        Math.min(index, heightPickerItems.length - 1),
-      );
+      const clamped = Math.max(0, Math.min(index, items.length - 1));
       if (clamped !== lastScrollIndexRef.current) {
         lastScrollIndexRef.current = clamped;
         Vibration.vibrate(6);
       }
     },
-    [heightPickerItems.length],
+    [heightUnit, cmPickerItems, ftPickerItems],
   );
 
   const onHeightScrollEnd = useCallback(
     (offsetY: number) => {
       if (isUnitSwitchingRef.current) return;
+      const items = heightUnit === "cm" ? cmPickerItems : ftPickerItems;
       const index = Math.round(offsetY / HEIGHT_ROW_HEIGHT);
-      const clamped = Math.max(
-        0,
-        Math.min(index, heightPickerItems.length - 1),
-      );
-      const item = heightPickerItems[clamped];
+      const clamped = Math.max(0, Math.min(index, items.length - 1));
+      const item = items[clamped];
       if (!item) return;
       setSelectedHeightCm(item.cm);
       setMetabolismHeightInput(formatHeightForUnit(item.cm, heightUnit));
     },
-    [heightPickerItems, heightUnit],
+    [cmPickerItems, ftPickerItems, heightUnit],
+  );
+
+  const onCmMomentumScrollEnd = useCallback(
+    (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+      if (isUnitSwitchingRef.current) return;
+      const snapY =
+        Math.round(e.nativeEvent.contentOffset.y / HEIGHT_ROW_HEIGHT) *
+        HEIGHT_ROW_HEIGHT;
+      cmListRef.current?.scrollTo({ y: snapY, animated: true });
+      onHeightScrollEnd(snapY);
+    },
+    [onHeightScrollEnd],
+  );
+
+  const onFtMomentumScrollEnd = useCallback(
+    (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+      if (isUnitSwitchingRef.current) return;
+      const snapY =
+        Math.round(e.nativeEvent.contentOffset.y / HEIGHT_ROW_HEIGHT) *
+        HEIGHT_ROW_HEIGHT;
+      ftListRef.current?.scrollTo({ y: snapY, animated: true });
+      onHeightScrollEnd(snapY);
+    },
+    [onHeightScrollEnd],
   );
 
   const saveTargets = () => {
@@ -836,76 +810,106 @@ export default function GoalsScreen() {
                     />
                   </View>
                 </Pressable>
-                {heightPickerOpen && (
-                  <View style={{ gap: 8 }}>
-                    <SegmentedButtons
-                      value={heightUnit}
-                      onValueChange={onHeightUnitChange}
-                      buttons={[
-                        { value: "cm", label: "cm" },
-                        { value: "ft", label: "ft" },
-                      ]}
+                <View
+                  style={[{ gap: 8 }, !heightPickerOpen && { display: "none" }]}
+                >
+                  <SegmentedButtons
+                    value={heightUnit}
+                    onValueChange={onHeightUnitChange}
+                    buttons={[
+                      { value: "cm", label: "cm" },
+                      { value: "ft", label: "ft" },
+                    ]}
+                    style={[
+                      styles.segmentedControl,
+                      { backgroundColor: theme.colors.elevation.level2 },
+                    ]}
+                    theme={segmentedButtonsTheme}
+                  />
+                  <View style={styles.heightPickerWrapper}>
+                    <View
                       style={[
-                        styles.segmentedControl,
-                        { backgroundColor: theme.colors.elevation.level2 },
+                        styles.heightPickerSelector,
+                        { borderColor: theme.colors.primary },
                       ]}
-                      theme={segmentedButtonsTheme}
+                      pointerEvents="none"
                     />
-                    <View style={styles.heightPickerWrapper}>
-                      <View
-                        style={[
-                          styles.heightPickerSelector,
-                          { borderColor: theme.colors.primary },
-                        ]}
-                        pointerEvents="none"
-                      />
-                      <ScrollView
-                        ref={heightListRef}
-                        style={styles.heightPickerList}
-                        showsVerticalScrollIndicator={false}
-                        nestedScrollEnabled
-                        decelerationRate={0.9}
-                        contentContainerStyle={styles.heightPickerContent}
-                        scrollEventThrottle={16}
-                        onScrollBeginDrag={() => {
-                          isUserScrollingRef.current = true;
-                          lastScrollIndexRef.current = -1;
-                        }}
-                        onScroll={(e) =>
-                          onHeightScroll(e.nativeEvent.contentOffset.y)
-                        }
-                        onMomentumScrollEnd={(e) => {
-                          if (isUnitSwitchingRef.current) return;
-                          const snapY =
-                            Math.round(
-                              e.nativeEvent.contentOffset.y / HEIGHT_ROW_HEIGHT,
-                            ) * HEIGHT_ROW_HEIGHT;
-                          heightListRef.current?.scrollTo({
-                            y: snapY,
-                            animated: true,
-                          });
-                          onHeightScrollEnd(snapY);
-                        }}
-                        onScrollEndDrag={() => {
-                          isUserScrollingRef.current = false;
-                        }}
-                      >
-                        {heightPickerItems.map((item) => {
-                          const isSelected =
-                            selectedHeightCm !== null &&
-                            Math.abs(selectedHeightCm - item.cm) < 0.51;
-                          return (
-                            <HeightPickerOption
-                              key={item.key}
-                              label={item.label}
-                              isSelected={isSelected}
-                            />
-                          );
-                        })}
-                      </ScrollView>
-                    </View>
+                    <ScrollView
+                      ref={cmListRef}
+                      style={[
+                        styles.heightPickerList,
+                        heightUnit !== "cm" && styles.heightPickerHidden,
+                      ]}
+                      showsVerticalScrollIndicator={false}
+                      nestedScrollEnabled
+                      decelerationRate={0.9}
+                      contentContainerStyle={styles.heightPickerContent}
+                      scrollEventThrottle={16}
+                      contentOffset={{ x: 0, y: cmInitialOffset }}
+                      onScrollBeginDrag={() => {
+                        isUserScrollingRef.current = true;
+                        lastScrollIndexRef.current = -1;
+                      }}
+                      onScroll={(e) =>
+                        onHeightScroll(e.nativeEvent.contentOffset.y)
+                      }
+                      onMomentumScrollEnd={onCmMomentumScrollEnd}
+                      onScrollEndDrag={() => {
+                        isUserScrollingRef.current = false;
+                      }}
+                    >
+                      {cmPickerItems.map((item) => {
+                        const isSelected =
+                          selectedHeightCm !== null &&
+                          Math.abs(selectedHeightCm - item.cm) < 0.51;
+                        return (
+                          <HeightPickerOption
+                            key={item.key}
+                            label={item.label}
+                            isSelected={isSelected}
+                          />
+                        );
+                      })}
+                    </ScrollView>
+                    <ScrollView
+                      ref={ftListRef}
+                      style={[
+                        styles.heightPickerList,
+                        heightUnit === "cm" && styles.heightPickerHidden,
+                      ]}
+                      showsVerticalScrollIndicator={false}
+                      nestedScrollEnabled
+                      decelerationRate={0.9}
+                      contentContainerStyle={styles.heightPickerContent}
+                      scrollEventThrottle={16}
+                      contentOffset={{ x: 0, y: ftInitialOffset }}
+                      onScrollBeginDrag={() => {
+                        isUserScrollingRef.current = true;
+                        lastScrollIndexRef.current = -1;
+                      }}
+                      onScroll={(e) =>
+                        onHeightScroll(e.nativeEvent.contentOffset.y)
+                      }
+                      onMomentumScrollEnd={onFtMomentumScrollEnd}
+                      onScrollEndDrag={() => {
+                        isUserScrollingRef.current = false;
+                      }}
+                    >
+                      {ftPickerItems.map((item) => {
+                        const isSelected =
+                          selectedHeightCm !== null &&
+                          Math.abs(selectedHeightCm - item.cm) < 0.51;
+                        return (
+                          <HeightPickerOption
+                            key={item.key}
+                            label={item.label}
+                            isSelected={isSelected}
+                          />
+                        );
+                      })}
+                    </ScrollView>
                   </View>
-                )}
+                </View>
 
                 <Text
                   variant="bodySmall"
@@ -1644,6 +1648,9 @@ const styles = StyleSheet.create({
   },
   heightPickerList: {
     height: PICKER_HEIGHT,
+  },
+  heightPickerHidden: {
+    display: "none",
   },
   heightPickerContent: {
     paddingVertical: PICKER_PADDING,
