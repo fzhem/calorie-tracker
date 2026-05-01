@@ -35,9 +35,6 @@ import type { StoredData } from "@/data/storage";
 import type { Weight, BodyFat, Meal } from "@/db/index";
 
 import {
-  TREND_RECENT_POINTS,
-  TREND_EMA_ALPHA,
-  TREND_EMA_GAMMA,
   GRAPH_MAX_DAYS_SHORT,
   GRAPH_MAX_DAYS_MEDIUM,
   GRAPH_MAX_DAYS_LONG,
@@ -46,6 +43,7 @@ import {
 import { getMealsSince, getWeightSeries, getBodyFatSeries } from "@/db/index";
 import { getCachedOrFetch } from "@/lib/queryCache";
 import { getLocalDateKey, parseAppDate, toLocalISOString } from "@/lib/dateKey";
+import { calculateBodyFatTrend, calculateWeightTrend } from "@/lib/trend";
 
 const WEIGHT_CHART_HEIGHT = 220;
 const WEIGHT_GUIDE_BOTTOM = WEIGHT_CHART_HEIGHT - 40;
@@ -178,59 +176,6 @@ function formatRelativeTime(dateStr: string) {
   if (diffDays < 7) return `${diffDays}d ago`;
   if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
   return date.toLocaleDateString();
-}
-
-type WeightTrend = "gaining" | "losing" | "maintaining";
-
-function calculateTrendWithEMA(
-  history: Weight[],
-  smoothingFactor: number,
-  threshold: number,
-): WeightTrend | null {
-  if (history.length < 2) return null;
-
-  const sorted = [...history].sort(
-    (a, b) =>
-      parseAppDate(a.recordedAt).getTime() -
-      parseAppDate(b.recordedAt).getTime(),
-  );
-
-  const weights = sorted.map((p) => p.weightKg);
-  const ema = calculateEMA(weights, smoothingFactor);
-
-  const change = ema[ema.length - 1] - ema[0];
-
-  if (change > threshold) return "gaining";
-  if (change < -threshold) return "losing";
-  return "maintaining";
-}
-
-function calculateEMA(
-  values: number[],
-  smoothingFactor: number = 0.2,
-): number[] {
-  if (values.length === 0) return [];
-
-  const ema: number[] = [];
-  ema[0] = values[0]; // Initialize with the first value
-
-  for (let i = 1; i < values.length; i++) {
-    ema[i] = smoothingFactor * values[i] + (1 - smoothingFactor) * ema[i - 1];
-  }
-
-  return ema;
-}
-
-function calculateWeightTrend(history: Weight[]): WeightTrend | null {
-  // Use the first 5 most recent entries for trend calculation (oldest to newest)
-  const recent = history.slice(0, TREND_RECENT_POINTS);
-  return calculateTrendWithEMA(recent, TREND_EMA_ALPHA, TREND_EMA_GAMMA);
-}
-
-function calculateBodyFatTrend(history: Weight[]): WeightTrend | null {
-  // Use the first 5 entries most recent entries for trend calculation (oldest to newest)
-  const recent = history.slice(0, TREND_RECENT_POINTS);
-  return calculateTrendWithEMA(recent, TREND_EMA_ALPHA, TREND_EMA_GAMMA);
 }
 
 function getWeeklyData(history: Weight[]): {
