@@ -41,6 +41,9 @@
           }
         }
       ],
+      "./plugins/withAndroidIcons",
+      "./plugins/withAndroidManifestExtras",
+      "./plugins/withAndroidBuildGradle",
       "./plugins/withHealthConnectPermissionDelegate"
     ],
     "experiments": {
