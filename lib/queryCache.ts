@@ -25,10 +25,14 @@ export const CACHE_TAGS = {
 } as const;
 
 export const CACHE_TTL_MS = {
-  mealsRecent: 5 * 60_000,
-  weightSeries: 10 * 60_000,
-  bodyFatSeries: 10 * 60_000,
-  latestMetric: 60_000,
+  // Meals: frequently updated by user; shorter TTL
+  mealsRecent: 60_000, // 1 min
+  dayMeals: 5 * 60_000, // 5 min
+  // Weight/Body Fat: stable data, infrequent updates; much longer TTL
+  weightSeries: 45 * 60_000, // 45 min
+  bodyFatSeries: 45 * 60_000, // 45 min
+  latestWeight: 10 * 60_000, // 10 min
+  latestBodyFat: 10 * 60_000, // 10 min
 } as const;
 
 type CacheTag = (typeof CACHE_TAGS)[keyof typeof CACHE_TAGS];
