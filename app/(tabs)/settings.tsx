@@ -991,15 +991,16 @@ export default function SettingsScreen() {
     }, [loadStoredData, refreshDownloadedModels]),
   );
 
+  // Initialize Health Connect status once on mount
   useEffect(() => {
-    if (!healthConnect) {
-      setHealthStatus("unavailable");
+    const initHealthConnect = async () => {
+      if (!healthConnect) {
+        setHealthStatus("unavailable");
+        return;
+      }
 
-      return;
-    }
-    healthConnect
-      .getSdkStatus()
-      .then((status) => {
+      try {
+        const status = await healthConnect.getSdkStatus();
         if (status === healthConnect.SdkAvailabilityStatus.SDK_AVAILABLE) {
           setHealthStatus("available");
         } else if (
@@ -1011,17 +1012,37 @@ export default function SettingsScreen() {
         } else {
           setHealthStatus("unavailable");
         }
-      })
-      .catch(() => {
+      } catch {
         setHealthStatus("error");
-      });
+      }
+    };
+
+    void initHealthConnect();
   }, []);
 
+  // Debounce storage writes: batch rapid data changes
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!isReady) return;
-    saveStoredData(data).catch(() =>
-      m3Alert.alert("Storage error", "Changes could not be saved."),
-    );
+
+    // Clear any pending save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Schedule save for 500ms after last change
+    saveTimeoutRef.current = setTimeout(() => {
+      saveStoredData(data).catch(() =>
+        m3Alert.alert("Storage error", "Changes could not be saved."),
+      );
+      saveTimeoutRef.current = null;
+    }, 500);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
   }, [data, isReady]);
 
   const ensureHealthConnectAvailable = async () => {
@@ -1449,17 +1470,20 @@ export default function SettingsScreen() {
     ]);
   };
 
-  useEffect(() => {
-    getLatestWeight().then((point) =>
-      setLatestWeight(point?.weightKg ?? data.manualWeightKg),
-    );
-    getLatestBodyFat().then((point) =>
-      setLatestBodyFat(point?.bodyFatPercentage ?? null),
-    );
-  }, [data.manualWeightKg, data.lastWeightSyncAt, data.lastBodyFatSyncAt]);
+  const refreshLatestMetrics = useCallback(async () => {
+    const weight = await getLatestWeight();
+    setLatestWeight(weight?.weightKg ?? data.manualWeightKg);
+    const bodyFat = await getLatestBodyFat();
+    setLatestBodyFat(bodyFat?.bodyFatPercentage ?? null);
+  }, [data.manualWeightKg]);
 
   const [latestWeight, setLatestWeight] = useState<number | null>(null);
   const [latestBodyFat, setLatestBodyFat] = useState<number | null>(null);
+
+  // Fetch latest metrics on mount and when auto-sync completes
+  useEffect(() => {
+    refreshLatestMetrics().catch(console.error);
+  }, [refreshLatestMetrics, data.lastWeightSyncAt, data.lastBodyFatSyncAt]);
 
   useEffect(() => {
     if (!isReady || !data.modelPath) return;
