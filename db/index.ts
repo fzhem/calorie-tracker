@@ -1,13 +1,11 @@
 import {
   SQLITE_DB_NAME,
-  ISO_DAY_START_SUFFIX,
-  ISO_DAY_END_SUFFIX,
   SOURCE_MANUAL,
   SOURCE_HEALTH_CONNECT,
 } from "@/constants";
 
 import { drizzle } from "drizzle-orm/op-sqlite";
-import { and, asc, gte, lte, desc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import { Platform } from "react-native";
 import {
   IOS_LIBRARY_PATH, // Default iOS
@@ -28,7 +26,11 @@ const sqlite = open({
 const db = drizzle(sqlite, { schema });
 export { db as database };
 
-const dayExpr = sql<string>`DATE(${schema.meals.loggedAt})`;
+const mealDayExpr = sql<string>`substr(${schema.meals.loggedAt}, 1, 10)`;
+const weightDayExpr = sql<string>`substr(${schema.weightHistory.recordedAt}, 1, 10)`;
+const mealInstantExpr = sql<number>`julianday(${schema.meals.loggedAt})`;
+const weightInstantExpr = sql<number>`julianday(${schema.weightHistory.recordedAt})`;
+const bodyFatInstantExpr = sql<number>`julianday(${schema.bodyFatHistory.recordedAt})`;
 function normalizeOrigin<
   T extends {
     originAppId?: string | null;
@@ -59,16 +61,11 @@ export async function insertMeal(meal: Meal): Promise<void> {
 
 /** All meals whose `loggedAt` falls on the given calendar day (ISO date key). */
 export async function getMealsForDay(dateKey: string): Promise<Meal[]> {
-  const start = `${dateKey}${ISO_DAY_START_SUFFIX}`;
-  const end = `${dateKey}${ISO_DAY_END_SUFFIX}`;
-
   return await db
     .select()
     .from(schema.meals)
-    .where(
-      and(gte(schema.meals.loggedAt, start), lte(schema.meals.loggedAt, end)),
-    )
-    .orderBy(desc(schema.meals.loggedAt));
+    .where(sql`substr(${schema.meals.loggedAt}, 1, 10) = ${dateKey}`)
+    .orderBy(desc(mealInstantExpr));
 }
 
 /** All meals logged on or after the given ISO timestamp. */
@@ -76,8 +73,8 @@ export async function getMealsSince(since: string): Promise<Meal[]> {
   return await db
     .select()
     .from(schema.meals)
-    .where(gte(schema.meals.loggedAt, since))
-    .orderBy(desc(schema.meals.loggedAt));
+    .where(sql`julianday(${schema.meals.loggedAt}) >= julianday(${since})`)
+    .orderBy(desc(mealInstantExpr));
 }
 
 export async function deleteMeal(id: string): Promise<void> {
@@ -98,13 +95,13 @@ export async function getCaloriesPerDay(
 ): Promise<{ day: string; totalCalories: number }[]> {
   return await db
     .select({
-      day: dayExpr,
+      day: mealDayExpr,
       totalCalories: sql<number>`SUM(${schema.meals.calories})`,
     })
     .from(schema.meals)
-    .where(gte(schema.meals.loggedAt, since))
-    .groupBy(sql`DATE(${schema.meals.loggedAt})`)
-    .orderBy(sql`DATE(${schema.meals.loggedAt})`);
+    .where(sql`julianday(${schema.meals.loggedAt}) >= julianday(${since})`)
+    .groupBy(mealDayExpr)
+    .orderBy(mealDayExpr);
 }
 
 // ── Weight ─────────────────────────────────────────────────────────────────
@@ -126,7 +123,7 @@ export async function getLatestWeight(): Promise<Weight | null> {
   const [latest] = await db
     .select()
     .from(schema.weightHistory)
-    .orderBy(desc(schema.weightHistory.recordedAt))
+    .orderBy(desc(weightInstantExpr))
     .limit(1);
 
   return latest ?? null;
@@ -140,7 +137,7 @@ export async function getLatestWeightBySource(
     .select()
     .from(schema.weightHistory)
     .where(eq(schema.weightHistory.source, source))
-    .orderBy(desc(schema.weightHistory.recordedAt))
+    .orderBy(desc(weightInstantExpr))
     .limit(1);
 
   return latest ?? null;
@@ -151,8 +148,10 @@ export async function getWeightSeries(since: string): Promise<Weight[]> {
   return await db
     .select()
     .from(schema.weightHistory)
-    .where(gte(schema.weightHistory.recordedAt, since))
-    .orderBy(asc(schema.weightHistory.recordedAt));
+    .where(
+      sql`julianday(${schema.weightHistory.recordedAt}) >= julianday(${since})`,
+    )
+    .orderBy(asc(weightInstantExpr));
 }
 
 /** Weekly averages (for GraphsScreen weight trend). */
@@ -172,7 +171,9 @@ export async function getWeeklyAverageWeight(
       avgWeight: avgWeight,
     })
     .from(schema.weightHistory)
-    .where(gte(schema.weightHistory.recordedAt, since))
+    .where(
+      sql`julianday(${schema.weightHistory.recordedAt}) >= julianday(${since})`,
+    )
     .groupBy(weekStart)
     .orderBy(weekStart);
 }
@@ -197,7 +198,7 @@ export async function getLatestBodyFat(): Promise<BodyFat | null> {
   const [latest] = await db
     .select()
     .from(schema.bodyFatHistory)
-    .orderBy(desc(schema.bodyFatHistory.recordedAt))
+    .orderBy(desc(bodyFatInstantExpr))
     .limit(1);
 
   return latest ?? null;
@@ -208,8 +209,10 @@ export async function getBodyFatSeries(since: string): Promise<BodyFat[]> {
   return await db
     .select()
     .from(schema.bodyFatHistory)
-    .where(gte(schema.bodyFatHistory.recordedAt, since))
-    .orderBy(asc(schema.bodyFatHistory.recordedAt));
+    .where(
+      sql`julianday(${schema.bodyFatHistory.recordedAt}) >= julianday(${since})`,
+    )
+    .orderBy(asc(bodyFatInstantExpr));
 }
 
 export async function updateWeight(
@@ -237,28 +240,22 @@ export async function getCaloriesVsWeight(
 ): Promise<{ day: string; totalCalories: number; avgWeight: number | null }[]> {
   return await db
     .select({
-      day: dayExpr,
+      day: mealDayExpr,
       totalCalories: sql<number>`SUM(${schema.meals.calories})`,
       avgWeight: sql<number | null>`AVG(${schema.weightHistory.weightKg})`,
     })
     .from(schema.meals)
-    .leftJoin(
-      schema.weightHistory,
-      sql`DATE(${schema.meals.loggedAt}) = DATE(${schema.weightHistory.recordedAt})`,
-    )
-    .where(gte(schema.meals.loggedAt, since))
-    .groupBy(dayExpr)
-    .orderBy(dayExpr);
+    .leftJoin(schema.weightHistory, sql`${mealDayExpr} = ${weightDayExpr}`)
+    .where(sql`julianday(${schema.meals.loggedAt}) >= julianday(${since})`)
+    .groupBy(mealDayExpr)
+    .orderBy(mealDayExpr);
 }
 
 // ── Export / Import helpers ──────────────────────────────────────────
 
 /** Get all meals (for export) */
 export async function getAllMeals(): Promise<Meal[]> {
-  return await db
-    .select()
-    .from(schema.meals)
-    .orderBy(desc(schema.meals.loggedAt));
+  return await db.select().from(schema.meals).orderBy(desc(mealInstantExpr));
 }
 
 /** Get all weight history (for export) */
@@ -266,7 +263,7 @@ export async function getAllWeights(): Promise<Weight[]> {
   return await db
     .select()
     .from(schema.weightHistory)
-    .orderBy(desc(schema.weightHistory.recordedAt));
+    .orderBy(desc(weightInstantExpr));
 }
 
 /** Get all body fat history (for export) */
@@ -274,7 +271,7 @@ export async function getAllBodyFats(): Promise<BodyFat[]> {
   return await db
     .select()
     .from(schema.bodyFatHistory)
-    .orderBy(desc(schema.bodyFatHistory.recordedAt));
+    .orderBy(desc(bodyFatInstantExpr));
 }
 
 /** Bulk import meals (INSERT OR IGNORE for idempotency) */

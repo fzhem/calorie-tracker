@@ -71,6 +71,7 @@ import {
   getLatestBodyFat,
 } from "@/db/index";
 import { invalidateCache, invalidateCachePrefix } from "@/lib/queryCache";
+import { parseAppDate, toLocalISOString } from "@/lib/dateKey";
 
 type HealthConnectModule = typeof import("react-native-health-connect");
 const healthConnect: HealthConnectModule | null =
@@ -447,7 +448,7 @@ function roundTo(value: number, digits = 1) {
 }
 
 function formatDisplayDate(value: string) {
-  return new Date(value).toLocaleString(undefined, {
+  return parseAppDate(value).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -733,8 +734,7 @@ export default function SettingsScreen() {
       setIsExporting(true);
       const json = await exportUserData();
       const now = new Date();
-      const timestamp = now
-        .toISOString()
+      const timestamp = toLocalISOString(now)
         .replace(/[:.]/g, "-")
         .replace("T", "_")
         .slice(0, 19);
@@ -1037,7 +1037,7 @@ export default function SettingsScreen() {
       }
 
       const endTime = new Date();
-      const startTime = addDays(endTime, -400).toISOString();
+      const startTime = toLocalISOString(addDays(endTime, -400));
       const allRecords: Array<{
         time: string;
         weight: { inKilograms: number };
@@ -1056,7 +1056,7 @@ export default function SettingsScreen() {
             timeRangeFilter: {
               operator: "between",
               startTime,
-              endTime: endTime.toISOString(),
+              endTime: toLocalISOString(endTime),
             },
             ascendingOrder: false,
             pageSize: 1000,
@@ -1081,7 +1081,7 @@ export default function SettingsScreen() {
               timeRangeFilter: {
                 operator: "between",
                 startTime,
-                endTime: endTime.toISOString(),
+                endTime: toLocalISOString(endTime),
               },
               ascendingOrder: false,
               pageSize: 1000,
@@ -1099,7 +1099,7 @@ export default function SettingsScreen() {
       }
 
       const synced: Omit<Weight, "id">[] = allRecords.map((r) => ({
-        recordedAt: r.time,
+        recordedAt: toLocalISOString(new Date(r.time)),
         weightKg: roundTo(r.weight.inKilograms, 2),
         source: "health-connect",
         ...extractHealthOrigin(r),
@@ -1115,7 +1115,7 @@ export default function SettingsScreen() {
                 ? (r as { percentage?: { value?: number } }).percentage!.value!
                 : NaN;
           return {
-            recordedAt: r.time,
+            recordedAt: toLocalISOString(new Date(r.time)),
             bodyFatPercentage: roundTo(raw, 2),
             source: "health-connect" as const,
             ...extractHealthOrigin(r),
@@ -1132,8 +1132,8 @@ export default function SettingsScreen() {
       }
       setData((prev) => ({
         ...prev,
-        lastWeightSyncAt: new Date().toISOString(),
-        lastBodyFatSyncAt: new Date().toISOString(),
+        lastWeightSyncAt: toLocalISOString(new Date()),
+        lastBodyFatSyncAt: toLocalISOString(new Date()),
       }));
       // Invalidate cached weight/body-fat so GraphsScreen picks up the fresh data
       invalidateCachePrefix("weightSeries:");

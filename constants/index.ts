@@ -132,10 +132,6 @@ export const TAB_RIPPLE_BORDER_RADIUS = 70;
 // ── Log Screen ───────────────────────────────────────────────
 export const LOG_ENTRY_MAX_WIDTH = 500;
 
-// ── Date / Time Patterns ─────────────────────────────────────
-export const ISO_DAY_START_SUFFIX = "T00:00:00.000Z";
-export const ISO_DAY_END_SUFFIX = "T23:59:59.999Z";
-
 // ── Graph Defaults ───────────────────────────────────────────
 export const GRAPH_MAX_DAYS_SHORT = 7;
 export const GRAPH_MAX_DAYS_MEDIUM = 90;

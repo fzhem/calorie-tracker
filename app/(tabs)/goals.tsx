@@ -48,6 +48,7 @@ import {
   deleteWeightBySource,
 } from "@/db/index";
 import { invalidateCache, invalidateCachePrefix } from "@/lib/queryCache";
+import { parseAppDate, toLocalISOString } from "@/lib/dateKey";
 
 const KG_PER_LB = 0.45359237;
 const CM_PER_IN = 2.54;
@@ -107,12 +108,13 @@ function mergeWeightHistory(existing: Weight[], incoming: Weight[]): Weight[] {
     keyed.set(`${p.source}-${p.recordedAt}`, p);
   return Array.from(keyed.values()).sort(
     (a, b) =>
-      new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+      parseAppDate(b.recordedAt).getTime() -
+      parseAppDate(a.recordedAt).getTime(),
   );
 }
 
 function formatDisplayDate(value: string) {
-  return new Date(value).toLocaleString(undefined, {
+  return parseAppDate(value).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -627,7 +629,7 @@ export default function GoalsScreen() {
 
     if (nextWeightKg && nextWeightKg > 0) {
       insertWeight({
-        recordedAt: new Date().toISOString(),
+        recordedAt: toLocalISOString(new Date()),
         weightKg: roundTo(nextWeightKg, 2),
         source: "manual",
         originAppId: null,

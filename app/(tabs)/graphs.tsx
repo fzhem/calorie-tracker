@@ -45,16 +45,10 @@ import {
 
 import { getMealsSince, getWeightSeries, getBodyFatSeries } from "@/db/index";
 import { getCachedOrFetch } from "@/lib/queryCache";
+import { getLocalDateKey, parseAppDate, toLocalISOString } from "@/lib/dateKey";
 
 const WEIGHT_CHART_HEIGHT = 220;
 const WEIGHT_GUIDE_BOTTOM = WEIGHT_CHART_HEIGHT - 40;
-
-function getLocalDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 function addDays(date: Date, days: number) {
   const next = new Date(date);
@@ -66,7 +60,7 @@ function addDays(date: Date, days: number) {
 function daysAgo(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString();
+  return toLocalISOString(d);
 }
 
 function formatDayLabel(dateKey: string) {
@@ -170,7 +164,7 @@ const WEIGHT_FILTER_OPTIONS = [
 ];
 
 function formatRelativeTime(dateStr: string) {
-  const date = new Date(dateStr);
+  const date = parseAppDate(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
@@ -197,7 +191,8 @@ function calculateTrendWithEMA(
 
   const sorted = [...history].sort(
     (a, b) =>
-      new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+      parseAppDate(a.recordedAt).getTime() -
+      parseAppDate(b.recordedAt).getTime(),
   );
 
   const weights = sorted.map((p) => p.weightKg);
@@ -248,10 +243,11 @@ function getWeeklyData(history: Weight[]): {
 
   const sorted = [...history].sort(
     (a, b) =>
-      new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+      parseAppDate(a.recordedAt).getTime() -
+      parseAppDate(b.recordedAt).getTime(),
   );
 
-  const latestDate = new Date(sorted[sorted.length - 1].recordedAt);
+  const latestDate = parseAppDate(sorted[sorted.length - 1].recordedAt);
   const dayLabels: string[] = [];
   const weekData: Array<number | null> = [];
 
@@ -261,7 +257,7 @@ function getWeeklyData(history: Weight[]): {
   while (steps < 7) {
     const dateKey = getLocalDateKey(currentDate);
     const point = sorted.find(
-      (p) => getLocalDateKey(new Date(p.recordedAt)) === dateKey,
+      (p) => getLocalDateKey(parseAppDate(p.recordedAt)) === dateKey,
     );
 
     if (point) {
@@ -311,7 +307,7 @@ function getWeeklyCalorieData(entries: Meal[]): {
 
   // Aggregate entries by their date
   for (const entry of entries) {
-    const when = toStartOfDay(new Date(entry.loggedAt));
+    const when = toStartOfDay(parseAppDate(entry.loggedAt));
     const dateKey = getLocalDateKey(when);
     const index = dateToIndex.get(dateKey);
     if (index !== undefined) {
@@ -328,7 +324,7 @@ function buildTwoWeekCalorieSeries(entries: Meal[]) {
   const totals = new Map<string, number>();
 
   for (const entry of entries) {
-    const key = getLocalDateKey(new Date(entry.loggedAt));
+    const key = getLocalDateKey(parseAppDate(entry.loggedAt));
     totals.set(key, (totals.get(key) ?? 0) + entry.calories);
   }
 
@@ -369,7 +365,7 @@ function getCalorieStatus(
 }
 
 function formatPointDate(value: string) {
-  return new Date(value).toLocaleDateString(undefined, {
+  return parseAppDate(value).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
     weekday: "short",
@@ -377,7 +373,7 @@ function formatPointDate(value: string) {
 }
 
 function formatBubbleDate(value: string) {
-  return new Date(value).toLocaleDateString(undefined, {
+  return parseAppDate(value).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -389,7 +385,7 @@ function buildCalorieSeries(entries: Meal[], days: number) {
   let earliestLoggedAt: Date | null = null;
 
   for (const entry of entries) {
-    const when = toStartOfDay(new Date(entry.loggedAt));
+    const when = toStartOfDay(parseAppDate(entry.loggedAt));
     const key = getLocalDateKey(when);
     totals.set(key, (totals.get(key) ?? 0) + entry.calories);
     if (!earliestLoggedAt || when < earliestLoggedAt) earliestLoggedAt = when;
@@ -517,7 +513,8 @@ function buildWeightSeries(
 ): WeightTrendPoint[] {
   const sorted = [...weightHistory].sort(
     (a, b) =>
-      new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+      parseAppDate(a.recordedAt).getTime() -
+      parseAppDate(b.recordedAt).getTime(),
   );
   if (!sorted.length) return [];
 
@@ -583,7 +580,7 @@ function buildWeightSeries(
         previous.rangeEnd.getFullYear() !== bucket.rangeEnd.getFullYear();
 
       return {
-        recordedAt: bucket.rangeEnd.toISOString(),
+        recordedAt: toLocalISOString(bucket.rangeEnd),
         weightKg: averageWeight(bucket.values),
         axisLabel: monthChanged
           ? bucket.rangeEnd.toLocaleDateString(undefined, { month: "short" })
@@ -606,7 +603,7 @@ function buildWeightSeries(
   return Array.from(byMonth.values())
     .sort((a, b) => a.monthStart.getTime() - b.monthStart.getTime())
     .map((bucket) => ({
-      recordedAt: bucket.monthStart.toISOString(),
+      recordedAt: toLocalISOString(bucket.monthStart),
       weightKg: averageWeight(bucket.values),
       axisLabel: bucket.monthStart.toLocaleDateString(undefined, {
         month: "short",
@@ -750,7 +747,8 @@ export default function GraphsScreen() {
     () =>
       [...weightHistory].sort(
         (a, b) =>
-          new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+          parseAppDate(a.recordedAt).getTime() -
+          parseAppDate(b.recordedAt).getTime(),
       ),
     [weightHistory],
   );

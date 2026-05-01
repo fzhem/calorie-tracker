@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start --dev-client",
+    "test": "tsx --test tests/**/*.test.ts",
     "postinstall": "patch-package && cd node_modules/react-native-litert-lm && npx nitrogen@0.35.3",
     "android": "expo run:android",
     "android:sync": "npm run android:icons && npm run android:gradle && npm run android:manifest",
@@ -41,6 +42,8 @@
     "react-native-svg": "^15.15.4"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.6.0",
     "@types/react": "~19.2.14",
     "babel-plugin-inline-import": "^3.0.0",
     "better-sqlite3": "^12.9.0",
@@ -48,6 +51,7 @@
     "esbuild-register": "^3.6.0",
     "expo-build-properties": "^55.0.13",
     "patch-package": "^8.0.1",
+    "tsx": "^4.20.6",
     "typescript": "~6.0.3"
   },
   "private": true

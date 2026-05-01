@@ -9,6 +9,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { getLocalDateKey, parseAppDate, toLocalISOString } from "@/lib/dateKey";
 import {
   AppState,
   Modal,
@@ -128,15 +129,8 @@ type EditEntryDraft = {
   fibre: string;
 };
 
-function getLocalDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function formatDisplayDate(value: string) {
-  return new Date(value).toLocaleString(undefined, {
+  return parseAppDate(value).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -828,8 +822,8 @@ export default function LogScreen() {
   const sortedTodayEntries = useMemo(() => {
     const list = [...todayEntries];
     list.sort((a, b) => {
-      const aTime = new Date(a.loggedAt).getTime();
-      const bTime = new Date(b.loggedAt).getTime();
+      const aTime = parseAppDate(a.loggedAt).getTime();
+      const bTime = parseAppDate(b.loggedAt).getTime();
       return sortMode === "newest" ? bTime - aTime : aTime - bTime;
     });
     return list;
@@ -1038,7 +1032,7 @@ export default function LogScreen() {
   );
 
   const addMeal = useCallback((item: QuickAddItem) => {
-    const now = new Date().toISOString();
+    const now = toLocalISOString(new Date());
     const meal = {
       id: makeMealId({
         loggedAt: now,
@@ -1059,7 +1053,7 @@ export default function LogScreen() {
   }, []);
 
   const quickAddMeal = useCallback((item: QuickAddItem) => {
-    const now = new Date().toISOString();
+    const now = toLocalISOString(new Date());
     const meal = {
       id: makeMealId({
         loggedAt: now,
