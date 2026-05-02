@@ -223,7 +223,10 @@ export async function exportUserData(): Promise<string> {
  * Imports user data from a JSON string and saves it to both storage and SQLite.
  * Throws if the data is invalid or cannot be parsed.
  */
-export async function importUserData(json: string): Promise<ImportSummary> {
+export async function importUserData(
+  json: string,
+  onProgress?: (value: number, label: string) => void,
+): Promise<ImportSummary> {
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(json);
@@ -296,26 +299,31 @@ export async function importUserData(json: string): Promise<ImportSummary> {
       healthConnectAutoSync: (data.healthConnectAutoSync as boolean) ?? false,
     };
 
+    onProgress?.(0.1, "Importing settings…");
     await saveStoredData(settings, { immediate: true });
 
     if (Array.isArray(data.entries)) {
+      onProgress?.(0.25, "Importing meals…");
       const meals = sanitizeMeals(data.entries);
       const mealsResult = await importMealsBulk(meals.valid);
       summary.meals.imported = mealsResult.imported;
       summary.meals.failed = meals.invalid + mealsResult.failed;
     }
     if (Array.isArray(data.weightHistory)) {
+      onProgress?.(0.5, "Importing weight history…");
       const weights = sanitizeWeights(data.weightHistory);
       const weightsResult = await importWeightsBulk(weights.valid);
       summary.weightHistory.imported = weightsResult.imported;
       summary.weightHistory.failed = weights.invalid + weightsResult.failed;
     }
     if (Array.isArray(data.bodyFatHistory)) {
+      onProgress?.(0.75, "Importing body fat history…");
       const bodyFats = sanitizeBodyFats(data.bodyFatHistory);
       const bodyFatsResult = await importBodyFatsBulk(bodyFats.valid);
       summary.bodyFatHistory.imported = bodyFatsResult.imported;
       summary.bodyFatHistory.failed = bodyFats.invalid + bodyFatsResult.failed;
     }
+    onProgress?.(1.0, "Done");
     return summary;
   }
 
@@ -323,26 +331,31 @@ export async function importUserData(json: string): Promise<ImportSummary> {
   const payload = parsed as ExportPayload;
 
   if (payload.settings) {
+    onProgress?.(0.1, "Importing settings…");
     await saveStoredData(payload.settings, { immediate: true });
   }
   if (Array.isArray(payload.meals)) {
+    onProgress?.(0.25, "Importing meals…");
     const meals = sanitizeMeals(payload.meals);
     const mealsResult = await importMealsBulk(meals.valid);
     summary.meals.imported = mealsResult.imported;
     summary.meals.failed = meals.invalid + mealsResult.failed;
   }
   if (Array.isArray(payload.weightHistory)) {
+    onProgress?.(0.5, "Importing weight history…");
     const weights = sanitizeWeights(payload.weightHistory);
     const weightsResult = await importWeightsBulk(weights.valid);
     summary.weightHistory.imported = weightsResult.imported;
     summary.weightHistory.failed = weights.invalid + weightsResult.failed;
   }
   if (Array.isArray(payload.bodyFatHistory)) {
+    onProgress?.(0.75, "Importing body fat history…");
     const bodyFats = sanitizeBodyFats(payload.bodyFatHistory);
     const bodyFatsResult = await importBodyFatsBulk(bodyFats.valid);
     summary.bodyFatHistory.imported = bodyFatsResult.imported;
     summary.bodyFatHistory.failed = bodyFats.invalid + bodyFatsResult.failed;
   }
+  onProgress?.(1.0, "Done");
 
   return summary;
 }

@@ -728,6 +728,10 @@ async function validateModelMagicNumber(
 
 export default function SettingsScreen() {
   const [isExporting, setIsExporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{
+    value: number;
+    label: string;
+  } | null>(null);
   // Import data from JSON file
   const handleImportData = async () => {
     try {
@@ -743,7 +747,10 @@ export default function SettingsScreen() {
         return;
       }
       const json = await file.text();
-      const summary = await importUserData(json);
+      setImportProgress({ value: 0, label: "Reading file…" });
+      const summary = await importUserData(json, (value, label) =>
+        setImportProgress({ value, label }),
+      );
       // Invalidate all caches so graphs/goals reflect imported data immediately
       invalidateMealCaches();
       invalidateWeightCaches();
@@ -773,6 +780,8 @@ export default function SettingsScreen() {
         "Import failed",
         error instanceof Error ? error.message : String(error),
       );
+    } finally {
+      setImportProgress(null);
     }
   };
   // Export data as JSON and share
@@ -2450,10 +2459,29 @@ export default function SettingsScreen() {
               mode="outlined"
               icon="import"
               onPress={handleImportData}
-              style={{ marginBottom: 10 }}
+              loading={importProgress !== null}
+              disabled={importProgress !== null}
+              style={{ marginBottom: importProgress !== null ? 6 : 10 }}
             >
-              Import data
+              {importProgress !== null ? "Importing..." : "Import data"}
             </Button>
+            {importProgress !== null ? (
+              <View style={{ marginBottom: 10 }}>
+                <Text
+                  variant="bodySmall"
+                  style={{
+                    color: theme.colors.onSurfaceVariant,
+                    marginBottom: 4,
+                  }}
+                >
+                  {importProgress.label}
+                </Text>
+                <ProgressBar
+                  progress={importProgress.value}
+                  style={styles.progressBar}
+                />
+              </View>
+            ) : null}
             <Text
               variant="bodyMedium"
               style={{ color: theme.colors.onSurfaceVariant, marginBottom: 0 }}
