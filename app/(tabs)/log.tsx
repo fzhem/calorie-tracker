@@ -390,18 +390,18 @@ const QuickLogCard = memo(function QuickLogCard({
               <View
                 style={[
                   styles.memoryStatusBadge,
-                  { backgroundColor: theme.colors.error },
+                  { backgroundColor: theme.colors.errorContainer },
                 ]}
               >
                 <MaterialCommunityIcons
                   name="alert-circle-outline"
                   size={10}
-                  color={theme.colors.onError}
+                  color={theme.colors.error}
                 />
                 <Text
                   style={[
                     styles.memoryStatusText,
-                    { color: theme.colors.onError },
+                    { color: theme.colors.error },
                   ]}
                 >
                   Blocked

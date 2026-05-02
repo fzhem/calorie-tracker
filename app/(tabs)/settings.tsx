@@ -1927,8 +1927,8 @@ export default function SettingsScreen() {
                                 styles.memoryWarningBadge,
                                 {
                                   backgroundColor: isBlocked
-                                    ? theme.colors.error
-                                    : theme.colors.tertiary,
+                                    ? theme.colors.errorContainer
+                                    : theme.colors.tertiaryContainer,
                                   paddingHorizontal: 6,
                                   paddingVertical: 2,
                                   borderRadius: 6,
@@ -1942,8 +1942,8 @@ export default function SettingsScreen() {
                                 size={12}
                                 color={
                                   isBlocked
-                                    ? theme.colors.onError
-                                    : theme.colors.onTertiary
+                                    ? theme.colors.error
+                                    : theme.colors.tertiary
                                 }
                               />
                               <Text
@@ -1952,8 +1952,8 @@ export default function SettingsScreen() {
                                   fontSize: 10,
                                   fontWeight: "700",
                                   color: isBlocked
-                                    ? theme.colors.onError
-                                    : theme.colors.onTertiary,
+                                    ? theme.colors.error
+                                    : theme.colors.tertiary,
                                   textShadowRadius: 1,
                                 }}
                               >
@@ -1984,18 +1984,27 @@ export default function SettingsScreen() {
                             </Text>
                           )}
                           {isArchitectureBlocked && (
-                            <Text
-                              variant="labelSmall"
+                            <View
                               style={[
-                                styles.memoryWarningSubtext,
+                                styles.recommendedTag,
                                 {
-                                  color: theme.colors.error,
-                                  fontWeight: "700",
+                                  backgroundColor: theme.colors.errorContainer,
                                 },
                               ]}
                             >
-                              Architecture not supported
-                            </Text>
+                              <Text
+                                variant="labelSmall"
+                                style={[
+                                  styles.memoryWarningSubtext,
+                                  {
+                                    color: theme.colors.error,
+                                    fontWeight: "700",
+                                  },
+                                ]}
+                              >
+                                Architecture not supported
+                              </Text>
+                            </View>
                           )}
                           {isWarning && !isBlocked && (
                             <Text
@@ -2188,8 +2197,8 @@ export default function SettingsScreen() {
                                     styles.memoryWarningBadge,
                                     {
                                       backgroundColor: isBlocked
-                                        ? theme.colors.error
-                                        : theme.colors.tertiary,
+                                        ? theme.colors.errorContainer
+                                        : theme.colors.tertiaryContainer,
                                       position: "relative",
                                       top: 0,
                                       right: 0,
@@ -2205,8 +2214,8 @@ export default function SettingsScreen() {
                                     size={12}
                                     color={
                                       isBlocked
-                                        ? theme.colors.onError
-                                        : theme.colors.onTertiary
+                                        ? theme.colors.error
+                                        : theme.colors.tertiary
                                     }
                                   />
                                 </View>
