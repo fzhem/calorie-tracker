@@ -1759,7 +1759,11 @@ export default function SettingsScreen() {
                 ]}
               >
                 <MaterialCommunityIcons
-                  name="cpu-32-bit"
+                  name={
+                    deviceArchitecture === "x86_64"
+                      ? "cpu-64-bit"
+                      : "cpu-32-bit"
+                  }
                   size={20}
                   color={theme.colors.error}
                 />
