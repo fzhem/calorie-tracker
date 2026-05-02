@@ -15,7 +15,7 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.sus.calorietracker",
+      "package": "com.zane.calorietracker",
       "displayName": "Calorie Tracker",
       "adaptiveIcon": {
         "foregroundImage": "./assets/ic_launcher-playstore.png",
