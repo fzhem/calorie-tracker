@@ -50,6 +50,13 @@ import {
 } from "@/lib/modelCache";
 import { checkModelMemory } from "@/lib/memoryUtils";
 import {
+  detectArchitecture,
+  isLiteRTSupported,
+  getLiteRTUnsupportedReason,
+  getArchitectureLabel,
+  type DeviceArchitecture,
+} from "@/lib/architectureUtils";
+import {
   DEFAULT_DATA,
   DEFAULT_MODEL_CONFIG,
   getCachedData,
@@ -646,12 +653,21 @@ export default function LogScreen() {
   const [modelPath, setModelPath] = useState<string | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string>("");
 
+  // Device architecture state
+  const [deviceArchitecture, setDeviceArchitecture] =
+    useState<DeviceArchitecture | null>(null);
+
   // Load modelPath and systemPrompt from storage on mount
   useEffect(() => {
     getModelConfig().then(({ modelPath, systemPrompt }) => {
       setModelPath(modelPath);
       setSystemPrompt(systemPrompt);
     });
+  }, []);
+
+  // Detect device architecture on mount
+  useEffect(() => {
+    setDeviceArchitecture(detectArchitecture());
   }, []);
 
   useFocusEffect(
@@ -720,6 +736,18 @@ export default function LogScreen() {
   };
 
   const handleLlmPrompt = async () => {
+    if (!deviceArchitecture || !isLiteRTSupported(deviceArchitecture)) {
+      setLlmError(
+        deviceArchitecture
+          ? getLiteRTUnsupportedReason(deviceArchitecture)
+          : "Checking device architecture compatibility. Please try again.",
+      );
+      setLlmLoading(false);
+      setLlmStage("idle");
+      setLlmStageStartedAt(null);
+      return;
+    }
+
     setLlmLoading(true);
     beginLlmStage("estimating");
     setLlmError("");
@@ -1392,10 +1420,25 @@ export default function LogScreen() {
     return checkModelMemory(selectedModelKey);
   }, [selectedModelKey]);
 
-  const isModelBlocked = memoryCheck?.status === "blocked";
+  // Block model if architecture doesn't support LiteRT
+  const isArchitectureBlocked = useMemo(() => {
+    return (
+      deviceArchitecture !== null && !isLiteRTSupported(deviceArchitecture)
+    );
+  }, [deviceArchitecture]);
+
+  const isModelBlocked =
+    isArchitectureBlocked || memoryCheck?.status === "blocked";
   const isModelWarning = memoryCheck?.status === "warning";
 
   const handleOpenLlmEstimator = useCallback(() => {
+    if (isArchitectureBlocked && deviceArchitecture) {
+      m3Alert.alert(
+        "AI Features Not Available",
+        `AI meal estimation requires an ARM 64-bit device, but your device is ${getArchitectureLabel(deviceArchitecture)}.\n\n${getLiteRTUnsupportedReason(deviceArchitecture)}`,
+      );
+      return;
+    }
     if (isModelBlocked) {
       m3Alert.alert(
         "Low Device Memory",
@@ -1404,7 +1447,13 @@ export default function LogScreen() {
       return;
     }
     setLlmModalVisible(true);
-  }, [isModelBlocked, selectedModelKey, memoryCheck?.usagePercent]);
+  }, [
+    isArchitectureBlocked,
+    isModelBlocked,
+    deviceArchitecture,
+    selectedModelKey,
+    memoryCheck?.usagePercent,
+  ]);
 
   return (
     <View

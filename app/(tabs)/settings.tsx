@@ -55,6 +55,13 @@ import {
   subscribeModelCache,
 } from "@/lib/modelCache";
 import { checkModelMemory } from "@/lib/memoryUtils";
+import {
+  detectArchitecture,
+  isLiteRTSupported,
+  getLiteRTUnsupportedReason,
+  getArchitectureLabel,
+  type DeviceArchitecture,
+} from "@/lib/architectureUtils";
 
 import { ToastAndroid } from "react-native";
 import {
@@ -845,6 +852,8 @@ export default function SettingsScreen() {
   );
   const [isReady, setIsReady] = useState(false);
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("idle");
+  const [deviceArchitecture, setDeviceArchitecture] =
+    useState<DeviceArchitecture | null>(null);
 
   const [isSyncingWeight, setIsSyncingWeight] = useState(false);
 
@@ -902,6 +911,11 @@ export default function SettingsScreen() {
       setDownloadError(null);
     }
   }, [selectedModelKey]);
+
+  // Detect device architecture on mount
+  useEffect(() => {
+    setDeviceArchitecture(detectArchitecture());
+  }, []);
 
   const activeModelConfig = activeModelConfigUri
     ? (data.perModelConfig?.[activeModelConfigUri] ?? DEFAULT_MODEL_CONFIG)
@@ -1506,6 +1520,17 @@ export default function SettingsScreen() {
     return "No model selected.";
   }, [data.modelPath, downloadedModels]);
 
+  const isArchitectureBlocked = useMemo(() => {
+    return (
+      deviceArchitecture !== null && !isLiteRTSupported(deviceArchitecture)
+    );
+  }, [deviceArchitecture]);
+
+  const architectureBlockedReason = useMemo(() => {
+    if (!isArchitectureBlocked || !deviceArchitecture) return null;
+    return getLiteRTUnsupportedReason(deviceArchitecture);
+  }, [isArchitectureBlocked, deviceArchitecture]);
+
   const segmentedButtonsTheme = useMemo(
     () => getAppSegmentedButtonsTheme(theme),
     [
@@ -1726,6 +1751,26 @@ export default function SettingsScreen() {
             >
               Active model: {selectedModelDescription}
             </Text>
+            {isArchitectureBlocked && deviceArchitecture ? (
+              <View
+                style={[
+                  styles.memoryAlertBox,
+                  { backgroundColor: theme.colors.errorContainer },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="cpu-32-bit"
+                  size={20}
+                  color={theme.colors.error}
+                />
+                <Text
+                  variant="labelSmall"
+                  style={{ color: theme.colors.onErrorContainer, flex: 1 }}
+                >
+                  {`Detected ${getArchitectureLabel(deviceArchitecture)}. ${architectureBlockedReason ?? "LiteRT models are unavailable on this architecture."}`}
+                </Text>
+              </View>
+            ) : null}
 
             {/* Tab navigation for Offline / Download Models */}
             <SegmentedButtons
@@ -1808,7 +1853,8 @@ export default function SettingsScreen() {
                 <View style={styles.modelSelector}>
                   {BUILT_IN_MODELS.map((model) => {
                     const memoryCheck = checkModelMemory(model.key);
-                    const isBlocked = memoryCheck.status === "blocked";
+                    const isBlocked =
+                      isArchitectureBlocked || memoryCheck.status === "blocked";
                     const isWarning = memoryCheck.status === "warning";
                     const memoryGB =
                       memoryCheck.modelMemoryBytes / (1024 * 1024 * 1024);
@@ -1911,11 +1957,15 @@ export default function SettingsScreen() {
                                   textShadowRadius: 1,
                                 }}
                               >
-                                {isBlocked ? "Low RAM" : "Warning"}
+                                {isArchitectureBlocked
+                                  ? "Blocked"
+                                  : isBlocked
+                                    ? "Low RAM"
+                                    : "Warning"}
                               </Text>
                             </View>
                           )}
-                          {isBlocked && (
+                          {isBlocked && !isArchitectureBlocked && (
                             <Text
                               variant="labelSmall"
                               style={[
@@ -1931,6 +1981,20 @@ export default function SettingsScreen() {
                             >
                               Requires {memoryLabel} ({memoryCheck.usagePercent}
                               % of RAM)
+                            </Text>
+                          )}
+                          {isArchitectureBlocked && (
+                            <Text
+                              variant="labelSmall"
+                              style={[
+                                styles.memoryWarningSubtext,
+                                {
+                                  color: theme.colors.error,
+                                  fontWeight: "700",
+                                },
+                              ]}
+                            >
+                              Architecture not supported
                             </Text>
                           )}
                           {isWarning && !isBlocked && (
@@ -1955,7 +2019,11 @@ export default function SettingsScreen() {
                     mode={
                       selectedModelKey === "custom" ? "contained" : "outlined"
                     }
-                    onPress={() => setSelectedModelKey("custom")}
+                    onPress={() => {
+                      if (!isArchitectureBlocked) setSelectedModelKey("custom");
+                    }}
+                    disabled={isArchitectureBlocked}
+                    icon={isArchitectureBlocked ? "lock" : undefined}
                   >
                     Custom URL
                   </Button>
@@ -1980,6 +2048,7 @@ export default function SettingsScreen() {
                   onPress={handleDownloadModel}
                   disabled={
                     isDownloading ||
+                    isArchitectureBlocked ||
                     (selectedModelKey === "custom" && !customModelUrl.trim()) ||
                     isSelectedModelDownloaded ||
                     (selectedModelKey !== "custom" &&
@@ -2061,7 +2130,9 @@ export default function SettingsScreen() {
                       const memoryCheck = modelKey
                         ? checkModelMemory(modelKey)
                         : null;
-                      const isBlocked = memoryCheck?.status === "blocked";
+                      const isBlocked =
+                        isArchitectureBlocked ||
+                        memoryCheck?.status === "blocked";
                       const isWarning = memoryCheck?.status === "warning";
 
                       return (
@@ -2166,9 +2237,11 @@ export default function SettingsScreen() {
                                   : theme.colors.tertiary,
                               }}
                             >
-                              {isBlocked
-                                ? `Uses ${memoryCheck.usagePercent}% of RAM (blocked)`
-                                : `Uses ${memoryCheck.usagePercent}% of RAM`}
+                              {isArchitectureBlocked
+                                ? "Architecture not supported"
+                                : isBlocked
+                                  ? `Uses ${memoryCheck.usagePercent}% of RAM (blocked)`
+                                  : `Uses ${memoryCheck.usagePercent}% of RAM`}
                             </Text>
                           )}
                           <View style={styles.downloadedItemActions}>
