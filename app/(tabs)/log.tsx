@@ -860,6 +860,10 @@ export default function LogScreen() {
       getMealsForDay(key)
         .then(setEntries)
         .catch(() => {});
+      // Refresh HC weight so metabolism recalculates if weights were imported
+      getLatestWeightBySource("health-connect")
+        .then((point) => setLatestHCWeightKg(point?.weightKg ?? null))
+        .catch(() => {});
     }, []),
   );
 

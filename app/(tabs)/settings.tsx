@@ -86,6 +86,7 @@ import {
 } from "@/db/index";
 import {
   invalidateBodyFatCaches,
+  invalidateMealCaches,
   invalidateWeightCaches,
 } from "@/lib/queryCache";
 import { parseAppDate, toLocalISOString } from "@/lib/dateKey";
@@ -743,6 +744,10 @@ export default function SettingsScreen() {
       }
       const json = await file.text();
       const summary = await importUserData(json);
+      // Invalidate all caches so graphs/goals reflect imported data immediately
+      invalidateMealCaches();
+      invalidateWeightCaches();
+      invalidateBodyFatCaches();
       // Refresh latest weight & body fat from DB after import
       getLatestWeight().then((point) =>
         setLatestWeight(point?.weightKg ?? null),

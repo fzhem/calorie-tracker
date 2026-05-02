@@ -314,12 +314,41 @@ export default function GoalsScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!hasCompletedInitialLoad.current) return;
-      // Only refresh health connect weight on focus, not the entire form
-      // (data is now persisted with debounced saves)
+      // Reload full form from storage so that an import done in Settings is
+      // reflected immediately when the user navigates here.
+      loadStoredData()
+        .then((next) => {
+          setData(next);
+          setBaseTargetInput(`${next.baseTarget}`);
+          setCaloriesPerKgInput(`${next.caloriesPerKg}`);
+          setGoalAdjustmentTypeInput(next.cutAdjustmentType ?? "kcal");
+          setGoalAdjustmentInput(`${next.cutCalorieAdjustment ?? 500}`);
+          setGoalPercentInput(`${next.cutPercentPerWeek ?? 1}`);
+          setMetabolismAgeInput(
+            next.metabolismAgeYears ? `${next.metabolismAgeYears}` : "",
+          );
+          setSelectedHeightCm(next.metabolismHeightCm ?? null);
+          setManualWeightInput(
+            next.manualWeightKg
+              ? formatWeightForUnit(next.manualWeightKg, weightUnit)
+              : "",
+          );
+          setProteinGoalInput(
+            next.proteinGoalGrams ? `${next.proteinGoalGrams}` : "",
+          );
+          setFatGoalInput(next.fatGoalGrams ? `${next.fatGoalGrams}` : "");
+          setCarbsGoalInput(
+            next.carbsGoalGrams ? `${next.carbsGoalGrams}` : "",
+          );
+          setFibreGoalInput(
+            next.fibreGoalGrams ? `${next.fibreGoalGrams}` : "",
+          );
+        })
+        .catch(() => {});
       getLatestWeightBySource("health-connect").then((point) => {
         setLatestHealthConnectWeightKg(point?.weightKg ?? null);
       });
-    }, []),
+    }, [weightUnit]),
   );
 
   useEffect(() => {

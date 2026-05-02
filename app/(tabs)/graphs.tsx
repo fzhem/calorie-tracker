@@ -46,6 +46,7 @@ import {
   CACHE_TAGS,
   CACHE_TTL_MS,
   getCachedOrFetch,
+  getCachedSync,
   queryKeys,
 } from "@/lib/queryCache";
 import { getLocalDateKey, parseAppDate, toLocalISOString } from "@/lib/dateKey";
@@ -649,7 +650,15 @@ export default function GraphsScreen() {
     useCallback(() => {
       if (!hasCompletedInitialLoad.current) return undefined;
       const now = Date.now();
-      if (now - lastGraphLoadAtRef.current < GRAPH_FOCUS_REFRESH_INTERVAL_MS) {
+      // Bypass throttle if any primary cache key has been invalidated (e.g. after import)
+      const cachesMissing =
+        getCachedSync(queryKeys.weightSeries(365)) === null ||
+        getCachedSync(queryKeys.bodyFatSeries(365)) === null ||
+        getCachedSync(queryKeys.recentMeals(30)) === null;
+      if (
+        !cachesMissing &&
+        now - lastGraphLoadAtRef.current < GRAPH_FOCUS_REFRESH_INTERVAL_MS
+      ) {
         return undefined;
       }
       loadScreenData();
