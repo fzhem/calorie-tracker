@@ -24,7 +24,6 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import type { Permission } from "react-native-health-connect";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  Badge,
   Button,
   Card,
   Chip,
@@ -42,10 +41,11 @@ import {
 import Slider from "@react-native-community/slider";
 import { Directory, File, Paths } from "expo-file-system";
 import {
-  createDownloadResumable,
-  type DownloadProgressData,
-  type DownloadResumable,
-} from "expo-file-system/legacy";
+  createDownloadTask,
+  completeHandler as completeDownloadHandler,
+  getExistingDownloadTasks,
+  setConfig as setDownloadConfig,
+} from "@kesha-antonov/react-native-background-downloader";
 
 import {
   clearModelCache,
@@ -726,6 +726,8 @@ async function validateModelMagicNumber(
   }
 }
 
+const DOWNLOAD_TASK_ID = "model-download";
+
 export default function SettingsScreen() {
   const [isExporting, setIsExporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{
@@ -909,9 +911,13 @@ export default function SettingsScreen() {
   const [downloadedModels, setDownloadedModels] = useState<DownloadedModel[]>(
     [],
   );
-  const downloadTaskRef = useRef<DownloadResumable | null>(null);
+  const downloadTaskRef = useRef<ReturnType<typeof createDownloadTask> | null>(
+    null,
+  );
   const downloadCancelRequestedRef = useRef(false);
+  const downloadResolveRef = useRef<(() => void) | null>(null);
   const lastFocusRefreshAtRef = useRef(0);
+
   const [activeModelConfigUri, setActiveModelConfigUri] = useState<
     string | null
   >(null);
@@ -930,6 +936,50 @@ export default function SettingsScreen() {
   useEffect(() => {
     setDeviceArchitecture(detectArchitecture());
   }, []);
+
+  // Re-attach to downloads that continued while app was backgrounded/killed
+  useEffect(() => {
+    let cancelled = false;
+    getExistingDownloadTasks().then((tasks) => {
+      if (cancelled) return;
+      const task = tasks.find((t) => t.id === DOWNLOAD_TASK_ID);
+      if (!task) return;
+
+      const label = (task.metadata as { label?: string })?.label ?? "Model";
+      setIsDownloading(true);
+      setActiveDownloadLabel(label);
+      downloadTaskRef.current = task;
+
+      task
+        .progress(({ bytesDownloaded, bytesTotal }) => {
+          setDownloadedBytes(bytesDownloaded);
+          if (bytesTotal > 0) {
+            setTotalBytes(bytesTotal);
+            setDownloadProgress(bytesDownloaded / bytesTotal);
+          }
+        })
+        .done(({ bytesDownloaded }) => {
+          completeDownloadHandler(DOWNLOAD_TASK_ID);
+          setDownloadedBytes(bytesDownloaded);
+          setDownloadProgress(1);
+          setIsDownloading(false);
+          setActiveDownloadLabel(null);
+          downloadTaskRef.current = null;
+          refreshDownloadedModels().catch(() => {});
+          setSnackbarMessage(`${label} downloaded and selected`);
+          setShowSnackbarViewAction(true);
+          setShowSnackbar(true);
+        })
+        .error(() => {
+          setIsDownloading(false);
+          setActiveDownloadLabel(null);
+          downloadTaskRef.current = null;
+        });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeModelConfig = activeModelConfigUri
     ? (data.perModelConfig?.[activeModelConfigUri] ?? DEFAULT_MODEL_CONFIG)
@@ -1350,13 +1400,26 @@ export default function SettingsScreen() {
       setDownloadSpeed(null);
       setActiveDownloadLabel(source.label);
 
+      // Configure the library's built-in notification with the model name
+      setDownloadConfig({
+        showNotificationsEnabled: true,
+        notificationsGrouping: {
+          enabled: false,
+          texts: {
+            downloadTitle: source.label,
+            downloadStarting: "Starting download…",
+            downloadProgress: "Downloading… {progress}%",
+            downloadFinished: "Download complete",
+          },
+        },
+      });
+
       if (!MODEL_DIRECTORY.exists) {
         MODEL_DIRECTORY.create({ intermediates: true, idempotent: true });
       }
 
       const destFile = new File(MODEL_DIRECTORY, source.fileName);
       if (destFile.exists) destFile.delete();
-      destFile.create();
       let knownTotalBytes: number | null = null;
       let wasCancelled = false;
 
@@ -1366,46 +1429,65 @@ export default function SettingsScreen() {
         setTotalBytes(knownTotalBytes);
       }
 
-      // Use a cancellable network task so the UI can expose a true Cancel action.
-      let lastBytes = 0;
-      let lastTime = Date.now();
+      // Destination path without file:// prefix (required by background downloader)
+      const destPath = destFile.uri.replace(/^file:\/\//, "");
 
-      const onProgress = ({
-        totalBytesExpectedToWrite,
-        totalBytesWritten,
-      }: DownloadProgressData) => {
-        const currentBytes = totalBytesWritten;
-        const now = Date.now();
-        const elapsed = (now - lastTime) / 1000;
-        if (elapsed > 0) {
-          setDownloadSpeed((currentBytes - lastBytes) / elapsed);
-        }
-        lastBytes = currentBytes;
-        lastTime = now;
-        setDownloadedBytes(currentBytes);
+      // Use native background downloader — continues even when app is backgrounded/killed
+      await new Promise<void>((resolve, reject) => {
+        downloadResolveRef.current = resolve;
+        let lastBytes = 0;
+        let lastTime = Date.now();
 
-        if (totalBytesExpectedToWrite && totalBytesExpectedToWrite > 0) {
-          knownTotalBytes = totalBytesExpectedToWrite;
-          setTotalBytes(totalBytesExpectedToWrite);
-          setDownloadProgress(currentBytes / totalBytesExpectedToWrite);
-          return;
-        }
+        const task = createDownloadTask({
+          id: DOWNLOAD_TASK_ID,
+          url: source.url,
+          destination: destPath,
+          metadata: { label: source.label },
+        })
+          .begin(({ expectedBytes }) => {
+            if (expectedBytes && expectedBytes > 0) {
+              knownTotalBytes = expectedBytes;
+              setTotalBytes(expectedBytes);
+            }
+          })
+          .progress(({ bytesDownloaded, bytesTotal }) => {
+            const currentBytes = bytesDownloaded;
+            const now = Date.now();
+            const elapsed = (now - lastTime) / 1000;
+            if (elapsed > 0) {
+              setDownloadSpeed((currentBytes - lastBytes) / elapsed);
+            }
+            lastBytes = currentBytes;
+            lastTime = now;
+            setDownloadedBytes(currentBytes);
 
-        if (knownTotalBytes && knownTotalBytes > 0) {
-          setDownloadProgress(currentBytes / knownTotalBytes);
-        }
-      };
+            const total =
+              bytesTotal > 0 ? bytesTotal : (knownTotalBytes ?? null);
+            if (total && total > 0) {
+              knownTotalBytes = total;
+              setTotalBytes(total);
+              setDownloadProgress(currentBytes / total);
+            }
+          })
+          .done(() => {
+            downloadResolveRef.current = null;
+            completeDownloadHandler(DOWNLOAD_TASK_ID);
+            resolve();
+          })
+          .error(({ error }) => {
+            downloadResolveRef.current = null;
+            if (downloadCancelRequestedRef.current) {
+              resolve(); // intentional cancel — not an error
+            } else {
+              reject(new Error(error));
+            }
+          });
 
-      const downloadTask = createDownloadResumable(
-        source.url,
-        destFile.uri,
-        {},
-        onProgress,
-      );
-      downloadTaskRef.current = downloadTask;
+        downloadTaskRef.current = task;
+        task.start();
+      });
 
-      const result = await downloadTask.downloadAsync();
-      if (!result || downloadCancelRequestedRef.current) {
+      if (downloadCancelRequestedRef.current) {
         wasCancelled = true;
       }
 
@@ -1422,12 +1504,8 @@ export default function SettingsScreen() {
       if (destFile.exists) {
         const finalBytes = destFile.size;
         setDownloadedBytes(finalBytes);
-        if (knownTotalBytes && knownTotalBytes > 0) {
-          setDownloadProgress(1);
-        } else {
-          setTotalBytes(finalBytes);
-          setDownloadProgress(1);
-        }
+        setTotalBytes(finalBytes > 0 ? finalBytes : (knownTotalBytes ?? null));
+        setDownloadProgress(1);
       }
 
       setData((prev) => ({ ...prev, modelPath: destFile.uri }));
@@ -1459,7 +1537,13 @@ export default function SettingsScreen() {
     try {
       downloadCancelRequestedRef.current = true;
       setIsCancellingDownload(true);
-      await downloadTaskRef.current.cancelAsync();
+      await downloadTaskRef.current.stop();
+      // stop() may not trigger .error() callback — resolve manually if needed
+      if (downloadResolveRef.current) {
+        const resolve = downloadResolveRef.current;
+        downloadResolveRef.current = null;
+        resolve();
+      }
     } catch (error) {
       setDownloadError(`Cancel failed: ${getErrorMessage(error)}`);
       setIsCancellingDownload(false);

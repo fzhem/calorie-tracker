@@ -24,7 +24,8 @@
       "permissions": [
         "android.permission.health.READ_WEIGHT",
         "android.permission.health.READ_BODY_FAT",
-        "android.permission.health.READ_HEALTH_DATA_HISTORY"
+        "android.permission.health.READ_HEALTH_DATA_HISTORY",
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "predictiveBackGestureEnabled": false
     },
@@ -46,7 +47,8 @@
       "./plugins/withAndroidIcons",
       "./plugins/withAndroidManifestExtras",
       "./plugins/withAndroidBuildGradle",
-      "./plugins/withHealthConnectPermissionDelegate"
+      "./plugins/withHealthConnectPermissionDelegate",
+      "@kesha-antonov/react-native-background-downloader"
     ],
     "experiments": {
       "typedRoutes": true
