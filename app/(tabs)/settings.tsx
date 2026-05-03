@@ -13,7 +13,9 @@ import {
 } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
+  Linking,
   Modal,
+  PermissionsAndroid,
   Platform,
   Pressable,
   ScrollView,
@@ -102,6 +104,12 @@ type HealthStatus =
   | "unavailable"
   | "update-required"
   | "error";
+
+type NotificationPermissionStatus =
+  | "unknown"
+  | "not-required"
+  | "granted"
+  | "denied";
 
 type ModelCatalogItem = {
   key: "GEMMA_4_E2B_IT" | "GEMMA_4_E4B_IT";
@@ -897,6 +905,12 @@ export default function SettingsScreen() {
   const [selectedModelKey, setSelectedModelKey] = useState<
     "GEMMA_4_E2B_IT" | "GEMMA_4_E4B_IT" | "custom"
   >("GEMMA_4_E2B_IT");
+  const [notificationPermissionStatus, setNotificationPermissionStatus] =
+    useState<NotificationPermissionStatus>("unknown");
+  const [
+    isRequestingNotificationPermission,
+    setIsRequestingNotificationPermission,
+  ] = useState(false);
   const [customModelUrl, setCustomModelUrl] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
   const [isCancellingDownload, setIsCancellingDownload] = useState(false);
@@ -936,6 +950,88 @@ export default function SettingsScreen() {
   useEffect(() => {
     setDeviceArchitecture(detectArchitecture());
   }, []);
+
+  const getNotificationPermissionStatus = useCallback(async () => {
+    if (Platform.OS !== "android") return "not-required" as const;
+    const apiLevel =
+      typeof Platform.Version === "number"
+        ? Platform.Version
+        : Number.parseInt(String(Platform.Version), 10);
+    if (!Number.isFinite(apiLevel) || apiLevel < 33) {
+      return "not-required" as const;
+    }
+    const granted = await PermissionsAndroid.check(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    );
+    return granted ? ("granted" as const) : ("denied" as const);
+  }, []);
+
+  const refreshNotificationPermissionStatus = useCallback(async () => {
+    const next = await getNotificationPermissionStatus();
+    setNotificationPermissionStatus(next);
+    return next;
+  }, [getNotificationPermissionStatus]);
+
+  const requestNotificationPermission = useCallback(async () => {
+    if (Platform.OS !== "android") {
+      setNotificationPermissionStatus("not-required");
+      return true;
+    }
+
+    const currentStatus = await refreshNotificationPermissionStatus();
+    if (currentStatus === "not-required" || currentStatus === "granted") {
+      return true;
+    }
+
+    setIsRequestingNotificationPermission(true);
+    try {
+      const result = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+        {
+          title: "Allow notifications?",
+          message:
+            "Notifications are used to show background model download progress and completion.",
+          buttonPositive: "Allow",
+          buttonNegative: "Not now",
+        },
+      );
+
+      const granted = result === PermissionsAndroid.RESULTS.GRANTED;
+      setNotificationPermissionStatus(granted ? "granted" : "denied");
+
+      if (!granted && result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+        m3Alert.alert(
+          "Notification permission blocked",
+          "Enable notifications in system settings to see background download progress and completion.",
+          [
+            { text: "Later", style: "cancel" },
+            {
+              text: "Open settings",
+              onPress: () => {
+                void Linking.openSettings();
+              },
+            },
+          ],
+        );
+      }
+
+      return granted;
+    } catch (error) {
+      m3Alert.alert(
+        "Permission request failed",
+        `Could not request notification permission. ${getErrorMessage(error)}`,
+      );
+      return false;
+    } finally {
+      setIsRequestingNotificationPermission(false);
+    }
+  }, [m3Alert, refreshNotificationPermissionStatus]);
+
+  useEffect(() => {
+    refreshNotificationPermissionStatus().catch(() => {
+      setNotificationPermissionStatus("unknown");
+    });
+  }, [refreshNotificationPermissionStatus]);
 
   // Re-attach to downloads that continued while app was backgrounded/killed
   useEffect(() => {
@@ -1066,7 +1162,14 @@ export default function SettingsScreen() {
           "Downloaded model list could not be refreshed.",
         );
       });
-    }, [loadStoredData, refreshDownloadedModels]),
+      refreshNotificationPermissionStatus().catch(() => {
+        setNotificationPermissionStatus("unknown");
+      });
+    }, [
+      loadStoredData,
+      refreshDownloadedModels,
+      refreshNotificationPermissionStatus,
+    ]),
   );
 
   // Initialize Health Connect status once on mount
@@ -1400,9 +1503,23 @@ export default function SettingsScreen() {
       setDownloadSpeed(null);
       setActiveDownloadLabel(source.label);
 
+      let shouldShowDownloadNotifications = true;
+      const notificationStatus = await refreshNotificationPermissionStatus();
+      if (notificationStatus === "denied") {
+        const granted = await requestNotificationPermission();
+        shouldShowDownloadNotifications = granted;
+        if (!granted) {
+          setSnackbarMessage(
+            "Download started without notifications. You can enable this in Settings.",
+          );
+          setShowSnackbarViewAction(false);
+          setShowSnackbar(true);
+        }
+      }
+
       // Configure the library's built-in notification with the model name
       setDownloadConfig({
-        showNotificationsEnabled: true,
+        showNotificationsEnabled: shouldShowDownloadNotifications,
         notificationsGrouping: {
           enabled: false,
           texts: {
@@ -1952,6 +2069,62 @@ export default function SettingsScreen() {
             {/* Download Tab Content */}
             {activeModelTab === "download" && (
               <>
+                <View
+                  style={[
+                    styles.notificationPermissionRow,
+                    {
+                      borderColor: theme.colors.outlineVariant,
+                      backgroundColor: theme.colors.elevation.level1,
+                    },
+                  ]}
+                >
+                  <View style={flex1Style}>
+                    <Text variant="bodyMedium">Download notifications</Text>
+                    <Text
+                      variant="labelSmall"
+                      style={{
+                        color: theme.colors.onSurfaceVariant,
+                        fontSize: 8,
+                        lineHeight: 12,
+                      }}
+                    >
+                      Needed for background download progress and completion.
+                    </Text>
+                  </View>
+                  <Button
+                    mode={
+                      notificationPermissionStatus === "granted"
+                        ? "contained-tonal"
+                        : "outlined"
+                    }
+                    compact
+                    icon={
+                      notificationPermissionStatus === "granted"
+                        ? "check"
+                        : "bell-ring-outline"
+                    }
+                    onPress={() => {
+                      if (notificationPermissionStatus !== "granted") {
+                        void requestNotificationPermission();
+                      }
+                    }}
+                    loading={isRequestingNotificationPermission}
+                    disabled={
+                      isRequestingNotificationPermission ||
+                      notificationPermissionStatus === "not-required" ||
+                      notificationPermissionStatus === "granted"
+                    }
+                  >
+                    {notificationPermissionStatus === "granted"
+                      ? "Granted"
+                      : notificationPermissionStatus === "not-required"
+                        ? "Not needed"
+                        : isRequestingNotificationPermission
+                          ? "Requesting..."
+                          : "Grant"}
+                  </Button>
+                </View>
+
                 <View style={styles.modelSelector}>
                   {BUILT_IN_MODELS.map((model) => {
                     const memoryCheck = checkModelMemory(model.key);
@@ -2732,6 +2905,16 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 8,
     borderRadius: 8,
+    marginTop: 8,
+  },
+  notificationPermissionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 12,
     marginTop: 8,
   },
   offlineEmptyState: {
