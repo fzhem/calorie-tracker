@@ -52,6 +52,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a9eee0dc-f2c0-4e28-bc90-84e9472d0f67"
+      }
+    },
+    "owner": "expo-faiz"
   }
 }
