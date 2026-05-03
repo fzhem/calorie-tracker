@@ -25,6 +25,7 @@ Simple Expo Android app for logging calories, visualizing weekly trends, and adj
 
 ### Screenshots
 <p align="center">
+	<img src="docs/assets/log.png" alt="Log screen" width="300" />
 	<img src="docs/assets/graphs.png" alt="Graphs screen" width="300" />
 	<img src="docs/assets/settings.png" alt="Settings screen" width="300" />
 </p>
