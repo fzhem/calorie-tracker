@@ -1,0 +1,188 @@
+diff --git a/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt b/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt
+index cea53d2..db5387f 100644
+--- a/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt
++++ b/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt
+@@ -124,6 +124,8 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
+ 
+     // Configuration
+     private var backend: Backend = Backend.CPU
++    private var visionBackend: Backend? = null
++    private var audioBackend: Backend? = null
+     private var temperature: Double = 0.7
+     private var topK: Int = 40
+     private var topP: Double = 0.95
+@@ -153,6 +155,8 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
+                 // Apply configuration
+                 config?.let { cfg ->
+                     cfg.backend?.let { backend = it }
++                    cfg.visionBackend?.let { visionBackend = it }
++                    cfg.audioBackend?.let { audioBackend = it }
+                     cfg.temperature?.let { temperature = it }
+                     cfg.topK?.let { topK = it.toInt() }
+                     cfg.topP?.let { topP = it }
+@@ -171,40 +175,32 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
+                         else -> com.google.ai.edge.litertlm.Backend.CPU()
+                     }
+                     
+-                    // Detect multimodal support from model filename.
+-                    // Only Gemma 3n bundles vision/audio executors; Gemma 4 E2B is text-only.
+-                    // Passing vision/audio backends to a text-only model causes
+-                    // vision_litert_compiled_model_executor init failures.
+-                    val modelFileName = modelPath.substringAfterLast("/").lowercase()
+-                    val isMultimodal = modelFileName.contains("3n") || modelFileName.contains("gemma3")
+-    
+-                    val lmVisionBackend = if (isMultimodal) com.google.ai.edge.litertlm.Backend.GPU() else null
+-                    val lmAudioBackend = if (isMultimodal) com.google.ai.edge.litertlm.Backend.CPU() else null
++                    val lmVisionBackend = when (visionBackend) {
++                        Backend.GPU -> com.google.ai.edge.litertlm.Backend.GPU()
++                        Backend.CPU -> com.google.ai.edge.litertlm.Backend.CPU()
++                        else -> null
++                    }
++                    val lmAudioBackend= when (audioBackend) {
++                        Backend.GPU -> com.google.ai.edge.litertlm.Backend.GPU()
++                        Backend.CPU -> com.google.ai.edge.litertlm.Backend.CPU()
++                        else -> null
++                    }
+     
+-                    Log.i(TAG, "Backend config: main=$lmBackend, vision=$lmVisionBackend, audio=$lmAudioBackend, multimodal=$isMultimodal")
++                    Log.i(TAG, "Backend config: main=$lmBackend, vision=$lmVisionBackend, audio=$lmAudioBackend")
+     
+                     // Get cache directory from application context
+                     val cacheDirectory = LiteRTLMInitProvider.applicationContext?.cacheDir?.absolutePath
+                     Log.i(TAG, "Using cache directory: $cacheDirectory")
+     
+                     // Create Engine configuration — visionBackend/audioBackend are optional
+-                    val engineConfig = if (isMultimodal) {
+-                        EngineConfig(
+-                            modelPath = modelPath,
+-                            backend = lmBackend,
+-                            visionBackend = lmVisionBackend!!,
+-                            audioBackend = lmAudioBackend!!,
+-                            maxNumTokens = maxTokens,
+-                            cacheDir = cacheDirectory
+-                        )
+-                    } else {
+-                        EngineConfig(
+-                            modelPath = modelPath,
+-                            backend = lmBackend,
+-                            maxNumTokens = maxTokens,
+-                            cacheDir = cacheDirectory
+-                        )
+-                    }
++                    val engineConfig = EngineConfig(
++                        modelPath = modelPath,
++                        backend = lmBackend,
++                        visionBackend = lmVisionBackend,
++                        audioBackend = lmAudioBackend,
++                        maxNumTokens = maxTokens,
++                        cacheDir = cacheDirectory
++                    )
+     
+                     if (isClosed) return@synchronized
+                     
+diff --git a/node_modules/react-native-litert-lm/android/src/main/java/dev/litert/litertlm/LiteRTLMPackage.kt b/node_modules/react-native-litert-lm/android/src/main/java/dev/litert/litertlm/LiteRTLMPackage.kt
+index 0b8b517..a8dda25 100644
+--- a/node_modules/react-native-litert-lm/android/src/main/java/dev/litert/litertlm/LiteRTLMPackage.kt
++++ b/node_modules/react-native-litert-lm/android/src/main/java/dev/litert/litertlm/LiteRTLMPackage.kt
+@@ -1,18 +1,35 @@
+ package dev.litert.litertlm
+ 
++import android.os.Build
++import android.util.Log
+ import com.facebook.react.TurboReactPackage
+ import com.facebook.react.bridge.NativeModule
+ import com.facebook.react.bridge.ReactApplicationContext
+ import com.facebook.react.module.model.ReactModuleInfo
+ import com.facebook.react.module.model.ReactModuleInfoProvider
+-import com.margelo.nitro.core.HybridObject
+ 
+ 
+ import com.margelo.nitro.dev.litert.litertlm.LiteRTLMOnLoad
+ 
+ class LiteRTLMPackage : TurboReactPackage() {
++    companion object {
++        private const val TAG = "LiteRTLMPackage"
++
++        private fun isSupportedPrimaryAbi(): Boolean {
++            val primaryAbi = Build.SUPPORTED_64_BIT_ABIS.firstOrNull() ?: return false
++            return primaryAbi == "arm64-v8a"
++        }
++    }
+     init {
+-        LiteRTLMOnLoad.initializeNative()
++        if (!isSupportedPrimaryAbi()) {
++            Log.w(TAG, "Skipping LiteRTLM native init on unsupported primary ABI: ${Build.SUPPORTED_64_BIT_ABIS.firstOrNull()}")
++        } else {
++            try {
++                LiteRTLMOnLoad.initializeNative()
++            } catch (e: UnsatisfiedLinkError) {
++                Log.e(TAG, "LiteRTLM native init failed; disabling LiteRTLM for this process.", e)
++            }
++        }
+     }
+ 
+ 
+diff --git a/node_modules/react-native-litert-lm/nitro.json b/node_modules/react-native-litert-lm/nitro.json
+new file mode 100644
+index 0000000..3a0c15a
+--- /dev/null
++++ b/node_modules/react-native-litert-lm/nitro.json
+@@ -0,0 +1,20 @@
++{
++  "$schema": "https://nitro.margelo.com/nitro.schema.json",
++  "cxxNamespace": ["litertlm"],
++  "ios": {
++    "iosModuleName": "LiteRTLM",
++    "language": "c++"
++  },
++  "android": {
++    "androidNamespace": ["dev", "litert", "litertlm"],
++    "androidCxxLibName": "LiteRTLM",
++    "language": "kotlin"
++  },
++  "autolinking": {
++    "LiteRTLM": {
++      "ios": { "language": "c++", "implementationClassName": "HybridLiteRTLM" },
++      "android": { "language": "kotlin", "implementationClassName": "HybridLiteRTLM" }
++    }
++  },
++  "ignorePaths": ["**/node_modules"]
++}
+\ No newline at end of file
+diff --git a/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts b/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts
+index 33d865c..a0b6879 100644
+--- a/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts
++++ b/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts
+@@ -37,14 +37,28 @@ export interface LLMConfig {
+    * If not specified, defaults to 'cpu'.
+    * If specified backend is unavailable, falls back automatically.
+    *
+-   * @remarks
+-   * Vision encoder is always set to GPU (required by Gemma models).
+-   * Audio encoder is always set to CPU (optimal for audio processing).
+-   *
+    * @default 'cpu'
+    */
+   backend?: Backend;
+ 
++  /**
++   * Compute backend for vision/multimodal encoder.
++   * - 'cpu': CPU inference (slower, more compatible)
++   * - 'gpu': GPU acceleration
++   *
++   * @default null
++   */
++  visionBackend?: Backend;
++
++  /**
++   * Compute backend for audio encoder.
++   * - 'cpu': CPU inference
++   * - 'gpu': GPU acceleration
++   *
++   * @default null
++   */
++  audioBackend?: Backend;
++
+   /**
+    * Maximum number of tokens to generate.
+    * @default 1024
