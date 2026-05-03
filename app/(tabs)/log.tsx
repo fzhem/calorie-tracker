@@ -763,6 +763,31 @@ export default function LogScreen() {
     let cleanedModelPath = modelPath.startsWith("file:///")
       ? modelPath.replace("file:///", "/")
       : modelPath;
+
+    // Check if model file exists before loading
+    try {
+      const { File } = await import("expo-file-system");
+      const file = new File(modelPath);
+      console.log("file:", file);
+      if (!file.exists) {
+        const fileName = file.uri.split("/").pop();
+        setLlmError(
+          `Model file not found: ${fileName}. Please select or download a model in settings.`,
+        );
+        setLlmLoading(false);
+        setLlmStage("idle");
+        setLlmStageStartedAt(null);
+        return;
+      }
+    } catch (e) {
+      // If file check fails, fallback to old error
+      setLlmError("Could not check model file existence.");
+      setLlmLoading(false);
+      setLlmStage("idle");
+      setLlmStageStartedAt(null);
+      return;
+    }
+
     const modelConfig =
       data.perModelConfig?.[cleanedModelPath] ?? DEFAULT_MODEL_CONFIG;
     const activeModelKey = `${cleanedModelPath}::${systemPrompt}::${JSON.stringify(modelConfig)}`;
