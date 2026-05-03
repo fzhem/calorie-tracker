@@ -21,8 +21,7 @@ Simple Expo Android app for logging calories, visualizing weekly trends, and adj
 ## Showcase
 
 ### Video demo
-
-<video src="./docs/assets/estimate_meal.mp4" controls></video>
+<video src="https://github.com/user-attachments/assets/038dbaa2-e470-43b2-8386-a0bc49a0e681" controls></video>
 
 ### Screenshots
 <p align="center">
