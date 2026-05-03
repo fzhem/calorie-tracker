@@ -25,7 +25,10 @@ Simple Expo Android app for logging calories, visualizing weekly trends, and adj
 <video src="./docs/assets/estimate_meal.mp4" controls></video>
 
 ### Screenshots
-| <img src="docs/assets/graphs.png" alt="Graphs screen" width="300" /> | <img src="docs/assets/settings.png" alt="Settings screen" width="300" /> |
+<p align="center">
+	<img src="docs/assets/graphs.png" alt="Graphs screen" width="300" />
+	<img src="docs/assets/settings.png" alt="Settings screen" width="300" />
+</p>
 
 ## Installation
 
