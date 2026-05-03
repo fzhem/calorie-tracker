@@ -418,12 +418,22 @@ export default function GoalsScreen() {
   };
 
   const onGoalPhasePress = (phase: GoalPhase) => {
-    setData((prev) => ({ ...prev, goalPhase: phase }));
+    setData((prev) => {
+      if (prev.goalPhase === phase) return prev;
+      const next = { ...prev, goalPhase: phase };
+      void saveStoredData(next, { immediate: true });
+      return next;
+    });
   };
 
   const onGoalPhaseLongPress = (phase: EditableGoalPhase) => {
     Vibration.vibrate(12);
-    setData((prev) => ({ ...prev, goalPhase: phase }));
+    setData((prev) => {
+      if (prev.goalPhase === phase) return prev;
+      const next = { ...prev, goalPhase: phase };
+      void saveStoredData(next, { immediate: true });
+      return next;
+    });
     setGoalAdjustmentEditorPhase(phase);
 
     const phaseType =
