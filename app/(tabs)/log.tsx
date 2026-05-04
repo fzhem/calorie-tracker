@@ -80,6 +80,7 @@ import {
   getLatestWeightBySource,
 } from "@/db/index";
 import { makeMealId } from "@/db/helpers";
+import { createLLM, type LiteRTLMInstance } from "react-native-litert-lm";
 import { invalidateMealCaches } from "@/lib/queryCache";
 
 export type NutritionResult = {
@@ -768,7 +769,6 @@ export default function LogScreen() {
     try {
       const { File } = await import("expo-file-system");
       const file = new File(modelPath);
-      console.log("file:", file);
       if (!file.exists) {
         const fileName = file.uri.split("/").pop();
         setLlmError(
@@ -791,11 +791,10 @@ export default function LogScreen() {
     const modelConfig =
       data.perModelConfig?.[cleanedModelPath] ?? DEFAULT_MODEL_CONFIG;
     const activeModelKey = `${cleanedModelPath}::${systemPrompt}::${JSON.stringify(modelConfig)}`;
-    let model = getModelInstance();
+    let model: LiteRTLMInstance | null = getModelInstance();
     if (!model || loadedModelKey !== activeModelKey) {
       try {
         beginLlmStage("loading-model");
-        const { createLLM } = await import("react-native-litert-lm");
         model = createLLM({ enableMemoryTracking: true });
         await model.loadModel(cleanedModelPath, {
           systemPrompt: systemPrompt,
