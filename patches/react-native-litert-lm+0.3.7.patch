@@ -1,8 +1,8 @@
 diff --git a/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt b/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt
-index cea53d2..db5387f 100644
+index 842dd03..9c3febe 100644
 --- a/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt
 +++ b/node_modules/react-native-litert-lm/android/src/main/java/com/margelo/nitro/dev/litert/litertlm/HybridLiteRTLM.kt
-@@ -124,6 +124,8 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
+@@ -162,6 +162,8 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
  
      // Configuration
      private var backend: Backend = Backend.CPU
@@ -11,7 +11,7 @@ index cea53d2..db5387f 100644
      private var temperature: Double = 0.7
      private var topK: Int = 40
      private var topP: Double = 0.95
-@@ -153,6 +155,8 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
+@@ -191,6 +193,8 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
                  // Apply configuration
                  config?.let { cfg ->
                      cfg.backend?.let { backend = it }
@@ -20,7 +20,17 @@ index cea53d2..db5387f 100644
                      cfg.temperature?.let { temperature = it }
                      cfg.topK?.let { topK = it.toInt() }
                      cfg.topP?.let { topP = it }
-@@ -171,40 +175,32 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
+@@ -198,6 +202,9 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
+                     cfg.systemPrompt?.let { systemPrompt = it }
+                 }
+     
++                // Whether to run engine validation after loading
++                val shouldValidate = config?.validate?: false
++    
+                 try {
+                     // Early GPU hardware check: probe for OpenCL library before
+                     // spending time on engine creation. LiteRT-LM's GPU delegate
+@@ -238,40 +245,32 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
                          else -> com.google.ai.edge.litertlm.Backend.CPU()
                      }
                      
@@ -80,6 +90,79 @@ index cea53d2..db5387f 100644
      
                      if (isClosed) return@synchronized
                      
+@@ -284,8 +283,17 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
+                     Log.i(TAG, "Conversation created successfully")
+ 
+                     // Validate the engine actually works with a quick test inference.
+-                    // GPU backend can initialize without error but silently fail to produce tokens.
+-                    validateEngine()
++                    // GPU/NPU backends can initialize without error but silently fail to
++                    // produce tokens — enabling this catches those failures at load time.
++                    // CPU is always reliable so validation is never run on it, even when
++                    // the `validate` flag is set.
++                    if (shouldValidate) {
++                        if (backend == Backend.GPU || backend == Backend.NPU) {
++                            validateEngine()
++                        } else {
++                            Log.i(TAG, "Validation skipped: CPU backend is always reliable")
++                        }
++                    }
+     
+                 } catch (e: Exception) {
+                     Log.e(TAG, "Failed to load model: ${e.message}", e)
+@@ -676,19 +684,9 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
+ 
+     private fun cleanupInternal() {
+         try {
++            conversation?.close()
+             conversation = null
+-            // Explicitly close engine if it supports it to free native memory immediately
+-            // Assuming Engine implements AutoCloseable or has close()
+-            if (engine is AutoCloseable) {
+-                (engine as AutoCloseable).close()
+-            } else {
+-                 // Try reflection or just null it if no close method
+-                try {
+-                    engine?.javaClass?.getMethod("close")?.invoke(engine)
+-                } catch (e: Exception) {
+-                    // Method not found, rely on GC
+-                }
+-            }
++            engine?.close()        // Direct call
+             engine = null 
+         } catch (e: Exception) {
+             Log.e(TAG, "Error closing resources", e)
+@@ -721,26 +719,12 @@ class HybridLiteRTLM : HybridLiteRTLMSpec() {
+         val convConfig = ConversationConfig(
+             samplerConfig = SamplerConfig(
+                 topK = topK,
+-                topP = topP,
+-                temperature = temperature,
+-            )
++                topP = topP.toDouble(),
++                temperature = temperature.toDouble(),
++            ),
++            systemInstruction = systemPrompt?.let { Contents.of(Content.Text(it)) }
+         )
+         conversation = engine!!.createConversation(convConfig)
+-        // Apply system prompt/instruction if set
+-        systemPrompt?.let { prompt ->
+-            if (prompt.isNotEmpty()) {
+-                try {
+-                    // Send system instruction as the first turn to prime the conversation.
+-                    // LiteRT-LM's Conversation API handles chat template formatting,
+-                    // including Gemma's <start_of_turn>system block.
+-                    val systemMsg = LiteRTMessage.system(prompt)
+-                    conversation!!.sendMessage(message = systemMsg)
+-                    Log.i(TAG, "System prompt applied (${prompt.length} chars)")
+-                } catch (e: Exception) {
+-                    Log.w(TAG, "Failed to apply system prompt: ${e.message}")
+-                }
+-            }
+-        }
+     }
+ 
+     /**
 diff --git a/node_modules/react-native-litert-lm/android/src/main/java/dev/litert/litertlm/LiteRTLMPackage.kt b/node_modules/react-native-litert-lm/android/src/main/java/dev/litert/litertlm/LiteRTLMPackage.kt
 index 0b8b517..a8dda25 100644
 --- a/node_modules/react-native-litert-lm/android/src/main/java/dev/litert/litertlm/LiteRTLMPackage.kt
@@ -150,18 +233,10 @@ index 0000000..3a0c15a
 +}
 \ No newline at end of file
 diff --git a/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts b/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts
-index 33d865c..a0b6879 100644
+index 33d865c..89808a2 100644
 --- a/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts
 +++ b/node_modules/react-native-litert-lm/src/specs/LiteRTLM.nitro.ts
-@@ -37,14 +37,28 @@ export interface LLMConfig {
-    * If not specified, defaults to 'cpu'.
-    * If specified backend is unavailable, falls back automatically.
-    *
--   * @remarks
--   * Vision encoder is always set to GPU (required by Gemma models).
--   * Audio encoder is always set to CPU (optimal for audio processing).
--   *
-    * @default 'cpu'
+@@ -45,6 +45,24 @@ export interface LLMConfig {
     */
    backend?: Backend;
  
@@ -186,3 +261,27 @@ index 33d865c..a0b6879 100644
    /**
     * Maximum number of tokens to generate.
     * @default 1024
+@@ -68,6 +86,23 @@ export interface LLMConfig {
+    * @default 0.95
+    */
+   topP?: number;
++
++  /**
++   * Whether to run engine validation after loading the model.
++   * When enabled, sends a quick test inference ("Hi") and waits up to 30s
++   * for a response to confirm the backend works. This is useful for GPU/NPU
++   * backends that may silently fail during inference (they can initialize
++   * without error but produce no tokens).
++   *
++   * Validation is **always a no-op on CPU** — the CPU backend is inherently
++   * reliable and never needs validation.
++   *
++   * Disabled by default because it adds significant latency (5-30s) to model loading.
++   * Enable only to catch GPU/NPU silent failure issues during development.
++   *
++   * @default false
++   */
++  validate?: boolean;
+ }
+ 
+ /**
