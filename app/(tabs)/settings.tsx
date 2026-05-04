@@ -1442,7 +1442,7 @@ export default function SettingsScreen() {
       const trimmed = customModelUrl.trim();
       if (!trimmed) return null;
       const tail = trimmed.split("/").pop() || `model-${Date.now()}.litertlm`;
-      return { label: "Custom model", url: trimmed, fileName: tail };
+      return { label: tail.split(".")[0], url: trimmed, fileName: tail };
     }
 
     const selected = BUILT_IN_MODELS.find(
