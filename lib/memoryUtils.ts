@@ -15,6 +15,7 @@ export const GB = 2 ** 30;
 export const MODEL_MEMORY_REQUIREMENTS: Record<string, number> = {
   GEMMA_4_E2B_IT: 2 * GB, // 2 GB
   GEMMA_4_E4B_IT: 4 * GB, // 4 GB
+  GRANITE_4_H_MICRO_GGUF: 2 * GB, // ~1.8 GB (round up to 2 GB)
 };
 
 export type MemoryStatus = "ok" | "warning" | "blocked";

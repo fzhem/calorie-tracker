@@ -1,0 +1,27 @@
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+  compileSdk 34
+  namespace "com.calorietracker.rnmemory"
+
+  defaultConfig {
+    minSdk 26
+    targetSdk 34
+  }
+}
+
+repositories {
+  google()
+  mavenCentral()
+}
+
+dependencies {
+  implementation 'com.facebook.react:react-native:+'
+}

@@ -80,7 +80,8 @@ import {
   getLatestWeightBySource,
 } from "@/db/index";
 import { makeMealId } from "@/db/helpers";
-import { createLLM, type LiteRTLMInstance } from "react-native-litert-lm";
+import { createLLM } from "@/lib/llm";
+import type { LLMInstance } from "@/lib/llm";
 import { invalidateMealCaches } from "@/lib/queryCache";
 
 export type NutritionResult = {
@@ -791,11 +792,32 @@ export default function LogScreen() {
     const modelConfig =
       data.perModelConfig?.[cleanedModelPath] ?? DEFAULT_MODEL_CONFIG;
     const activeModelKey = `${cleanedModelPath}::${systemPrompt}::${JSON.stringify(modelConfig)}`;
-    let model: LiteRTLMInstance | null = getModelInstance();
+    // Detect backend to decide whether architecture check is needed
+    const modelBackend = modelPath.toLowerCase().endsWith(".gguf")
+      ? "llamacpp"
+      : "litertlm";
+
+    // Only block LiteRT models on unsupported architectures
+    if (
+      modelBackend === "litertlm" &&
+      (!deviceArchitecture || !isLiteRTSupported(deviceArchitecture))
+    ) {
+      setLlmError(
+        deviceArchitecture
+          ? getLiteRTUnsupportedReason(deviceArchitecture)
+          : "Checking device architecture compatibility. Please try again.",
+      );
+      setLlmLoading(false);
+      setLlmStage("idle");
+      setLlmStageStartedAt(null);
+      return;
+    }
+
+    let model: LLMInstance | null = getModelInstance();
     if (!model || loadedModelKey !== activeModelKey) {
       try {
         beginLlmStage("loading-model");
-        model = createLLM({ enableMemoryTracking: true });
+        model = await createLLM({ enableMemoryTracking: true });
         await model.loadModel(cleanedModelPath, {
           systemPrompt: systemPrompt,
           backend: "cpu",

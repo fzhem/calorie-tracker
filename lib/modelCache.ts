@@ -1,34 +1,4 @@
 /**
- * Get the full memory usage object from the loaded model, if available.
- * Returns null if not available or not enabled.
- */
-export function getModelMemoryUsageDetails(): {
-  residentBytes: number;
-  nativeHeapBytes: number;
-  availableMemoryBytes: number;
-  isLowMemory: boolean;
-} | null {
-  if (!_instance) return null;
-  try {
-    if (typeof _instance.getMemoryUsage === "function") {
-      const usage = _instance.getMemoryUsage();
-      if (
-        usage &&
-        typeof usage === "object" &&
-        typeof usage.residentBytes === "number" &&
-        typeof usage.nativeHeapBytes === "number" &&
-        typeof usage.availableMemoryBytes === "number" &&
-        typeof usage.isLowMemory === "boolean"
-      ) {
-        return usage;
-      }
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-/**
  * Module-level singleton for the active LLM instance.
  *
  * Keeps at most one model loaded at a time. Calling setModelCache when
@@ -36,11 +6,13 @@ export function getModelMemoryUsageDetails(): {
  * Compatible with React's useSyncExternalStore.
  */
 
+import type { LLMInstance, LLMMemoryUsage } from "./llm";
+
 type Listener = () => void;
 
 const listeners = new Set<Listener>();
 
-let _instance: any = null;
+let _instance: LLMInstance | null = null;
 let _loadedKey: string | null = null;
 let _memoryUsageRSS: number | null = null;
 
@@ -48,12 +20,36 @@ function notify() {
   listeners.forEach((fn) => fn());
 }
 
-export function getModelInstance(): any {
+export function getModelInstance(): LLMInstance | null {
   return _instance;
 }
 
 export function getLoadedModelKey(): string | null {
   return _loadedKey;
+}
+
+/**
+ * Get the full memory usage object from the loaded model, if available.
+ * Returns null if not available or not enabled.
+ */
+export function getModelMemoryUsageDetails(): LLMMemoryUsage | null {
+  if (!_instance) return null;
+  try {
+    const usage = _instance.getMemoryUsage();
+    if (
+      usage &&
+      typeof usage === "object" &&
+      typeof usage.residentBytes === "number" &&
+      typeof usage.nativeHeapBytes === "number" &&
+      typeof usage.availableMemoryBytes === "number" &&
+      typeof usage.isLowMemory === "boolean"
+    ) {
+      return usage;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -63,17 +59,13 @@ export function getLoadedModelKey(): string | null {
 export function getModelMemoryUsageBytes(): number | null {
   if (!_instance) return null;
   try {
-    if (typeof _instance.getMemoryUsage === "function") {
-      const usage = _instance.getMemoryUsage();
-      // usage is an object like { residentBytes, nativeHeapBytes, availableMemoryBytes, isLowMemory }
-      if (
-        usage &&
-        typeof usage === "object" &&
-        typeof usage.residentBytes === "number"
-      ) {
-        return usage.residentBytes;
-      }
-      return null;
+    const usage = _instance.getMemoryUsage();
+    if (
+      usage &&
+      typeof usage === "object" &&
+      typeof usage.residentBytes === "number"
+    ) {
+      return usage.residentBytes;
     }
     return _memoryUsageRSS;
   } catch {
@@ -82,7 +74,7 @@ export function getModelMemoryUsageBytes(): number | null {
 }
 
 /** Store a freshly loaded model. Closes any previously cached instance. */
-export function setModelCache(instance: any, key: string) {
+export function setModelCache(instance: LLMInstance, key: string) {
   if (_instance && _instance !== instance) {
     try {
       _instance.close();
@@ -92,7 +84,7 @@ export function setModelCache(instance: any, key: string) {
   _loadedKey = key;
   _memoryUsageRSS = null;
   // Try to get initial memory usage
-  if (instance && typeof instance.getMemoryUsage === "function") {
+  if (instance) {
     try {
       const usage = instance.getMemoryUsage();
       if (

@@ -1,0 +1,11 @@
+{
+  "name": "rn-memory-module",
+  "version": "0.1.0",
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "source": "src/index.ts",
+  "files": [
+    "src",
+    "android"
+  ]
+}

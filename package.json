@@ -14,6 +14,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "rn-memory-module": "file:./modules/rn-memory-module",
     "@kesha-antonov/react-native-background-downloader": "^4.5.4",
     "@op-engineering/op-sqlite": "^15.2.12",
     "@react-native-community/slider": "^5.2.0",
@@ -28,6 +29,7 @@
     "expo-router": "^55.0.13",
     "expo-sharing": "^55.0.18",
     "expo-splash-screen": "^55.0.19",
+    "llama.rn": "^0.12.0-rc.9",
     "react": "~19.2.5",
     "react-native": "^0.83.6",
     "react-native-chart-kit": "^6.12.1",

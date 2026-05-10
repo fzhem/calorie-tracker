@@ -112,7 +112,7 @@ type NotificationPermissionStatus =
   | "denied";
 
 type ModelCatalogItem = {
-  key: "GEMMA_4_E2B_IT" | "GEMMA_4_E4B_IT";
+  key: "GEMMA_4_E2B_IT" | "GEMMA_4_E4B_IT" | "GRANITE_4_H_MICRO_GGUF";
   label: string;
   sizeLabel: string;
   url: string;
@@ -145,6 +145,16 @@ export const GEMMA_4_E4B_IT =
 /** Magic number for .litertlm model files: "LITERTLM" */
 const LITERTLM_MAGIC = [0x4c, 0x49, 0x54, 0x45, 0x52, 0x54, 0x4c, 0x4d];
 
+/** GGUF magic number: "GGUF" at offset 0. The first 4 bytes are 0x47 0x47 0x55 0x46 */
+const GGUF_MAGIC = [0x47, 0x47, 0x55, 0x46];
+
+/**
+ * Download URL for a small GGUF model (Granite 4.0 H Micro Q4_K_M ~1.6 GB).
+ * Public HuggingFace repo.
+ */
+export const GRANITE_4_H_MICRO_GGUF =
+  "https://huggingface.co/ibm-granite/granite-4.0-h-micro-GGUF/resolve/main/granite-4.0-h-micro-Q4_K_M.gguf";
+
 const BUILT_IN_MODELS: ModelCatalogItem[] = [
   {
     key: "GEMMA_4_E2B_IT",
@@ -160,6 +170,14 @@ const BUILT_IN_MODELS: ModelCatalogItem[] = [
     sizeLabel: "3.65 GB",
     url: GEMMA_4_E4B_IT,
     fileName: "gemma-4-E4B-it.litertlm",
+  },
+  {
+    key: "GRANITE_4_H_MICRO_GGUF",
+    label: "Granite-4.0-H-Micro",
+    sizeLabel: "1.94 GB",
+    url: GRANITE_4_H_MICRO_GGUF,
+    fileName: "granite-4.0-h-micro-Q4_K_M.gguf",
+    recommended: true,
   },
 ];
 
@@ -689,16 +707,29 @@ async function resolveRemoteFileSize(url: string) {
 }
 
 /**
- * Validates that the URL points to a valid .litertlm model file by checking
- * the magic number in the first 8 bytes (LITERTLM).
+ * Validates that the URL points to a valid model file by checking
+ * the magic number.
+ * - .litertlm files: first 8 bytes = "LITERTLM"
+ * - .gguf files: first 4 bytes = "GGUF"
  */
 async function validateModelMagicNumber(
   url: string,
 ): Promise<{ valid: boolean; message?: string }> {
   try {
+    // Detect expected file type from URL
+    const lower = url.toLowerCase();
+    const isGGUF = lower.endsWith(".gguf");
+    const isLiteRT = lower.endsWith(".litertlm");
+
+    // Only validate known extension types; skip for unknown
+    if (!isGGUF && !isLiteRT) return { valid: true };
+
+    const expectedMagic = isLiteRT ? LITERTLM_MAGIC : GGUF_MAGIC;
+    const bytesNeeded = expectedMagic.length;
+
     const response = await fetchWithTimeout(url, {
       method: "GET",
-      headers: { Range: "bytes=0-7" },
+      headers: { Range: `bytes=0-${bytesNeeded - 1}` },
       timeout: 15000,
     });
 
@@ -708,7 +739,7 @@ async function validateModelMagicNumber(
     }
 
     const buffer = await response.arrayBuffer();
-    if (buffer.byteLength < 8) {
+    if (buffer.byteLength < bytesNeeded) {
       return {
         valid: false,
         message:
@@ -717,12 +748,12 @@ async function validateModelMagicNumber(
     }
 
     const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < 8; i++) {
-      if (bytes[i] !== LITERTLM_MAGIC[i]) {
+    for (let i = 0; i < bytesNeeded; i++) {
+      if (bytes[i] !== expectedMagic[i]) {
+        const typeName = isLiteRT ? ".litertlm" : ".gguf";
         return {
           valid: false,
-          message:
-            "The URL does not point to a valid .litertlm model file. This may indicate a blob URL or an incorrect link.",
+          message: `The URL does not point to a valid ${typeName} model file. This may indicate a blob URL or an incorrect link.`,
         };
       }
     }
@@ -903,7 +934,7 @@ export default function SettingsScreen() {
   }, [data.healthConnectAutoSync]);
 
   const [selectedModelKey, setSelectedModelKey] = useState<
-    "GEMMA_4_E2B_IT" | "GEMMA_4_E4B_IT" | "custom"
+    "GEMMA_4_E2B_IT" | "GEMMA_4_E4B_IT" | "GRANITE_4_H_MICRO_GGUF" | "custom"
   >("GEMMA_4_E2B_IT");
   const [notificationPermissionStatus, setNotificationPermissionStatus] =
     useState<NotificationPermissionStatus>("unknown");
@@ -1124,7 +1155,11 @@ export default function SettingsScreen() {
 
     const details: DownloadedModel[] = MODEL_DIRECTORY.list()
       .filter((entry): entry is File => entry instanceof File)
-      .filter((file) => file.name.toLowerCase().endsWith(".litertlm"))
+      .filter(
+        (file) =>
+          file.name.toLowerCase().endsWith(".litertlm") ||
+          file.name.toLowerCase().endsWith(".gguf"),
+      )
       .map((file) => ({
         name: file.name,
         uri: file.uri,
@@ -1736,10 +1771,16 @@ export default function SettingsScreen() {
   }, [data.modelPath, downloadedModels]);
 
   const isArchitectureBlocked = useMemo(() => {
-    return (
-      deviceArchitecture !== null && !isLiteRTSupported(deviceArchitecture)
-    );
-  }, [deviceArchitecture]);
+    // Architecture blocking only applies to LiteRTLM models - not GGUF
+    if (!deviceArchitecture) return false;
+    // Check if the currently selected model is GGUF (works on any arch)
+    if (selectedModelKey === "GRANITE_4_H_MICRO_GGUF") return false;
+    if (selectedModelKey === "custom") {
+      const lower = customModelUrl.toLowerCase();
+      if (lower.endsWith(".gguf")) return false;
+    }
+    return !isLiteRTSupported(deviceArchitecture);
+  }, [deviceArchitecture, selectedModelKey, customModelUrl]);
 
   const architectureBlockedReason = useMemo(() => {
     if (!isArchitectureBlocked || !deviceArchitecture) return null;
@@ -1947,7 +1988,7 @@ export default function SettingsScreen() {
 
         <Card style={styles.card} mode="elevated">
           <Card.Title
-            title="LiteRT Models"
+            title="LiteRT/GGUF Models"
             titleVariant="titleLarge"
             right={() =>
               loadedModelKey ? (
@@ -2319,7 +2360,7 @@ export default function SettingsScreen() {
                     label="Model URL"
                     value={customModelUrl}
                     onChangeText={setCustomModelUrl}
-                    placeholder="https://.../model.litertlm"
+                    placeholder=".litertlm or .gguf URL"
                     autoCapitalize="none"
                     autoCorrect={false}
                   />
@@ -2410,7 +2451,9 @@ export default function SettingsScreen() {
                         ? "GEMMA_4_E2B_IT"
                         : model.name.includes("gemma-4-E4B")
                           ? "GEMMA_4_E4B_IT"
-                          : null;
+                          : model.name.toLowerCase().includes("granite")
+                            ? "GRANITE_4_H_MICRO_GGUF"
+                            : null;
                       const memoryCheck = modelKey
                         ? checkModelMemory(modelKey)
                         : null;

@@ -51,3 +51,5 @@ yarn-error.*
 !app.json
 !eas.json
 !drizzle/meta/*.json
+modules/rn-memory-module/android/build
+modules/rn-memory-module/nitrogen
