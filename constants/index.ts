@@ -98,7 +98,7 @@ export const QUICK_ADJUST_KCAL_PRESETS = [250, 500, 750, 1000];
 
 // ── Model Config Defaults ────────────────────────────────────
 export const DEFAULT_MODEL_TEMPERATURE = 0.2;
-export const DEFAULT_MODEL_MAX_TOKENS = 1024;
+export const DEFAULT_MODEL_MAX_TOKENS = 2048;
 export const DEFAULT_MODEL_TOP_K = 64;
 export const DEFAULT_MODEL_TOP_P = 0.95;
 export const DEFAULT_MODEL_BACKEND = "cpu";

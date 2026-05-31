@@ -803,6 +803,8 @@ export default function LogScreen() {
           temperature: modelConfig.temperature,
           topK: modelConfig.topK,
           topP: modelConfig.topP,
+          enableSpeculativeDecoding:
+            modelConfig.enableSpeculativeDecoding ?? false,
         });
         setModelCache(model, activeModelKey);
       } catch (err) {

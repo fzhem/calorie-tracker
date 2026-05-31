@@ -176,7 +176,8 @@ function isModelConfigEqual(a: ModelConfig, b: ModelConfig) {
     a.maxTokens === b.maxTokens &&
     a.topK === b.topK &&
     a.topP === b.topP &&
-    a.backend === b.backend
+    a.backend === b.backend &&
+    a.enableSpeculativeDecoding === b.enableSpeculativeDecoding
   );
 }
 
@@ -326,6 +327,8 @@ const ModelConfigModal = memo(function ModelConfigModal({
   const [accelerator, setAccelerator] = useState<Accelerator>(
     () => (config?.backend as Accelerator) ?? "cpu",
   );
+  const [enableSpeculativeDecoding, setEnableSpeculativeDecoding] =
+    useState<boolean>(() => config?.enableSpeculativeDecoding ?? false);
 
   useEffect(() => {
     if (config && !isModelConfigEqual(config, draft)) setDraft(config);
@@ -334,6 +337,7 @@ const ModelConfigModal = memo(function ModelConfigModal({
 
   useEffect(() => {
     setAccelerator((config?.backend as Accelerator) ?? "cpu");
+    setEnableSpeculativeDecoding(config?.enableSpeculativeDecoding ?? false);
   }, [config]);
 
   return (
@@ -372,7 +376,7 @@ const ModelConfigModal = memo(function ModelConfigModal({
 
           {/* TopK Slider */}
           <SliderRow
-            label="Top K"
+            label="TopK (5-100)"
             value={draft.topK}
             min={5}
             max={100}
@@ -386,7 +390,7 @@ const ModelConfigModal = memo(function ModelConfigModal({
 
           {/* TopP Slider */}
           <SliderRow
-            label="Top P"
+            label="TopP (0.00-1.00)"
             value={draft.topP}
             min={0}
             max={1}
@@ -400,7 +404,7 @@ const ModelConfigModal = memo(function ModelConfigModal({
 
           {/* Temperature Slider */}
           <SliderRow
-            label="Temperature"
+            label="Temperature (0.00-2.00)"
             value={draft.temperature}
             min={0}
             max={2}
@@ -425,12 +429,23 @@ const ModelConfigModal = memo(function ModelConfigModal({
             </Button>
           </View>
 
+          <View style={styles.speculativeToggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text variant="bodyMedium">Enable speculative decoding</Text>
+            </View>
+            <Switch
+              value={enableSpeculativeDecoding}
+              onValueChange={setEnableSpeculativeDecoding}
+            />
+          </View>
+
           <View style={modalRowEnd}>
             <Button
               mode="text"
               onPress={() => {
                 setDraft(DEFAULT_MODEL_CONFIG);
                 setAccelerator("cpu");
+                setEnableSpeculativeDecoding(false);
               }}
             >
               Reset
@@ -451,7 +466,11 @@ const ModelConfigModal = memo(function ModelConfigModal({
                 );
                 validated.maxTokens = Math.max(validated.maxTokens, 1);
                 setDraft(validated);
-                onSave({ ...validated, backend: accelerator });
+                onSave({
+                  ...validated,
+                  backend: accelerator,
+                  enableSpeculativeDecoding,
+                });
               }}
             >
               Save
@@ -2540,6 +2559,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "rgba(0,0,0,0.08)",
     marginTop: 0,
+  },
+  speculativeToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 4,
   },
   healthConnectStats: {
     flexDirection: "row",

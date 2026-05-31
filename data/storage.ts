@@ -93,6 +93,7 @@ export type ModelConfig = {
   topK: number;
   topP: number;
   backend: "cpu" | "gpu" | "npu";
+  enableSpeculativeDecoding: boolean;
 };
 
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
@@ -101,6 +102,7 @@ export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   topK: DEFAULT_MODEL_TOP_K,
   topP: DEFAULT_MODEL_TOP_P,
   backend: DEFAULT_MODEL_BACKEND,
+  enableSpeculativeDecoding: false,
 };
 
 export const STORAGE_KEY = CONST_STORAGE_KEY;
@@ -186,6 +188,7 @@ function normalizePerModelConfig(
       topK: config.topK,
       topP: config.topP,
       backend: config.backend ?? "cpu",
+      enableSpeculativeDecoding: config.enableSpeculativeDecoding ?? false,
     };
   }
   return normalized;
