@@ -1,5 +1,5 @@
 import { useFocusEffect } from "@react-navigation/native";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated } from "react-native";
 import {
   Modal,
@@ -53,46 +53,13 @@ import { parseAppDate, toLocalISOString } from "@/lib/dateKey";
 
 const KG_PER_LB = 0.45359237;
 const CM_PER_IN = 2.54;
-const DEFAULT_HEIGHT_CM = 170;
 const HEIGHT_MIN_CM = 92;
 const HEIGHT_MAX_CM = 214;
-const HEIGHT_MIN_IN = Math.ceil(HEIGHT_MIN_CM / CM_PER_IN);
-const HEIGHT_MAX_IN = Math.floor(HEIGHT_MAX_CM / CM_PER_IN);
-const HEIGHT_ROW_HEIGHT = 44;
-const PICKER_VISIBLE_ROWS = 3;
-const PICKER_HEIGHT = PICKER_VISIBLE_ROWS * HEIGHT_ROW_HEIGHT;
-const PICKER_PADDING = Math.floor(PICKER_VISIBLE_ROWS / 2) * HEIGHT_ROW_HEIGHT;
 const GOALS_PROFILE_INPUT_THEME = { animation: { scale: 0 } };
 
 type WeightUnit = "kg" | "lb";
-type HeightUnit = "cm" | "ft-in";
-type HeightPickerItem = { key: string; cm: number; label: string };
+type HeightUnit = "cm" | "ft";
 type EditableGoalPhase = Exclude<GoalPhase, "maintain">;
-
-type HeightPickerOptionProps = {
-  label: string;
-  isSelected: boolean;
-};
-
-const HeightPickerOption = memo(function HeightPickerOption({
-  label,
-  isSelected,
-}: HeightPickerOptionProps) {
-  const theme = useTheme();
-  return (
-    <View style={styles.heightPickerRow}>
-      <Text
-        style={[
-          styles.heightPickerRowText,
-          { color: isSelected ? theme.colors.primary : theme.colors.onSurface },
-          isSelected && styles.heightPickerRowTextSelected,
-        ]}
-      >
-        {label}
-      </Text>
-    </View>
-  );
-});
 
 function roundTo(value: number, digits = 1) {
   return Math.round(value * 10 ** digits) / 10 ** digits;
@@ -144,31 +111,21 @@ function formatWeightForUnit(weightKg: number, unit: WeightUnit) {
   return `${roundTo(displayValue, 2)}`;
 }
 
-function formatHeightForUnit(heightCm: number, unit: HeightUnit) {
-  if (unit === "cm") return `${roundTo(heightCm, 1)} cm`;
+function formatHeightCmInput(heightCm: number) {
+  return `${roundTo(heightCm, 1)}`;
+}
+
+function parseHeightCmInputToCm(value: string) {
+  const parsed = parseNumberInput(value);
+  return parsed === null ? null : parsed;
+}
+
+function getFeetInchesFromCm(heightCm: number) {
   const totalInches = Math.round(heightCm / CM_PER_IN);
-  const feet = Math.floor(totalInches / 12);
-  const inches = totalInches % 12;
-  return `${feet}' ${inches}"`;
-}
-
-function formatFeetInches(totalInches: number) {
-  const feet = Math.floor(totalInches / 12);
-  const inches = totalInches % 12;
-  return `${feet}' ${inches}"`;
-}
-
-function findNearestIndex(items: HeightPickerItem[], heightCm: number): number {
-  let index = 0;
-  let nearestDelta = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < items.length; i += 1) {
-    const delta = Math.abs(items[i].cm - heightCm);
-    if (delta < nearestDelta) {
-      nearestDelta = delta;
-      index = i;
-    }
-  }
-  return index;
+  return {
+    feet: Math.floor(totalInches / 12),
+    inches: totalInches % 12,
+  };
 }
 
 export default function GoalsScreen() {
@@ -200,9 +157,20 @@ export default function GoalsScreen() {
   const [metabolismAgeInput, setMetabolismAgeInput] = useState(
     initialData.metabolismAgeYears ? `${initialData.metabolismAgeYears}` : "",
   );
-  const [metabolismHeightInput, setMetabolismHeightInput] = useState("");
-  const [selectedHeightCm, setSelectedHeightCm] = useState<number | null>(
-    initialData.metabolismHeightCm ?? null,
+  const [metabolismHeightInput, setMetabolismHeightInput] = useState(
+    initialData.metabolismHeightCm
+      ? formatHeightCmInput(initialData.metabolismHeightCm)
+      : "",
+  );
+  const [heightFeetInput, setHeightFeetInput] = useState(
+    initialData.metabolismHeightCm
+      ? `${getFeetInchesFromCm(initialData.metabolismHeightCm).feet}`
+      : "",
+  );
+  const [heightInchesInput, setHeightInchesInput] = useState(
+    initialData.metabolismHeightCm
+      ? `${getFeetInchesFromCm(initialData.metabolismHeightCm).inches}`
+      : "",
   );
   const [manualWeightInput, setManualWeightInput] = useState(
     initialData.manualWeightKg ? `${initialData.manualWeightKg}` : "",
@@ -223,18 +191,14 @@ export default function GoalsScreen() {
   const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
   const weightAnim = useRef(new Animated.Value(1)).current;
   const toggleAnim = useRef(new Animated.Value(0)).current; // 0 for kg, 1 for lb
-  const [heightPickerOpen, setHeightPickerOpen] = useState(false);
+  const heightAnim = useRef(new Animated.Value(1)).current;
+  const heightToggleAnim = useRef(new Animated.Value(0)).current; // 0 for cm, 1 for ft
   const [goalAdjustmentPickerVisible, setGoalAdjustmentPickerVisible] =
     useState(false);
   const [sexMenuVisible, setSexMenuVisible] = useState(false);
   const [activityMenuVisible, setActivityMenuVisible] = useState(false);
   const [weightUnlocked, setWeightUnlocked] = useState(false);
   const [goalsTab, setGoalsTab] = useState<"profile" | "overrides">("profile");
-  const cmListRef = useRef<ScrollView | null>(null);
-  const ftListRef = useRef<ScrollView | null>(null);
-  const isUserScrollingRef = useRef(false);
-  const lastScrollIndexRef = useRef(-1);
-  const isUnitSwitchingRef = useRef(false);
   const m3Alert = useM3Alert();
   const hasCompletedInitialLoad = useRef(false);
 
@@ -250,12 +214,18 @@ export default function GoalsScreen() {
         setMetabolismAgeInput(
           next.metabolismAgeYears ? `${next.metabolismAgeYears}` : "",
         );
-        setSelectedHeightCm(next.metabolismHeightCm ?? null);
-        setMetabolismHeightInput(
-          next.metabolismHeightCm
-            ? formatHeightForUnit(next.metabolismHeightCm, heightUnit)
-            : "",
-        );
+        if (next.metabolismHeightCm !== null) {
+          const feetInches = getFeetInchesFromCm(next.metabolismHeightCm);
+          setMetabolismHeightInput(
+            formatHeightCmInput(next.metabolismHeightCm),
+          );
+          setHeightFeetInput(`${feetInches.feet}`);
+          setHeightInchesInput(`${feetInches.inches}`);
+        } else {
+          setMetabolismHeightInput("");
+          setHeightFeetInput("");
+          setHeightInchesInput("");
+        }
         setManualWeightInput(
           next.manualWeightKg
             ? formatWeightForUnit(next.manualWeightKg, weightUnit)
@@ -327,7 +297,18 @@ export default function GoalsScreen() {
           setMetabolismAgeInput(
             next.metabolismAgeYears ? `${next.metabolismAgeYears}` : "",
           );
-          setSelectedHeightCm(next.metabolismHeightCm ?? null);
+          if (next.metabolismHeightCm !== null) {
+            const feetInches = getFeetInchesFromCm(next.metabolismHeightCm);
+            setMetabolismHeightInput(
+              formatHeightCmInput(next.metabolismHeightCm),
+            );
+            setHeightFeetInput(`${feetInches.feet}`);
+            setHeightInchesInput(`${feetInches.inches}`);
+          } else {
+            setMetabolismHeightInput("");
+            setHeightFeetInput("");
+            setHeightInchesInput("");
+          }
           setManualWeightInput(
             next.manualWeightKg
               ? formatWeightForUnit(next.manualWeightKg, weightUnit)
@@ -351,13 +332,21 @@ export default function GoalsScreen() {
     }, [weightUnit]),
   );
 
-  useEffect(() => {
-    setMetabolismHeightInput(
-      selectedHeightCm !== null
-        ? formatHeightForUnit(selectedHeightCm, heightUnit)
-        : "",
-    );
-  }, [selectedHeightCm, heightUnit]);
+  const getCurrentHeightCmFromInputs = useCallback(() => {
+    if (heightUnit === "cm") {
+      return metabolismHeightInput.trim()
+        ? parseHeightCmInputToCm(metabolismHeightInput)
+        : null;
+    }
+
+    const feetTrimmed = heightFeetInput.trim();
+    const inchesTrimmed = heightInchesInput.trim();
+    if (!feetTrimmed && !inchesTrimmed) return null;
+    const feet = feetTrimmed ? parseNumberInput(feetTrimmed) : 0;
+    const inches = inchesTrimmed ? parseNumberInput(inchesTrimmed) : 0;
+    if (feet === null || inches === null) return null;
+    return (feet * 12 + inches) * CM_PER_IN;
+  }, [heightUnit, metabolismHeightInput, heightFeetInput, heightInchesInput]);
 
   const onToggleWeightUnit = () => {
     const nextUnit = weightUnit === "kg" ? "lb" : "kg";
@@ -390,31 +379,37 @@ export default function GoalsScreen() {
   const onHeightUnitChange = (nextValue: string) => {
     const nextUnit = nextValue as HeightUnit;
     if (nextUnit === heightUnit) return;
-    if (selectedHeightCm === null) {
-      setHeightUnit(nextUnit);
-      return;
-    }
-
-    isUnitSwitchingRef.current = true;
-
-    const newItems = nextUnit === "cm" ? cmPickerItems : ftPickerItems;
-    const targetIndex = findNearestIndex(newItems, selectedHeightCm);
-    const targetItem = newItems[targetIndex];
+    const nextHeightCm = getCurrentHeightCmFromInputs();
 
     setHeightUnit(nextUnit);
-    if (targetItem) {
-      setSelectedHeightCm(targetItem.cm);
+    if (nextHeightCm !== null) {
+      const feetInches = getFeetInchesFromCm(nextHeightCm);
+      setMetabolismHeightInput(formatHeightCmInput(nextHeightCm));
+      setHeightFeetInput(`${feetInches.feet}`);
+      setHeightInchesInput(`${feetInches.inches}`);
     }
+  };
 
-    const newRef = nextUnit === "cm" ? cmListRef : ftListRef;
-    setTimeout(() => {
-      newRef.current?.scrollTo({
-        y: targetIndex * HEIGHT_ROW_HEIGHT,
-        animated: false,
-      });
-      lastScrollIndexRef.current = targetIndex;
-      isUnitSwitchingRef.current = false;
-    }, 0);
+  const onToggleHeightUnit = () => {
+    const nextUnit: HeightUnit = heightUnit === "cm" ? "ft" : "cm";
+    Animated.timing(heightToggleAnim, {
+      toValue: nextUnit === "cm" ? 0 : 1,
+      duration: 180,
+      useNativeDriver: false,
+    }).start();
+    Animated.sequence([
+      Animated.timing(heightAnim, {
+        toValue: 0.85,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(heightAnim, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    onHeightUnitChange(nextUnit);
   };
 
   const onGoalPhasePress = (phase: GoalPhase) => {
@@ -467,117 +462,6 @@ export default function GoalsScreen() {
     setGoalAdjustmentPickerVisible(true);
   };
 
-  const onPressHeightField = () => {
-    const isOpening = !heightPickerOpen;
-    let heightToScroll = selectedHeightCm;
-    if (isOpening && selectedHeightCm === null) {
-      heightToScroll = DEFAULT_HEIGHT_CM;
-      setSelectedHeightCm(DEFAULT_HEIGHT_CM);
-      setMetabolismHeightInput(
-        formatHeightForUnit(DEFAULT_HEIGHT_CM, heightUnit),
-      );
-    }
-    if (isOpening && heightToScroll !== null) {
-      const items = heightUnit === "cm" ? cmPickerItems : ftPickerItems;
-      const idx = findNearestIndex(items, heightToScroll);
-      const activeRef = heightUnit === "cm" ? cmListRef : ftListRef;
-      setTimeout(() => {
-        activeRef.current?.scrollTo({
-          y: idx * HEIGHT_ROW_HEIGHT,
-          animated: false,
-        });
-        lastScrollIndexRef.current = idx;
-      }, 0);
-    }
-    Vibration.vibrate(20);
-    setHeightPickerOpen((v) => !v);
-  };
-
-  const cmPickerItems = useMemo<HeightPickerItem[]>(
-    () =>
-      Array.from({ length: HEIGHT_MAX_CM - HEIGHT_MIN_CM + 1 }, (_, index) => {
-        const cm = HEIGHT_MIN_CM + index;
-        return { key: `cm-${cm}`, cm, label: `${cm} cm` };
-      }),
-    [],
-  );
-
-  const ftPickerItems = useMemo<HeightPickerItem[]>(
-    () =>
-      Array.from({ length: HEIGHT_MAX_IN - HEIGHT_MIN_IN + 1 }, (_, index) => {
-        const inches = HEIGHT_MIN_IN + index;
-        const cm = inches * CM_PER_IN;
-        return { key: `in-${inches}`, cm, label: formatFeetInches(inches) };
-      }),
-    [],
-  );
-
-  const cmInitialOffset = useMemo(() => {
-    const h = initialData.metabolismHeightCm;
-    return h !== null
-      ? findNearestIndex(cmPickerItems, h) * HEIGHT_ROW_HEIGHT
-      : 0;
-  }, [cmPickerItems]);
-
-  const ftInitialOffset = useMemo(() => {
-    const h = initialData.metabolismHeightCm;
-    return h !== null
-      ? findNearestIndex(ftPickerItems, h) * HEIGHT_ROW_HEIGHT
-      : 0;
-  }, [ftPickerItems]);
-
-  const onHeightScroll = useCallback(
-    (offsetY: number) => {
-      if (isUnitSwitchingRef.current) return;
-      const items = heightUnit === "cm" ? cmPickerItems : ftPickerItems;
-      const index = Math.round(offsetY / HEIGHT_ROW_HEIGHT);
-      const clamped = Math.max(0, Math.min(index, items.length - 1));
-      if (clamped !== lastScrollIndexRef.current) {
-        lastScrollIndexRef.current = clamped;
-        Vibration.vibrate(6);
-      }
-    },
-    [heightUnit, cmPickerItems, ftPickerItems],
-  );
-
-  const onHeightScrollEnd = useCallback(
-    (offsetY: number) => {
-      if (isUnitSwitchingRef.current) return;
-      const items = heightUnit === "cm" ? cmPickerItems : ftPickerItems;
-      const index = Math.round(offsetY / HEIGHT_ROW_HEIGHT);
-      const clamped = Math.max(0, Math.min(index, items.length - 1));
-      const item = items[clamped];
-      if (!item) return;
-      setSelectedHeightCm(item.cm);
-      setMetabolismHeightInput(formatHeightForUnit(item.cm, heightUnit));
-    },
-    [cmPickerItems, ftPickerItems, heightUnit],
-  );
-
-  const onCmMomentumScrollEnd = useCallback(
-    (e: { nativeEvent: { contentOffset: { y: number } } }) => {
-      if (isUnitSwitchingRef.current) return;
-      const snapY =
-        Math.round(e.nativeEvent.contentOffset.y / HEIGHT_ROW_HEIGHT) *
-        HEIGHT_ROW_HEIGHT;
-      cmListRef.current?.scrollTo({ y: snapY, animated: true });
-      onHeightScrollEnd(snapY);
-    },
-    [onHeightScrollEnd],
-  );
-
-  const onFtMomentumScrollEnd = useCallback(
-    (e: { nativeEvent: { contentOffset: { y: number } } }) => {
-      if (isUnitSwitchingRef.current) return;
-      const snapY =
-        Math.round(e.nativeEvent.contentOffset.y / HEIGHT_ROW_HEIGHT) *
-        HEIGHT_ROW_HEIGHT;
-      ftListRef.current?.scrollTo({ y: snapY, animated: true });
-      onHeightScrollEnd(snapY);
-    },
-    [onHeightScrollEnd],
-  );
-
   const saveTargets = () => {
     const nextBase = parseNumberInput(baseTargetInput);
     const nextPerKg = parseNumberInput(caloriesPerKgInput);
@@ -593,7 +477,7 @@ export default function GoalsScreen() {
     const nextAge = metabolismAgeInput.trim()
       ? parseNumberInput(metabolismAgeInput)
       : null;
-    const nextHeightCm = selectedHeightCm;
+    const nextHeightCm = getCurrentHeightCmFromInputs();
     const nextProtein = proteinGoalInput.trim()
       ? parseNumberInput(proteinGoalInput)
       : null;
@@ -619,6 +503,29 @@ export default function GoalsScreen() {
     if (nextAge !== null && (nextAge < 13 || nextAge > 120)) {
       m3Alert.alert("Invalid age", "Enter an age between 13 and 120.");
       return;
+    }
+    if (heightUnit === "ft") {
+      const feetTrimmed = heightFeetInput.trim();
+      const inchesTrimmed = heightInchesInput.trim();
+      const feet = feetTrimmed ? parseNumberInput(feetTrimmed) : 0;
+      const inches = inchesTrimmed ? parseNumberInput(inchesTrimmed) : 0;
+      const hasValue = feetTrimmed.length > 0 || inchesTrimmed.length > 0;
+      if (
+        hasValue &&
+        (feet === null ||
+          inches === null ||
+          !Number.isInteger(feet) ||
+          !Number.isInteger(inches) ||
+          feet < 0 ||
+          inches < 0 ||
+          inches > 11)
+      ) {
+        m3Alert.alert(
+          "Invalid height",
+          "Use whole numbers for feet and inches, with inches between 0 and 11.",
+        );
+        return;
+      }
     }
     if (nextHeightCm !== null && (nextHeightCm < 92 || nextHeightCm > 214)) {
       m3Alert.alert(
@@ -684,9 +591,17 @@ export default function GoalsScreen() {
     );
     setMetabolismHeightInput(
       nextHeightCm !== null
-        ? formatHeightForUnit(roundTo(nextHeightCm, 1), heightUnit)
+        ? formatHeightCmInput(roundTo(nextHeightCm, 1))
         : "",
     );
+    if (nextHeightCm !== null) {
+      const feetInches = getFeetInchesFromCm(nextHeightCm);
+      setHeightFeetInput(`${feetInches.feet}`);
+      setHeightInchesInput(`${feetInches.inches}`);
+    } else {
+      setHeightFeetInput("");
+      setHeightInchesInput("");
+    }
     Vibration.vibrate(18);
   };
 
@@ -824,123 +739,106 @@ export default function GoalsScreen() {
                   mode="outlined"
                   theme={GOALS_PROFILE_INPUT_THEME}
                 />
-                <Pressable onPress={onPressHeightField}>
-                  <View pointerEvents="none">
-                    <TextInput
-                      label={`Height`}
-                      value={metabolismHeightInput}
-                      mode="outlined"
-                      editable={false}
-                      right={
-                        <TextInput.Icon
-                          icon={
-                            heightPickerOpen ? "chevron-up" : "chevron-down"
-                          }
+                <View style={styles.heightRow}>
+                  <Animated.View
+                    style={{
+                      flex: 1,
+                      justifyContent: "center",
+                      transform: [{ scale: heightAnim }],
+                    }}
+                  >
+                    {heightUnit === "cm" ? (
+                      <TextInput
+                        label="Height (cm)"
+                        value={metabolismHeightInput}
+                        onChangeText={setMetabolismHeightInput}
+                        keyboardType="numeric"
+                        placeholder="170"
+                        mode="outlined"
+                        theme={GOALS_PROFILE_INPUT_THEME}
+                      />
+                    ) : (
+                      <View style={styles.heightFtInputsRow}>
+                        <TextInput
+                          label="Height (ft)"
+                          value={heightFeetInput}
+                          onChangeText={setHeightFeetInput}
+                          keyboardType="numeric"
+                          placeholder="5"
+                          mode="outlined"
+                          style={styles.heightFtInput}
+                          theme={GOALS_PROFILE_INPUT_THEME}
                         />
-                      }
-                      theme={GOALS_PROFILE_INPUT_THEME}
-                    />
-                  </View>
-                </Pressable>
-                <View
-                  style={[{ gap: 8 }, !heightPickerOpen && { display: "none" }]}
-                >
-                  <SegmentedButtons
-                    value={heightUnit}
-                    onValueChange={onHeightUnitChange}
-                    buttons={[
-                      { value: "cm", label: "cm" },
-                      { value: "ft", label: "ft" },
-                    ]}
-                    style={[
-                      styles.segmentedControl,
-                      { backgroundColor: theme.colors.elevation.level2 },
-                    ]}
-                    theme={segmentedButtonsTheme}
-                  />
-                  <View style={styles.heightPickerWrapper}>
-                    <View
+                        <TextInput
+                          label="in"
+                          value={heightInchesInput}
+                          onChangeText={setHeightInchesInput}
+                          keyboardType="numeric"
+                          placeholder="10"
+                          mode="outlined"
+                          style={styles.heightInInput}
+                          theme={GOALS_PROFILE_INPUT_THEME}
+                        />
+                      </View>
+                    )}
+                  </Animated.View>
+                  <Animated.View
+                    style={{
+                      marginLeft: 8,
+                      transform: [{ scale: heightAnim }],
+                    }}
+                  >
+                    <Pressable
+                      onPress={onToggleHeightUnit}
                       style={[
-                        styles.heightPickerSelector,
-                        { borderColor: theme.colors.primary },
+                        styles.toggleOuter,
+                        { backgroundColor: theme.colors.surfaceVariant },
                       ]}
-                      pointerEvents="none"
-                    />
-                    <ScrollView
-                      ref={cmListRef}
-                      style={[
-                        styles.heightPickerList,
-                        heightUnit !== "cm" && styles.heightPickerHidden,
-                      ]}
-                      showsVerticalScrollIndicator={false}
-                      nestedScrollEnabled
-                      decelerationRate={0.9}
-                      contentContainerStyle={styles.heightPickerContent}
-                      scrollEventThrottle={16}
-                      contentOffset={{ x: 0, y: cmInitialOffset }}
-                      onScrollBeginDrag={() => {
-                        isUserScrollingRef.current = true;
-                        lastScrollIndexRef.current = -1;
-                      }}
-                      onScroll={(e) =>
-                        onHeightScroll(e.nativeEvent.contentOffset.y)
-                      }
-                      onMomentumScrollEnd={onCmMomentumScrollEnd}
-                      onScrollEndDrag={() => {
-                        isUserScrollingRef.current = false;
-                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Toggle height unit"
                     >
-                      {cmPickerItems.map((item) => {
-                        const isSelected =
-                          selectedHeightCm !== null &&
-                          Math.abs(selectedHeightCm - item.cm) < 0.51;
-                        return (
-                          <HeightPickerOption
-                            key={item.key}
-                            label={item.label}
-                            isSelected={isSelected}
-                          />
-                        );
-                      })}
-                    </ScrollView>
-                    <ScrollView
-                      ref={ftListRef}
-                      style={[
-                        styles.heightPickerList,
-                        heightUnit === "cm" && styles.heightPickerHidden,
-                      ]}
-                      showsVerticalScrollIndicator={false}
-                      nestedScrollEnabled
-                      decelerationRate={0.9}
-                      contentContainerStyle={styles.heightPickerContent}
-                      scrollEventThrottle={16}
-                      contentOffset={{ x: 0, y: ftInitialOffset }}
-                      onScrollBeginDrag={() => {
-                        isUserScrollingRef.current = true;
-                        lastScrollIndexRef.current = -1;
-                      }}
-                      onScroll={(e) =>
-                        onHeightScroll(e.nativeEvent.contentOffset.y)
-                      }
-                      onMomentumScrollEnd={onFtMomentumScrollEnd}
-                      onScrollEndDrag={() => {
-                        isUserScrollingRef.current = false;
-                      }}
-                    >
-                      {ftPickerItems.map((item) => {
-                        const isSelected =
-                          selectedHeightCm !== null &&
-                          Math.abs(selectedHeightCm - item.cm) < 0.51;
-                        return (
-                          <HeightPickerOption
-                            key={item.key}
-                            label={item.label}
-                            isSelected={isSelected}
-                          />
-                        );
-                      })}
-                    </ScrollView>
-                  </View>
+                      <Animated.View
+                        style={[
+                          styles.togglePill,
+                          {
+                            left: heightToggleAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [2, 30],
+                            }),
+                            backgroundColor: theme.colors.primary,
+                          },
+                        ]}
+                      />
+                      <View style={styles.toggleLabelRow}>
+                        <Text
+                          style={[
+                            styles.toggleLabel,
+                            {
+                              color:
+                                heightUnit === "cm"
+                                  ? theme.colors.onPrimary
+                                  : theme.colors.onSurfaceVariant,
+                            },
+                          ]}
+                        >
+                          cm
+                        </Text>
+                        <Text
+                          style={[
+                            styles.toggleLabel,
+                            {
+                              color:
+                                heightUnit === "ft"
+                                  ? theme.colors.onPrimary
+                                  : theme.colors.onSurfaceVariant,
+                            },
+                          ]}
+                        >
+                          ft
+                        </Text>
+                      </View>
+                    </Pressable>
+                  </Animated.View>
                 </View>
 
                 <Text
@@ -1629,6 +1527,22 @@ const styles = StyleSheet.create({
   },
   macroGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   macroInput: { minWidth: "47%", flexGrow: 1 },
+  heightRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+    minHeight: 56,
+  },
+  heightFtInputsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  heightFtInput: {
+    flex: 0.55,
+  },
+  heightInInput: {
+    flex: 0.45,
+  },
   weightRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1677,41 +1591,5 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 10,
     maxHeight: "80%",
-  },
-  heightPickerList: {
-    height: PICKER_HEIGHT,
-  },
-  heightPickerHidden: {
-    display: "none",
-  },
-  heightPickerContent: {
-    paddingVertical: PICKER_PADDING,
-  },
-  heightPickerWrapper: {
-    position: "relative",
-    height: PICKER_HEIGHT,
-  },
-  heightPickerSelector: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: PICKER_PADDING,
-    height: HEIGHT_ROW_HEIGHT,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    zIndex: 1,
-    pointerEvents: "none",
-  },
-  heightPickerRow: {
-    height: HEIGHT_ROW_HEIGHT,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  heightPickerRowText: {
-    fontSize: 16,
-  },
-  heightPickerRowTextSelected: {
-    fontWeight: "700",
-    fontSize: 18,
   },
 });
