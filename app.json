@@ -1,22 +1,15 @@
 {
   "expo": {
-    "name": "Calorie Tracker",
+    "name": "Calorie Tracker-dev",
     "version": "0.6.6",
     "orientation": "portrait",
     "icon": "./assets/ic_launcher-playstore.png",
     "scheme": "calorietracker",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/ic_launcher-playstore.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#f2433b"
-    },
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "package": "com.zane.calorietracker",
-      "displayName": "Calorie Tracker",
       "adaptiveIcon": {
         "foregroundImage": "./assets/ic_launcher-playstore.png",
         "backgroundColor": "#f2433b"
