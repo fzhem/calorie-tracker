@@ -1542,17 +1542,50 @@ export default function LogScreen() {
                   : `${Math.abs(remaining)} kcal over`}
               </Text>
             </View>
-            <Text
-              variant="bodySmall"
-              style={{ color: theme.colors.onSurfaceVariant }}
-            >
-              BMR: {metabolism.bmr ? `${metabolism.bmr}` : "N/A"} | TDEE:{" "}
-              {metabolism.tdee ? `${metabolism.tdee}` : "N/A"} | Maintenance:{" "}
-              {metabolism.maintenanceCalories
-                ? `${metabolism.maintenanceCalories}`
-                : "N/A"}{" "}
-              kcal/day
-            </Text>
+            <View style={styles.metabolismRow}>
+              <View style={styles.metabolismChip}>
+                <MaterialCommunityIcons
+                  name="fire"
+                  size={12}
+                  color={theme.colors.onSurfaceVariant}
+                />
+                <Text
+                  variant="labelSmall"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  BMR {metabolism.bmr ? `${metabolism.bmr}` : "N/A"}
+                </Text>
+              </View>
+              <View style={styles.metabolismChip}>
+                <MaterialCommunityIcons
+                  name="lightning-bolt"
+                  size={12}
+                  color={theme.colors.onSurfaceVariant}
+                />
+                <Text
+                  variant="labelSmall"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  TDEE {metabolism.tdee ? `${metabolism.tdee}` : "N/A"}
+                </Text>
+              </View>
+              <View style={styles.metabolismChip}>
+                <MaterialCommunityIcons
+                  name="target"
+                  size={12}
+                  color={theme.colors.onSurfaceVariant}
+                />
+                <Text
+                  variant="labelSmall"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  Maintenance{" "}
+                  {metabolism.maintenanceCalories
+                    ? `${metabolism.maintenanceCalories}`
+                    : "N/A"}
+                </Text>
+              </View>
+            </View>
             <ProgressBar
               progress={progress}
               color={remaining < 0 ? theme.colors.error : theme.colors.primary}
@@ -1716,15 +1749,29 @@ export default function LogScreen() {
             {visibleEntries.length ? (
               renderedEntries
             ) : (
-              <Text
-                variant="bodyMedium"
-                style={[
-                  styles.emptyText,
-                  { color: theme.colors.onSurfaceVariant },
-                ]}
-              >
-                No entries logged today yet.
-              </Text>
+              <View style={styles.emptyState}>
+                <MaterialCommunityIcons
+                  name="silverware-fork-knife"
+                  size={40}
+                  color={theme.colors.onSurfaceVariant}
+                  style={{ opacity: 0.4 }}
+                />
+                <Text
+                  variant="bodyMedium"
+                  style={[
+                    styles.emptyText,
+                    { color: theme.colors.onSurfaceVariant },
+                  ]}
+                >
+                  No entries logged today yet.
+                </Text>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant, opacity: 0.6 }}
+                >
+                  Use the Quick Log above to add a meal.
+                </Text>
+              </View>
             )}
           </Card.Content>
         </Card>
@@ -2271,6 +2318,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   progressBar: { height: 10, borderRadius: 999 },
+  metabolismRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  metabolismChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "transparent",
+  },
   macroSummaryBar: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2440,5 +2498,11 @@ const styles = StyleSheet.create({
   entryMeta: {},
   entryActions: { flexDirection: "row", alignItems: "center", marginRight: -6 },
   entryActionIcon: { margin: 0 },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 32,
+    gap: 8,
+  },
   emptyText: {},
 });
