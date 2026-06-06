@@ -73,6 +73,8 @@ export type StoredData = {
   metabolismSex: MetabolismSex;
   metabolismAgeYears: number | null;
   metabolismHeightCm: number | null;
+  metabolismBodyFatPercent: number | null;
+  manualBodyFatPercent: number | null;
   activityLevel: ActivityLevel;
   manualWeightKg: number | null;
   lastWeightSyncAt: string | null;
@@ -140,6 +142,8 @@ export const DEFAULT_DATA: StoredData = {
   metabolismSex: DEFAULT_SEX,
   metabolismAgeYears: null,
   metabolismHeightCm: null,
+  metabolismBodyFatPercent: null,
+  manualBodyFatPercent: null,
   activityLevel: DEFAULT_ACTIVITY_LEVEL,
   manualWeightKg: null,
   lastWeightSyncAt: null,

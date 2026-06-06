@@ -193,7 +193,6 @@ export async function insertBodyFat(point: Omit<BodyFat, "id">): Promise<void> {
 }
 
 /** Latest body-fat measurement. */
-
 export async function getLatestBodyFat(): Promise<BodyFat | null> {
   const [latest] = await db
     .select()
@@ -202,6 +201,28 @@ export async function getLatestBodyFat(): Promise<BodyFat | null> {
     .limit(1);
 
   return latest ?? null;
+}
+
+/** Latest body-fat by source (for GoalsScreen manual override). */
+export async function getLatestBodyFatBySource(
+  source: typeof SOURCE_MANUAL | typeof SOURCE_HEALTH_CONNECT,
+): Promise<BodyFat | null> {
+  const [latest] = await db
+    .select()
+    .from(schema.bodyFatHistory)
+    .where(eq(schema.bodyFatHistory.source, source))
+    .orderBy(desc(bodyFatInstantExpr))
+    .limit(1);
+
+  return latest ?? null;
+}
+
+export async function deleteBodyFatBySource(
+  source: typeof SOURCE_MANUAL | typeof SOURCE_HEALTH_CONNECT,
+): Promise<void> {
+  await db
+    .delete(schema.bodyFatHistory)
+    .where(eq(schema.bodyFatHistory.source, source));
 }
 
 /** Body fat series for graphs. */

@@ -34,6 +34,7 @@ type MetabolismInput = {
   ageYears: number | null;
   sex: MetabolismSex;
   activityLevel: ActivityLevel;
+  bodyFatPercent?: number | null;
 };
 
 export type MetabolismMetrics = {
@@ -93,7 +94,8 @@ export function getGoalCalorieDelta(
 }
 
 export function estimateMetabolism(input: MetabolismInput): MetabolismMetrics {
-  const { weightKg, heightCm, ageYears, sex, activityLevel } = input;
+  const { weightKg, heightCm, ageYears, sex, activityLevel, bodyFatPercent } =
+    input;
 
   if (
     !isPositiveNumber(weightKg) ||
@@ -104,12 +106,21 @@ export function estimateMetabolism(input: MetabolismInput): MetabolismMetrics {
     return { bmr: null, tdee: null, maintenanceCalories: null };
   }
 
-  const sexOffset = sex === SEX_MALE ? BMR_MALE_OFFSET : BMR_FEMALE_OFFSET;
-  const bmr =
-    BMR_WEIGHT_COEFF * weightKg +
-    BMR_HEIGHT_COEFF * heightCm -
-    BMR_AGE_COEFF * ageYears +
-    sexOffset;
+  const bf = bodyFatPercent ?? null;
+  let bmr: number;
+  if (isPositiveNumber(bf)) {
+    // Katch-McArdle formula: uses lean body mass, doesn't need height/sex
+    const leanBodyMass = weightKg * (1 - bf / 100);
+    bmr = 370 + 21.6 * leanBodyMass;
+  } else {
+    // Mifflin-St Jeor: fallback when body fat is not available
+    const sexOffset = sex === SEX_MALE ? BMR_MALE_OFFSET : BMR_FEMALE_OFFSET;
+    bmr =
+      BMR_WEIGHT_COEFF * weightKg +
+      BMR_HEIGHT_COEFF * heightCm -
+      BMR_AGE_COEFF * ageYears +
+      sexOffset;
+  }
   const tdee = bmr * getActivityFactor(activityLevel);
 
   return {
@@ -122,9 +133,12 @@ export function estimateMetabolism(input: MetabolismInput): MetabolismMetrics {
 export function getAdjustedCalorieTarget(
   data: StoredData,
   latestHealthConnectWeightKg?: number | null,
+  latestHCBodyFatPercent?: number | null,
 ) {
   const effectiveWeightKg =
     data.manualWeightKg ?? latestHealthConnectWeightKg ?? null;
+  const effectiveBodyFatPercent =
+    data.manualBodyFatPercent ?? latestHCBodyFatPercent ?? null;
 
   const metabolism = estimateMetabolism({
     weightKg: effectiveWeightKg,
@@ -132,6 +146,7 @@ export function getAdjustedCalorieTarget(
     ageYears: data.metabolismAgeYears,
     sex: data.metabolismSex,
     activityLevel: data.activityLevel,
+    bodyFatPercent: effectiveBodyFatPercent,
   });
 
   const goalDelta = getGoalCalorieDelta(data.goalPhase ?? PHASE_MAINTAIN, {

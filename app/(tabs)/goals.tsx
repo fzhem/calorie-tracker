@@ -15,7 +15,6 @@ import {
   Button,
   Card,
   Chip,
-  Menu,
   SegmentedButtons,
   Snackbar,
   Text,
@@ -32,7 +31,6 @@ import {
   saveStoredData,
 } from "@/data/storage";
 import type { GoalAdjustmentType, GoalPhase, StoredData } from "@/data/storage";
-import type { Weight } from "@/db/index";
 import {
   estimateMetabolism,
   getActivityFactor,
@@ -48,14 +46,17 @@ import {
   insertWeight,
   getLatestWeightBySource,
   deleteWeightBySource,
+  deleteBodyFatBySource,
+  getLatestBodyFatBySource,
 } from "@/db/index";
-import { invalidateWeightCaches } from "@/lib/queryCache";
-import { parseAppDate, toLocalISOString } from "@/lib/dateKey";
+import {
+  invalidateWeightCaches,
+  invalidateBodyFatCaches,
+} from "@/lib/queryCache";
+import { toLocalISOString } from "@/lib/dateKey";
 
 const KG_PER_LB = 0.45359237;
 const CM_PER_IN = 2.54;
-const HEIGHT_MIN_CM = 92;
-const HEIGHT_MAX_CM = 214;
 const GOALS_PROFILE_INPUT_THEME = { animation: { scale: 0 } };
 
 type WeightUnit = "kg" | "lb";
@@ -69,26 +70,6 @@ function roundTo(value: number, digits = 1) {
 function parseNumberInput(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function mergeWeightHistory(existing: Weight[], incoming: Weight[]): Weight[] {
-  const keyed = new Map<string, Weight>();
-  for (const p of [...existing, ...incoming])
-    keyed.set(`${p.source}-${p.recordedAt}`, p);
-  return Array.from(keyed.values()).sort(
-    (a, b) =>
-      parseAppDate(b.recordedAt).getTime() -
-      parseAppDate(a.recordedAt).getTime(),
-  );
-}
-
-function formatDisplayDate(value: string) {
-  return parseAppDate(value).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 function getActivityLabel(activityLevel: StoredData["activityLevel"]) {
@@ -188,6 +169,11 @@ export default function GoalsScreen() {
   const [fibreGoalInput, setFibreGoalInput] = useState(
     initialData.fibreGoalGrams ? `${initialData.fibreGoalGrams}` : "",
   );
+  const [bodyFatInput, setBodyFatInput] = useState(
+    initialData.metabolismBodyFatPercent
+      ? `${initialData.metabolismBodyFatPercent}`
+      : "",
+  );
   const [heightUnit, setHeightUnit] = useState<HeightUnit>("cm");
   const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
   const weightAnim = useRef(new Animated.Value(1)).current;
@@ -196,9 +182,16 @@ export default function GoalsScreen() {
   const heightToggleAnim = useRef(new Animated.Value(0)).current; // 0 for cm, 1 for ft
   const [goalAdjustmentPickerVisible, setGoalAdjustmentPickerVisible] =
     useState(false);
-  const [sexMenuVisible, setSexMenuVisible] = useState(false);
-  const [activityMenuVisible, setActivityMenuVisible] = useState(false);
+  const [latestHCBodyFatPercent, setLatestHCBodyFatPercent] = useState<
+    number | null
+  >(null);
   const [weightUnlocked, setWeightUnlocked] = useState(false);
+  const [bodyFatUnlocked, setBodyFatUnlocked] = useState(false);
+  const [manualBodyFatInput, setManualBodyFatInput] = useState(
+    initialData.manualBodyFatPercent
+      ? `${initialData.manualBodyFatPercent}`
+      : "",
+  );
   const [goalsTab, setGoalsTab] = useState<"profile" | "overrides">("profile");
   const [savedSnackbarVisible, setSavedSnackbarVisible] = useState(false);
   const m3Alert = useM3Alert();
@@ -255,6 +248,9 @@ export default function GoalsScreen() {
   useEffect(() => {
     getLatestWeightBySource("health-connect").then((point) => {
       setLatestHealthConnectWeightKg(point?.weightKg ?? null);
+    });
+    getLatestBodyFatBySource("health-connect").then((point) => {
+      setLatestHCBodyFatPercent(point?.bodyFatPercentage ?? null);
     });
   }, []);
 
@@ -490,6 +486,12 @@ export default function GoalsScreen() {
     const nextFibre = fibreGoalInput.trim()
       ? parseNumberInput(fibreGoalInput)
       : null;
+    const nextBodyFat = bodyFatInput.trim()
+      ? parseNumberInput(bodyFatInput)
+      : null;
+    const nextManualBodyFat = manualBodyFatInput.trim()
+      ? parseNumberInput(manualBodyFatInput)
+      : null;
 
     if (!nextBase || nextBase <= 0) {
       m3Alert.alert("Invalid goal", "Enter a valid override calorie target.");
@@ -578,6 +580,14 @@ export default function GoalsScreen() {
       metabolismAgeYears: nextAge !== null ? Math.round(nextAge) : null,
       metabolismHeightCm:
         nextHeightCm !== null ? roundTo(nextHeightCm, 1) : null,
+      metabolismBodyFatPercent:
+        nextBodyFat !== null
+          ? Math.min(Math.max(roundTo(nextBodyFat, 1), 0), 100)
+          : null,
+      manualBodyFatPercent:
+        nextManualBodyFat !== null
+          ? Math.min(Math.max(roundTo(nextManualBodyFat, 1), 0), 100)
+          : null,
       manualWeightKg:
         nextWeightKg && nextWeightKg > 0 ? roundTo(nextWeightKg, 2) : null,
       proteinGoalGrams: nextProtein !== null ? roundTo(nextProtein, 1) : null,
@@ -642,16 +652,35 @@ export default function GoalsScreen() {
       manualWeightKg: null,
     }));
   };
+  const clearManualBodyFat = () => {
+    Vibration.vibrate(40);
+    setManualBodyFatInput("");
+    deleteBodyFatBySource("manual").catch(() =>
+      m3Alert.alert(
+        "Delete failed",
+        "Manual body fat could not be removed. Please try again.",
+      ),
+    );
+    invalidateBodyFatCaches();
+    setData((prev) => ({
+      ...prev,
+      manualBodyFatPercent: null,
+    }));
+  };
   const hasSavedManualWeight = data.manualWeightKg !== null;
+  const hasSavedManualBodyFat = data.manualBodyFatPercent !== null;
 
   const latestWeight =
     data.manualWeightKg ?? latestHealthConnectWeightKg ?? null;
+  const effectiveBodyFatPercent =
+    data.manualBodyFatPercent ?? latestHCBodyFatPercent ?? null;
   const metabolism = estimateMetabolism({
     weightKg: latestWeight,
     heightCm: data.metabolismHeightCm,
     ageYears: data.metabolismAgeYears,
     sex: data.metabolismSex,
     activityLevel: data.activityLevel,
+    bodyFatPercent: effectiveBodyFatPercent,
   });
   const goalDelta = getGoalCalorieDelta(data.goalPhase, {
     adjustmentType:
@@ -1106,7 +1135,7 @@ export default function GoalsScreen() {
                 </Text>
 
                 <Text variant="labelMedium" style={{ marginTop: 3 }}>
-                  Weight Tracking
+                  Weight & Body Fat Tracking
                 </Text>
                 <View style={styles.weightRow}>
                   <Animated.View
@@ -1194,18 +1223,50 @@ export default function GoalsScreen() {
                     </Pressable>
                   </Animated.View>
                 </View>
-                <Button
-                  mode="text"
-                  icon="delete-outline"
-                  onPress={clearManualWeight}
-                  textColor={theme.colors.error}
-                  rippleColor={theme.colors.errorContainer}
-                  disabled={!hasSavedManualWeight}
-                  style={{ alignSelf: "flex-start" }}
-                >
-                  Clear manual weight
-                </Button>
-
+                <View style={styles.bodyFatRow}>
+                  <TextInput
+                    label="Manual body fat (%)"
+                    value={manualBodyFatInput}
+                    onChangeText={setManualBodyFatInput}
+                    keyboardType="numeric"
+                    placeholder="e.g. 15"
+                    mode="outlined"
+                    editable={bodyFatUnlocked}
+                    right={
+                      <TextInput.Icon
+                        icon={bodyFatUnlocked ? "lock-open-variant" : "lock"}
+                        onPress={() => {
+                          Vibration.vibrate(40);
+                          setBodyFatUnlocked(!bodyFatUnlocked);
+                        }}
+                      />
+                    }
+                    theme={GOALS_PROFILE_INPUT_THEME}
+                    style={{ flex: 1 }}
+                  />
+                </View>
+                <View style={styles.clearRow}>
+                  <Button
+                    mode="text"
+                    icon="delete-outline"
+                    onPress={clearManualWeight}
+                    textColor={theme.colors.error}
+                    rippleColor={theme.colors.errorContainer}
+                    disabled={!hasSavedManualWeight}
+                  >
+                    Clear weight
+                  </Button>
+                  <Button
+                    mode="text"
+                    icon="delete-outline"
+                    onPress={clearManualBodyFat}
+                    textColor={theme.colors.error}
+                    rippleColor={theme.colors.errorContainer}
+                    disabled={!hasSavedManualBodyFat}
+                  >
+                    Clear body fat
+                  </Button>
+                </View>
                 <Button
                   mode="contained"
                   icon="content-save-outline"
@@ -1658,6 +1719,17 @@ const styles = StyleSheet.create({
   },
   heightInInput: {
     flex: 0.45,
+  },
+  clearRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  bodyFatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+    minHeight: 56,
   },
   weightRow: {
     flexDirection: "row",

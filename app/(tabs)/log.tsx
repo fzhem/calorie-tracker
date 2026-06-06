@@ -78,6 +78,7 @@ import {
   deleteMeal,
   updateMeal,
   getLatestWeightBySource,
+  getLatestBodyFatBySource,
 } from "@/db/index";
 import { makeMealId } from "@/db/helpers";
 import { createLLM, type LiteRTLMInstance } from "react-native-litert-lm";
@@ -842,6 +843,9 @@ export default function LogScreen() {
   const todayKey = getLocalDateKey(new Date());
   const [entries, setEntries] = useState<Meal[]>([]);
   const [latestHCWeightKg, setLatestHCWeightKg] = useState<number | null>(null);
+  const [latestHCBodyFatPercent, setLatestHCBodyFatPercent] = useState<
+    number | null
+  >(null);
   const [isReady, setIsReady] = useState(false);
   const hasCompletedInitialLoad = useRef(false);
   const [sortMode, setSortMode] = useState<SortMode>("newest");
@@ -891,9 +895,14 @@ export default function LogScreen() {
       getMealsForDay(key)
         .then(setEntries)
         .catch(() => {});
-      // Refresh HC weight so metabolism recalculates if weights were imported
+      // Refresh HC weight and body fat so metabolism recalculates
       getLatestWeightBySource("health-connect")
         .then((point) => setLatestHCWeightKg(point?.weightKg ?? null))
+        .catch(() => {});
+      getLatestBodyFatBySource("health-connect")
+        .then((point) =>
+          setLatestHCBodyFatPercent(point?.bodyFatPercentage ?? null),
+        )
         .catch(() => {});
     }, []),
   );
@@ -967,8 +976,9 @@ export default function LogScreen() {
   );
   const todayCalories = todayEntries.reduce((sum, e) => sum + e.calories, 0);
   const { adjustedTarget, goalDelta, metabolism } = useMemo(
-    () => getAdjustedCalorieTarget(data, latestHCWeightKg),
-    [data, latestHCWeightKg],
+    () =>
+      getAdjustedCalorieTarget(data, latestHCWeightKg, latestHCBodyFatPercent),
+    [data, latestHCWeightKg, latestHCBodyFatPercent],
   );
   const remaining = adjustedTarget - todayCalories;
   const progress = Math.min(todayCalories / Math.max(adjustedTarget, 1), 1);
