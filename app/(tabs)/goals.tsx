@@ -850,43 +850,90 @@ export default function GoalsScreen() {
                 >
                   Sex
                 </Text>
-                <Menu
-                  visible={sexMenuVisible}
-                  onDismiss={() => setSexMenuVisible(false)}
-                  anchor={
-                    <Button
-                      mode="outlined"
-                      onPress={() => setSexMenuVisible(true)}
-                      style={{ marginBottom: 6 }}
-                      icon={
-                        data.metabolismSex === "male"
-                          ? "gender-male"
-                          : "gender-female"
-                      }
-                    >
-                      {data.metabolismSex === "male" ? "Male" : "Female"}
-                    </Button>
-                  }
-                >
-                  <Menu.Item
+                <View style={styles.sexRow}>
+                  <Pressable
                     onPress={() => {
                       Vibration.vibrate(20);
                       setData((prev) => ({ ...prev, metabolismSex: "male" }));
-                      setSexMenuVisible(false);
                     }}
-                    title="Male"
-                    leadingIcon="gender-male"
-                  />
-                  <Menu.Item
+                    style={[
+                      styles.sexOption,
+                      {
+                        backgroundColor:
+                          data.metabolismSex === "male"
+                            ? theme.colors.primaryContainer
+                            : theme.colors.elevation.level1,
+                        borderColor:
+                          data.metabolismSex === "male"
+                            ? theme.colors.primary
+                            : theme.colors.outlineVariant,
+                      },
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name="gender-male"
+                      size={20}
+                      color={
+                        data.metabolismSex === "male"
+                          ? theme.colors.onPrimaryContainer
+                          : theme.colors.onSurfaceVariant
+                      }
+                    />
+                    <Text
+                      variant="labelMedium"
+                      style={{
+                        color:
+                          data.metabolismSex === "male"
+                            ? theme.colors.onPrimaryContainer
+                            : theme.colors.onSurfaceVariant,
+                        fontWeight: "700",
+                      }}
+                    >
+                      Male
+                    </Text>
+                  </Pressable>
+                  <Pressable
                     onPress={() => {
                       Vibration.vibrate(20);
                       setData((prev) => ({ ...prev, metabolismSex: "female" }));
-                      setSexMenuVisible(false);
                     }}
-                    title="Female"
-                    leadingIcon="gender-female"
-                  />
-                </Menu>
+                    style={[
+                      styles.sexOption,
+                      {
+                        backgroundColor:
+                          data.metabolismSex === "female"
+                            ? theme.colors.primaryContainer
+                            : theme.colors.elevation.level1,
+                        borderColor:
+                          data.metabolismSex === "female"
+                            ? theme.colors.primary
+                            : theme.colors.outlineVariant,
+                      },
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name="gender-female"
+                      size={20}
+                      color={
+                        data.metabolismSex === "female"
+                          ? theme.colors.onPrimaryContainer
+                          : theme.colors.onSurfaceVariant
+                      }
+                    />
+                    <Text
+                      variant="labelMedium"
+                      style={{
+                        color:
+                          data.metabolismSex === "female"
+                            ? theme.colors.onPrimaryContainer
+                            : theme.colors.onSurfaceVariant,
+                        fontWeight: "700",
+                      }}
+                    >
+                      Female
+                    </Text>
+                  </Pressable>
+                </View>
 
                 <Text
                   variant="bodySmall"
@@ -894,75 +941,63 @@ export default function GoalsScreen() {
                 >
                   Activity Level
                 </Text>
-                <Menu
-                  visible={activityMenuVisible}
-                  onDismiss={() => setActivityMenuVisible(false)}
-                  anchor={
-                    <Button
-                      mode="outlined"
-                      onPress={() => setActivityMenuVisible(true)}
-                      style={{ marginBottom: 6 }}
-                      icon={getActivityIcon(data.activityLevel)}
-                    >
-                      {getActivityLabel(data.activityLevel)}
-                    </Button>
-                  }
-                >
-                  <Menu.Item
-                    onPress={() => {
-                      Vibration.vibrate(20);
-                      setData((prev) => ({
-                        ...prev,
-                        activityLevel: "sedentary",
-                      }));
-                      setActivityMenuVisible(false);
-                    }}
-                    title="Sedentary"
-                    leadingIcon="sofa"
-                  />
-                  <Menu.Item
-                    onPress={() => {
-                      Vibration.vibrate(20);
-                      setData((prev) => ({ ...prev, activityLevel: "light" }));
-                      setActivityMenuVisible(false);
-                    }}
-                    title="Light"
-                    leadingIcon="walk"
-                  />
-                  <Menu.Item
-                    onPress={() => {
-                      Vibration.vibrate(20);
-                      setData((prev) => ({
-                        ...prev,
-                        activityLevel: "moderate",
-                      }));
-                      setActivityMenuVisible(false);
-                    }}
-                    title="Moderate"
-                    leadingIcon="run"
-                  />
-                  <Menu.Item
-                    onPress={() => {
-                      Vibration.vibrate(20);
-                      setData((prev) => ({ ...prev, activityLevel: "heavy" }));
-                      setActivityMenuVisible(false);
-                    }}
-                    title="Heavy"
-                    leadingIcon="dumbbell"
-                  />
-                  <Menu.Item
-                    onPress={() => {
-                      Vibration.vibrate(20);
-                      setData((prev) => ({
-                        ...prev,
-                        activityLevel: "athlete",
-                      }));
-                      setActivityMenuVisible(false);
-                    }}
-                    title="Athlete"
-                    leadingIcon="arm-flex"
-                  />
-                </Menu>
+                <View style={styles.activityRow}>
+                  {(
+                    [
+                      "sedentary",
+                      "light",
+                      "moderate",
+                      "heavy",
+                      "athlete",
+                    ] as const
+                  ).map((level) => {
+                    const isSelected = data.activityLevel === level;
+                    return (
+                      <Pressable
+                        key={level}
+                        onPress={() => {
+                          Vibration.vibrate(20);
+                          setData((prev) => ({
+                            ...prev,
+                            activityLevel: level,
+                          }));
+                        }}
+                        style={[
+                          styles.activityChip,
+                          {
+                            backgroundColor: isSelected
+                              ? theme.colors.primaryContainer
+                              : theme.colors.elevation.level1,
+                            borderColor: isSelected
+                              ? theme.colors.primary
+                              : theme.colors.outlineVariant,
+                          },
+                        ]}
+                      >
+                        <MaterialCommunityIcons
+                          name={getActivityIcon(level)}
+                          size={16}
+                          color={
+                            isSelected
+                              ? theme.colors.onPrimaryContainer
+                              : theme.colors.onSurfaceVariant
+                          }
+                        />
+                        <Text
+                          variant="labelSmall"
+                          style={{
+                            color: isSelected
+                              ? theme.colors.onPrimaryContainer
+                              : theme.colors.onSurfaceVariant,
+                            fontWeight: isSelected ? "700" : "500",
+                          }}
+                        >
+                          {getActivityLabel(level)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
 
                 <View style={styles.goalModeLabelRow}>
                   <Text
@@ -974,12 +1009,6 @@ export default function GoalsScreen() {
                   >
                     Goal Mode
                   </Text>
-                  <MaterialCommunityIcons
-                    name="hand-okay"
-                    size={14}
-                    color={theme.colors.onSurfaceVariant}
-                    style={{ marginTop: 6 }}
-                  />
                 </View>
 
                 <View style={styles.goalModeRow}>
@@ -1546,6 +1575,36 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   supportingText: {},
+  sexRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 6,
+  },
+  sexOption: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  activityRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 6,
+  },
+  activityChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
   goalModeLabelRow: {
     flexDirection: "row",
     alignItems: "center",
