@@ -456,11 +456,15 @@ const QuickLogCard = memo(function QuickLogCard({
         </View>
         <Pressable
           onPress={() => onSetMacrosExpanded(!isMacrosExpanded)}
-          style={[
+          style={({ pressed }) => [
             styles.macroSectionHeader,
             {
-              backgroundColor: theme.colors.elevation.level1,
-              borderColor: theme.colors.outlineVariant,
+              backgroundColor: pressed
+                ? theme.colors.elevation.level3
+                : theme.colors.elevation.level1,
+              borderColor: pressed
+                ? theme.colors.primary
+                : theme.colors.outlineVariant,
             },
           ]}
         >
@@ -2000,11 +2004,15 @@ export default function LogScreen() {
             />
             <Pressable
               onPress={() => setShowEditMacros((prev) => !prev)}
-              style={[
+              style={({ pressed }) => [
                 styles.macroSectionHeader,
                 {
-                  backgroundColor: theme.colors.elevation.level1,
-                  borderColor: theme.colors.outlineVariant,
+                  backgroundColor: pressed
+                    ? theme.colors.elevation.level3
+                    : theme.colors.elevation.level1,
+                  borderColor: pressed
+                    ? theme.colors.primary
+                    : theme.colors.outlineVariant,
                 },
               ]}
             >
