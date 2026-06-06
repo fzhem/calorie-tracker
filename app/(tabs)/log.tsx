@@ -2137,7 +2137,7 @@ export default function LogScreen() {
       <Modal
         visible={macroModalVisible}
         transparent
-        animationType="fade"
+        animationType="none"
         onRequestClose={() => setMacroModalVisible(false)}
       >
         <Pressable
