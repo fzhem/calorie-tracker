@@ -1694,7 +1694,11 @@ export default function LogScreen() {
               <Button
                 mode="text"
                 compact
-                icon="sort-clock-descending"
+                icon={
+                  sortMode === "newest"
+                    ? "sort-clock-descending"
+                    : "sort-clock-ascending"
+                }
                 style={styles.entriesSortButton}
                 contentStyle={styles.entriesSortButtonContent}
                 labelStyle={styles.entriesSortButtonLabel}
@@ -2400,7 +2404,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   entriesHeaderRight: { marginRight: 8 },
-  entriesSortButton: { marginVertical: 0 },
+  entriesSortButton: { marginVertical: 0, minWidth: 120 },
   entriesSortButtonContent: { paddingHorizontal: 2 },
   entriesSortButtonLabel: { marginHorizontal: 4 },
   entriesList: { gap: 8 },
