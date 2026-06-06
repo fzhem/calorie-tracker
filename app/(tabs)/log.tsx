@@ -1597,103 +1597,102 @@ export default function LogScreen() {
                   Vibration.vibrate(10);
                   setMacroModalVisible(true);
                 }}
+                style={({ pressed }) => [
+                  styles.macroSummaryBar,
+                  {
+                    backgroundColor: pressed
+                      ? theme.colors.elevation.level3
+                      : theme.colors.elevation.level1,
+                    borderColor: pressed
+                      ? theme.colors.primary
+                      : theme.colors.outlineVariant,
+                  },
+                ]}
               >
-                <View
-                  style={[
-                    styles.macroSummaryBar,
-                    {
-                      backgroundColor: theme.colors.elevation.level1,
-                      borderColor: theme.colors.outlineVariant,
-                    },
-                  ]}
-                >
-                  <View style={styles.macroSummaryContent}>
-                    {proteinGoal !== null ? (
-                      <View
-                        style={[
-                          styles.macroToken,
-                          { backgroundColor: macroPalette.protein.background },
-                        ]}
-                      >
-                        <Text
-                          variant="labelSmall"
-                          style={{
-                            color: macroPalette.protein.color,
-                            fontWeight: "700",
-                          }}
-                        >
-                          P {Math.round(todayTotalProtein)}/
-                          {Math.round(proteinGoal)}
-                        </Text>
-                      </View>
-                    ) : null}
-                    {carbsGoal !== null ? (
-                      <View
-                        style={[
-                          styles.macroToken,
-                          { backgroundColor: macroPalette.carbs.background },
-                        ]}
-                      >
-                        <Text
-                          variant="labelSmall"
-                          style={{
-                            color: macroPalette.carbs.color,
-                            fontWeight: "700",
-                          }}
-                        >
-                          C {Math.round(todayTotalCarbs)}/
-                          {Math.round(carbsGoal)}
-                        </Text>
-                      </View>
-                    ) : null}
-                    {fatGoal !== null ? (
-                      <View
-                        style={[
-                          styles.macroToken,
-                          { backgroundColor: macroPalette.fat.background },
-                        ]}
-                      >
-                        <Text
-                          variant="labelSmall"
-                          style={{
-                            color: macroPalette.fat.color,
-                            fontWeight: "700",
-                          }}
-                        >
-                          F {Math.round(todayTotalFat)}/{Math.round(fatGoal)}
-                        </Text>
-                      </View>
-                    ) : null}
+                <View style={styles.macroSummaryContent}>
+                  {proteinGoal !== null ? (
                     <View
                       style={[
                         styles.macroToken,
-                        { backgroundColor: macroPalette.fibre.background },
+                        { backgroundColor: macroPalette.protein.background },
                       ]}
                     >
                       <Text
                         variant="labelSmall"
                         style={{
-                          color: macroPalette.fibre.color,
+                          color: macroPalette.protein.color,
                           fontWeight: "700",
                         }}
                       >
-                        Fib {Math.round(todayTotalFibre)}/
-                        {Math.round(fibreGoal)}
+                        P {Math.round(todayTotalProtein)}/
+                        {Math.round(proteinGoal)}
                       </Text>
                     </View>
+                  ) : null}
+                  {carbsGoal !== null ? (
+                    <View
+                      style={[
+                        styles.macroToken,
+                        { backgroundColor: macroPalette.carbs.background },
+                      ]}
+                    >
+                      <Text
+                        variant="labelSmall"
+                        style={{
+                          color: macroPalette.carbs.color,
+                          fontWeight: "700",
+                        }}
+                      >
+                        C {Math.round(todayTotalCarbs)}/{Math.round(carbsGoal)}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {fatGoal !== null ? (
+                    <View
+                      style={[
+                        styles.macroToken,
+                        { backgroundColor: macroPalette.fat.background },
+                      ]}
+                    >
+                      <Text
+                        variant="labelSmall"
+                        style={{
+                          color: macroPalette.fat.color,
+                          fontWeight: "700",
+                        }}
+                      >
+                        F {Math.round(todayTotalFat)}/{Math.round(fatGoal)}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View
+                    style={[
+                      styles.macroToken,
+                      { backgroundColor: macroPalette.fibre.background },
+                    ]}
+                  >
+                    <Text
+                      variant="labelSmall"
+                      style={{
+                        color: macroPalette.fibre.color,
+                        fontWeight: "700",
+                      }}
+                    >
+                      Fib {Math.round(todayTotalFibre)}/{Math.round(fibreGoal)}
+                    </Text>
                   </View>
-                  <View style={styles.macroSummaryMeta}>
-                    <MaterialCommunityIcons
-                      name={macroGoalModeIcon}
-                      size={16}
-                      color={theme.colors.onSurfaceVariant}
-                    />
-                    <MaterialCommunityIcons
-                      name="chevron-down"
-                      size={16}
-                      color={theme.colors.onSurfaceVariant}
-                    />
-                  </View>
+                </View>
+                <View style={styles.macroSummaryMeta}>
+                  <MaterialCommunityIcons
+                    name={macroGoalModeIcon}
+                    size={16}
+                    color={theme.colors.onSurfaceVariant}
+                  />
+                  <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={16}
+                    color={theme.colors.onSurfaceVariant}
+                  />
                 </View>
               </Pressable>
             ) : null}
