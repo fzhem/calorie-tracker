@@ -17,6 +17,7 @@ import {
   Chip,
   Menu,
   SegmentedButtons,
+  Snackbar,
   Text,
   TextInput,
   useTheme,
@@ -199,6 +200,7 @@ export default function GoalsScreen() {
   const [activityMenuVisible, setActivityMenuVisible] = useState(false);
   const [weightUnlocked, setWeightUnlocked] = useState(false);
   const [goalsTab, setGoalsTab] = useState<"profile" | "overrides">("profile");
+  const [savedSnackbarVisible, setSavedSnackbarVisible] = useState(false);
   const m3Alert = useM3Alert();
   const hasCompletedInitialLoad = useRef(false);
 
@@ -602,6 +604,7 @@ export default function GoalsScreen() {
       setHeightFeetInput("");
       setHeightInchesInput("");
     }
+    setSavedSnackbarVisible(true);
     Vibration.vibrate(18);
   };
 
@@ -703,7 +706,7 @@ export default function GoalsScreen() {
               }
               buttons={[
                 { value: "profile", label: "Profile", icon: "account" },
-                { value: "overrides", label: "Overrides", icon: "tune" },
+                { value: "overrides", label: "Custom Goals", icon: "tune" },
               ]}
               style={[
                 styles.segmentedControl,
@@ -1201,8 +1204,8 @@ export default function GoalsScreen() {
                     { color: theme.colors.onSurfaceVariant },
                   ]}
                 >
-                  Use overrides if profile-based metabolism is incomplete or if
-                  you want custom macro targets.
+                  Set custom calorie targets and macros if profile-based
+                  metabolism is incomplete.
                 </Text>
                 <TextInput
                   label="Override calorie target"
@@ -1485,6 +1488,16 @@ export default function GoalsScreen() {
         </Pressable>
       </Modal>
       {m3Alert.alertDialog}
+      <Snackbar
+        visible={savedSnackbarVisible}
+        onDismiss={() => setSavedSnackbarVisible(false)}
+        duration={2000}
+        style={{ backgroundColor: theme.colors.primaryContainer }}
+      >
+        <Text style={{ color: theme.colors.onPrimaryContainer }}>
+          Settings saved
+        </Text>
+      </Snackbar>
     </View>
   );
 }
