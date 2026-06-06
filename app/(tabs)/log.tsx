@@ -598,6 +598,7 @@ const QuickLogCard = memo(function QuickLogCard({
                           <IconButton
                             icon={isFavourite ? "star" : "star-outline"}
                             size={18}
+                            iconColor={theme.colors.tertiary}
                             onPress={() => onToggleFavouriteQuickAdd(item)}
                             accessibilityLabel={
                               isFavourite ? "Remove favourite" : "Add favourite"
@@ -1333,6 +1334,7 @@ export default function LogScreen() {
             <IconButton
               icon={isEntryFavourite ? "star" : "star-outline"}
               size={18}
+              iconColor={theme.colors.tertiary}
               style={styles.entryActionIcon}
               onPress={() => toggleFavouriteQuickAdd(entryAsQuickAdd)}
               accessibilityLabel={
