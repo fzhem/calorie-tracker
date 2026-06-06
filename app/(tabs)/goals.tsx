@@ -73,10 +73,10 @@ function parseNumberInput(value: string) {
 }
 
 function getActivityLabel(activityLevel: StoredData["activityLevel"]) {
-  if (activityLevel === "sedentary") return "Sedentary";
+  if (activityLevel === "sedentary") return "Sed";
   if (activityLevel === "light") return "Light";
-  if (activityLevel === "moderate") return "Moderate";
-  if (activityLevel === "athlete") return "Athlete";
+  if (activityLevel === "moderate") return "Mod";
+  if (activityLevel === "athlete") return "Athl";
   return "Heavy";
 }
 
@@ -1660,9 +1660,9 @@ const styles = StyleSheet.create({
   activityChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    gap: 3,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
     borderRadius: 10,
     borderWidth: 1,
   },
