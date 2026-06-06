@@ -2106,7 +2106,11 @@ export default function SettingsScreen() {
                 {downloadedModels.length ? (
                   <View style={styles.downloadedList}>
                     {downloadedModels.map((model) => {
-                      const isActive = data.modelPath === model.uri;
+                      const isEstimate =
+                        (data.estimateModelPath ?? data.modelPath) ===
+                        model.uri;
+                      const isScan =
+                        (data.scanModelPath ?? data.modelPath) === model.uri;
                       const inMemory = isInMemory(model.uri);
                       const savedConfig = data.perModelConfig?.[model.uri];
                       const hasCustomConfig =
@@ -2133,11 +2137,12 @@ export default function SettingsScreen() {
                           style={[
                             styles.downloadedItem,
                             {
-                              borderColor: isActive
-                                ? theme.colors.primary
-                                : isBlocked
-                                  ? theme.colors.error
-                                  : theme.colors.outlineVariant,
+                              borderColor:
+                                isEstimate || isScan
+                                  ? theme.colors.primary
+                                  : isBlocked
+                                    ? theme.colors.error
+                                    : theme.colors.outlineVariant,
                               backgroundColor: theme.colors.elevation.level2,
                             },
                           ]}
@@ -2220,6 +2225,36 @@ export default function SettingsScreen() {
                           >
                             {formatBytes(model.size)}
                           </Text>
+                          {(isEstimate || isScan) && (
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                gap: 4,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              {isEstimate && (
+                                <Chip
+                                  compact
+                                  mode="outlined"
+                                  icon="robot"
+                                  textStyle={{ fontSize: 11 }}
+                                >
+                                  Estimate
+                                </Chip>
+                              )}
+                              {isScan && (
+                                <Chip
+                                  compact
+                                  mode="outlined"
+                                  icon="camera-outline"
+                                  textStyle={{ fontSize: 11 }}
+                                >
+                                  Scan
+                                </Chip>
+                              )}
+                            </View>
+                          )}
                           {memoryCheck && (isBlocked || isWarning) && (
                             <Text
                               variant="labelSmall"
@@ -2238,25 +2273,37 @@ export default function SettingsScreen() {
                           )}
                           <View style={styles.downloadedItemActions}>
                             <Button
-                              mode={isActive ? "contained" : "outlined"}
-                              onPress={() => setActiveModel(model.uri)}
+                              mode={isEstimate ? "contained" : "outlined"}
+                              compact
+                              onPress={() => {
+                                clearModelCache();
+                                setData((prev) => ({
+                                  ...prev,
+                                  estimateModelPath: model.uri,
+                                }));
+                              }}
                               disabled={isBlocked}
-                              icon={isBlocked ? "lock" : undefined}
+                              icon={isBlocked ? "lock" : "robot"}
+                              style={{ flex: 1 }}
                             >
-                              {isActive
-                                ? "In use"
-                                : isBlocked
-                                  ? "Blocked"
-                                  : "Use"}
+                              Estimate
                             </Button>
-                            {inMemory ? (
-                              <Button
-                                mode="outlined"
-                                onPress={() => clearModelCache()}
-                              >
-                                Unload
-                              </Button>
-                            ) : null}
+                            <Button
+                              mode={isScan ? "contained" : "outlined"}
+                              compact
+                              onPress={() => {
+                                clearModelCache();
+                                setData((prev) => ({
+                                  ...prev,
+                                  scanModelPath: model.uri,
+                                }));
+                              }}
+                              disabled={isBlocked}
+                              icon={isBlocked ? "lock" : "camera-outline"}
+                              style={{ flex: 1 }}
+                            >
+                              Scan
+                            </Button>
                             <Button
                               mode="text"
                               compact

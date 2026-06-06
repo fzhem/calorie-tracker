@@ -59,6 +59,10 @@ export type BodyFatPoint = {
 export type StoredData = {
   favouriteQuickAdds: FavouriteQuickAdd[];
   modelPath: string | null;
+  /** Model used for text-only estimate-meal feature. Falls back to modelPath. */
+  estimateModelPath: string | null;
+  /** Model used for multimodal scan-label feature. Falls back to modelPath. */
+  scanModelPath: string | null;
   systemPrompt: string;
   quickLogMacrosExpanded: boolean;
   baseTarget: number;
@@ -110,6 +114,8 @@ export const STORAGE_KEY = CONST_STORAGE_KEY;
 export const DEFAULT_DATA: StoredData = {
   favouriteQuickAdds: [],
   modelPath: null,
+  estimateModelPath: null,
+  scanModelPath: null,
   systemPrompt: `You are a nutrition assistant.
 
   Return JSON only.

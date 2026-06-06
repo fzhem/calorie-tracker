@@ -11,6 +11,15 @@ import {
 } from "react";
 import { getLocalDateKey, parseAppDate, toLocalISOString } from "@/lib/dateKey";
 import {
+  NutritionLabelScanner,
+  type ScannedLabelData,
+} from "@/ui/nutritionLabelScanner";
+import {
+  ensureLabelModelLoaded,
+  parseNutritionLabelImage,
+  scaleScannedData,
+} from "@/lib/nutritionLabelParser";
+import {
   AppState,
   Modal,
   Platform,
@@ -44,7 +53,6 @@ import {
 import {
   clearModelCache,
   getModelInstance,
-  setModelCache,
   subscribeModelCache,
   getModelKeySnapshot,
 } from "@/lib/modelCache";
@@ -80,8 +88,8 @@ import {
   getLatestWeightBySource,
 } from "@/db/index";
 import { makeMealId } from "@/db/helpers";
-import { createLLM, type LiteRTLMInstance } from "react-native-litert-lm";
 import { invalidateMealCaches } from "@/lib/queryCache";
+import { ensureModelLoaded } from "@/lib/modelLoader";
 
 export type NutritionResult = {
   calories: number;
@@ -219,6 +227,7 @@ type QuickLogCardProps = {
   onQuickAddMeal: (item: QuickAddItem) => void;
   onToggleFavouriteQuickAdd: (item: QuickAddItem) => void;
   onOpenLlmEstimator: () => void;
+  onOpenLabelScanner: () => void;
   data: StoredData;
   isModelBlocked?: boolean;
   isModelWarning?: boolean;
@@ -235,6 +244,7 @@ const QuickLogCard = memo(function QuickLogCard({
   onQuickAddMeal,
   onToggleFavouriteQuickAdd,
   onOpenLlmEstimator,
+  onOpenLabelScanner,
   data,
   isModelBlocked,
   isModelWarning,
@@ -409,6 +419,13 @@ const QuickLogCard = memo(function QuickLogCard({
                 </Text>
               </View>
             )}
+            <IconButton
+              mode="outlined"
+              icon="camera-outline"
+              iconColor={theme.colors.primary}
+              onPress={onOpenLabelScanner}
+              style={styles.quickLogLlmButton}
+            />
             <Button
               mode={isModelBlocked ? "contained-tonal" : "outlined"}
               compact
@@ -753,24 +770,28 @@ export default function LogScreen() {
     beginLlmStage("estimating");
     setLlmError("");
     setLlmResult(null);
-    if (!modelPath) {
+
+    // Resolve which model to use for estimate-meal (text-only)
+    const resolveModelPath =
+      data.estimateModelPath ?? data.modelPath ?? modelPath;
+    if (!resolveModelPath) {
       setLlmError("No model file selected in settings.");
       setLlmLoading(false);
       setLlmStage("idle");
       setLlmStageStartedAt(null);
       return;
     }
-    // Remove 'file:///' prefix if present
-    let cleanedModelPath = modelPath.startsWith("file:///")
-      ? modelPath.replace("file:///", "/")
-      : modelPath;
+    const resolvedCleanedPath = resolveModelPath.startsWith("file:///")
+      ? resolveModelPath.replace("file:///", "/")
+      : resolveModelPath;
 
     // Check if model file exists before loading
+    // NOTE: File() expects a file:/// URI, not a plain fs path
     try {
       const { File } = await import("expo-file-system");
-      const file = new File(modelPath);
-      if (!file.exists) {
-        const fileName = file.uri.split("/").pop();
+      const fileForCheck = new File(resolveModelPath);
+      if (!fileForCheck.exists) {
+        const fileName = fileForCheck.uri.split("/").pop();
         setLlmError(
           `Model file not found: ${fileName}. Please select or download a model in settings.`,
         );
@@ -780,7 +801,6 @@ export default function LogScreen() {
         return;
       }
     } catch (e) {
-      // If file check fails, fallback to old error
       setLlmError("Could not check model file existence.");
       setLlmLoading(false);
       setLlmStage("idle");
@@ -789,32 +809,24 @@ export default function LogScreen() {
     }
 
     const modelConfig =
-      data.perModelConfig?.[cleanedModelPath] ?? DEFAULT_MODEL_CONFIG;
-    const activeModelKey = `${cleanedModelPath}::${systemPrompt}::${JSON.stringify(modelConfig)}`;
-    let model: LiteRTLMInstance | null = getModelInstance();
-    if (!model || loadedModelKey !== activeModelKey) {
-      try {
-        beginLlmStage("loading-model");
-        model = createLLM({ enableMemoryTracking: true });
-        await model.loadModel(cleanedModelPath, {
-          systemPrompt: systemPrompt,
-          backend: "cpu",
-          maxTokens: modelConfig.maxTokens,
-          temperature: modelConfig.temperature,
-          topK: modelConfig.topK,
-          topP: modelConfig.topP,
-          enableSpeculativeDecoding:
-            modelConfig.enableSpeculativeDecoding ?? false,
-        });
-        setModelCache(model, activeModelKey);
-      } catch (err) {
-        setLlmError("Failed to load model: " + err);
-        setLlmLoading(false);
-        setLlmStage("idle");
-        setLlmStageStartedAt(null);
-        return;
-      }
+      data.perModelConfig?.[resolvedCleanedPath] ?? DEFAULT_MODEL_CONFIG;
+    try {
+      beginLlmStage("loading-model");
+      const model = await ensureModelLoaded({
+        modelPath: resolvedCleanedPath,
+        systemPrompt,
+        modelConfig,
+      });
+      // model is set — continue below
+    } catch (err) {
+      setLlmError("Failed to load model: " + err);
+      setLlmLoading(false);
+      setLlmStage("idle");
+      setLlmStageStartedAt(null);
+      return;
     }
+    // Re-acquire after loading (already cached by ensureModelLoaded)
+    const model = getModelInstance()!;
     try {
       const response = await model.sendMessage(llmPrompt);
       beginLlmStage("estimating");
@@ -844,6 +856,7 @@ export default function LogScreen() {
   const [editDraft, setEditDraft] = useState<EditEntryDraft | null>(null);
   const [showEditMacros, setShowEditMacros] = useState(false);
   const [llmModalVisible, setLlmModalVisible] = useState(false);
+  const [labelScannerVisible, setLabelScannerVisible] = useState(false);
 
   useEffect(() => {
     loadStoredData()
@@ -1485,6 +1498,43 @@ export default function LogScreen() {
     memoryCheck?.usagePercent,
   ]);
 
+  const parseLabelImage = useCallback(
+    async (imageUri: string): Promise<ScannedLabelData> => {
+      // Resolve which model to use for scan-label (multimodal)
+      const scanModelPath = data.scanModelPath ?? modelPath;
+      const model = await ensureLabelModelLoaded({
+        deviceArchitecture,
+        modelPath: scanModelPath,
+        perModelConfig: data.perModelConfig ?? {},
+      });
+
+      return parseNutritionLabelImage(model, imageUri);
+    },
+    [deviceArchitecture, modelPath, data.perModelConfig, data.scanModelPath],
+  );
+
+  const handleLabelScanned = useCallback(
+    (labelData: ScannedLabelData, portions: number) => {
+      const scaled = scaleScannedData(labelData, portions);
+      addMeal(scaled);
+      setLabelScannerVisible(false);
+      Vibration.vibrate(12);
+      m3Alert.alert("Success", `Added ${labelData.title} to your log.`);
+    },
+    [addMeal],
+  );
+
+  const handleOpenLabelScanner = useCallback(() => {
+    if (!modelPath) {
+      ToastAndroid.show(
+        "No model downloaded. Please download a model in Settings first.",
+        ToastAndroid.LONG,
+      );
+      return;
+    }
+    setLabelScannerVisible(true);
+  }, [modelPath]);
+
   return (
     <View
       style={[
@@ -1679,6 +1729,7 @@ export default function LogScreen() {
           onQuickAddMeal={quickAddMeal}
           onToggleFavouriteQuickAdd={toggleFavouriteQuickAdd}
           onOpenLlmEstimator={handleOpenLlmEstimator}
+          onOpenLabelScanner={handleOpenLabelScanner}
           data={data}
           isModelBlocked={isModelBlocked}
           isModelWarning={isModelWarning}
@@ -2246,6 +2297,14 @@ export default function LogScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <NutritionLabelScanner
+        visible={labelScannerVisible}
+        onClose={() => setLabelScannerVisible(false)}
+        onLabelScanned={handleLabelScanned}
+        parseLabelImage={parseLabelImage}
+      />
+
       {m3Alert.alertDialog}
     </View>
   );
