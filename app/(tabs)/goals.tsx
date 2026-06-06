@@ -994,16 +994,27 @@ export default function GoalsScreen() {
                     >
                       Cut
                     </Button>
-                    <MaterialCommunityIcons
-                      name="tune"
-                      size={18}
-                      color={
-                        data.goalPhase === "cut"
-                          ? theme.colors.onPrimary
-                          : theme.colors.primary
-                      }
-                      style={styles.goalModeConfigIcon}
-                    />
+                    <View
+                      style={[
+                        styles.goalModeConfigBadge,
+                        {
+                          backgroundColor:
+                            data.goalPhase === "cut"
+                              ? theme.colors.onPrimary
+                              : theme.colors.secondaryContainer,
+                        },
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name="tune"
+                        size={14}
+                        color={
+                          data.goalPhase === "cut"
+                            ? theme.colors.primary
+                            : theme.colors.onSecondaryContainer
+                        }
+                      />
+                    </View>
                   </View>
                   <Button
                     mode={
@@ -1029,18 +1040,41 @@ export default function GoalsScreen() {
                     >
                       Bulk
                     </Button>
-                    <MaterialCommunityIcons
-                      name="tune"
-                      size={18}
-                      color={
-                        data.goalPhase === "bulk"
-                          ? theme.colors.onPrimary
-                          : theme.colors.primary
-                      }
-                      style={styles.goalModeConfigIcon}
-                    />
+                    <View
+                      style={[
+                        styles.goalModeConfigBadge,
+                        {
+                          backgroundColor:
+                            data.goalPhase === "bulk"
+                              ? theme.colors.onPrimary
+                              : theme.colors.secondaryContainer,
+                        },
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name="tune"
+                        size={14}
+                        color={
+                          data.goalPhase === "bulk"
+                            ? theme.colors.primary
+                            : theme.colors.onSecondaryContainer
+                        }
+                      />
+                    </View>
                   </View>
                 </View>
+                <Text
+                  variant="labelSmall"
+                  style={{
+                    color: theme.colors.onSurfaceVariant,
+                    marginTop: 2,
+                    marginBottom: 4,
+                    textAlign: "center",
+                    opacity: 0.7,
+                  }}
+                >
+                  Hold Cut or Bulk for adjustment settings
+                </Text>
 
                 <Text variant="labelMedium" style={{ marginTop: 3 }}>
                   Weight Tracking
@@ -1527,6 +1561,16 @@ const styles = StyleSheet.create({
   },
   goalModeButton: {
     flex: 1,
+  },
+  goalModeConfigBadge: {
+    position: "absolute",
+    bottom: -4,
+    right: -4,
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
   goalModeConfigIcon: {
     position: "absolute",
