@@ -1526,12 +1526,6 @@ export default function LogScreen() {
           ]}
           elevation={3}
         >
-          <Text
-            variant="labelLarge"
-            style={[styles.eyebrow, { color: theme.colors.primary }]}
-          >
-            Calorie Logger
-          </Text>
           <View style={styles.goalBadgeRow}>
             <Chip
               icon={goalModeIcon}
@@ -2342,8 +2336,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: "hidden",
   },
-  heroCard: { borderRadius: 24, padding: 16, gap: 14 },
-  eyebrow: { textTransform: "uppercase", letterSpacing: 1 },
+  heroCard: { borderRadius: 24, padding: 16, gap: 4 },
   progressSection: { gap: 8 },
   progressRow: {
     flexDirection: "row",
@@ -2422,8 +2415,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginTop: 6,
-    marginBottom: 4,
     flexWrap: "wrap",
   },
   formArea: { gap: 12 },
