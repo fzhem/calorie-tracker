@@ -882,6 +882,16 @@ export default function LogScreen() {
       .catch(() => {});
   }, [isReady]);
 
+  // Load latest health-connect body fat for calorie target calculation
+  useEffect(() => {
+    if (!isReady) return;
+    getLatestBodyFatBySource("health-connect")
+      .then((point) =>
+        setLatestHCBodyFatPercent(point?.bodyFatPercentage ?? null),
+      )
+      .catch(() => {});
+  }, [isReady]);
+
   useFocusEffect(
     useCallback(() => {
       if (!hasCompletedInitialLoad.current) return;
@@ -1100,7 +1110,7 @@ export default function LogScreen() {
       ? theme.colors.onErrorContainer
       : data.goalPhase === "bulk"
         ? theme.colors.onPrimaryContainer
-        : theme.colors.onSecondaryContainer;
+        : theme.colors.secondaryContainer;
   const goalModeDetail =
     data.goalPhase === "maintain"
       ? "Maintenance calories"
@@ -2000,6 +2010,7 @@ export default function LogScreen() {
                 )
               }
               mode="outlined"
+              theme={QUICK_LOG_INPUT_THEME}
             />
             <TextInput
               label="Calories (kcal)"
@@ -2011,6 +2022,7 @@ export default function LogScreen() {
               }
               keyboardType="numeric"
               mode="outlined"
+              theme={QUICK_LOG_INPUT_THEME}
             />
             <Pressable
               onPress={() => setShowEditMacros((prev) => !prev)}
@@ -2041,7 +2053,9 @@ export default function LogScreen() {
                 <Chip
                   compact
                   mode="flat"
-                  style={{ backgroundColor: theme.colors.surfaceVariant }}
+                  style={{
+                    backgroundColor: theme.colors.surfaceVariant,
+                  }}
                   textStyle={{ color: theme.colors.onSurfaceVariant }}
                 >
                   Optional
