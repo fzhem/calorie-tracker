@@ -14,7 +14,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { BarChart, LineChart } from "react-native-chart-kit";
+import { BarChart } from "react-native-gifted-charts";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Card,
@@ -23,7 +23,7 @@ import {
   Button,
   useTheme,
 } from "react-native-paper";
-import Svg, { G, Line, Rect, Text as SvgText, Circle } from "react-native-svg";
+import Svg, { Line, Rect, Text as SvgText, Circle } from "react-native-svg";
 import { getAppSegmentedButtonsTheme } from "@/ui/segmentedButtons";
 
 import { getAdjustedCalorieTarget } from "@/domain/metabolism";
@@ -35,13 +35,14 @@ import {
 import type { StoredData } from "@/data/storage";
 import type { Weight, BodyFat, Meal } from "@/db/index";
 
-import {
-  GRAPH_MAX_DAYS_SHORT,
-  GRAPH_MAX_DAYS_MEDIUM,
-  GRAPH_MAX_DAYS_LONG,
-} from "@/constants";
+import { GRAPH_MAX_DAYS_LONG } from "@/constants";
 
 import { getMealsSince, getWeightSeries, getBodyFatSeries } from "@/db/index";
+import WeightBodyFatChart, {
+  buildTrendSeries,
+  type AggregatedPoint,
+  type TrendPoint,
+} from "@/ui/weightBodyFatChart";
 import {
   CACHE_TAGS,
   CACHE_TTL_MS,
@@ -53,7 +54,6 @@ import { getLocalDateKey, parseAppDate, toLocalISOString } from "@/lib/dateKey";
 import { calculateBodyFatTrend, calculateWeightTrend } from "@/lib/trend";
 
 const WEIGHT_CHART_HEIGHT = 220;
-const WEIGHT_GUIDE_BOTTOM = WEIGHT_CHART_HEIGHT - 40;
 const GRAPH_FOCUS_REFRESH_INTERVAL_MS = 30_000;
 
 function addDays(date: Date, days: number) {
@@ -69,13 +69,6 @@ function daysAgo(n: number): string {
   return toLocalISOString(d);
 }
 
-function formatDayLabel(dateKey: string) {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
-    weekday: "short",
-  });
-}
-
 function formatShortDay(date: Date) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
@@ -88,79 +81,8 @@ function formatCalorieLabel(dateKey: string, days: number) {
   return formatShortDay(d);
 }
 
-function formatWeightLabel(dateKey: string, days: number) {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  const d = new Date(year, month - 1, day);
-  if (days <= 7) return d.toLocaleDateString(undefined, { weekday: "short" });
-  if (days <= 31) return d.toLocaleDateString(undefined, { day: "numeric" });
-  if (days <= 90)
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
-}
-
-type WeightTrendPoint = {
-  recordedAt: string;
-  weightKg: number;
-  axisLabel: string;
-  bubbleLabel: string;
-  isAverage: boolean;
-};
-
 function toStartOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function toStartOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
-function toEndOfDay(date: Date) {
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-    23,
-    59,
-    59,
-    999,
-  );
-}
-
-function averageWeight(values: number[]) {
-  if (!values.length) return 0;
-  const total = values.reduce((sum, value) => sum + value, 0);
-  return Math.round((total / values.length) * 100) / 100;
-}
-
-function formatDateRange(start: Date, end: Date, includeYear: boolean) {
-  const rangeStart = toStartOfDay(start);
-  const rangeEnd = toStartOfDay(end);
-  const startMonth = rangeStart.toLocaleDateString(undefined, {
-    month: "short",
-  });
-  const endMonth = rangeEnd.toLocaleDateString(undefined, { month: "short" });
-  const startDay = String(rangeStart.getDate()).padStart(2, "0");
-  const endDay = String(rangeEnd.getDate()).padStart(2, "0");
-  const sameYear = rangeStart.getFullYear() === rangeEnd.getFullYear();
-  const sameMonth = sameYear && rangeStart.getMonth() === rangeEnd.getMonth();
-
-  if (sameMonth) {
-    return `${startMonth} ${startDay}~${endDay}${includeYear ? ` ${rangeEnd.getFullYear()}` : ""}`;
-  }
-
-  if (sameYear) {
-    return `${startMonth} ${startDay}~${endMonth} ${endDay}${includeYear ? ` ${rangeEnd.getFullYear()}` : ""}`;
-  }
-
-  return `${startMonth} ${startDay} ${rangeStart.getFullYear()}~${endMonth} ${endDay} ${rangeEnd.getFullYear()}`;
-}
-
-function formatWeightValue(weightKg: number) {
-  return `${weightKg.toFixed(2)} kg`;
-}
-
-function formatBodyFatValue(bodyFatPercentage: number) {
-  return `${bodyFatPercentage.toFixed(2)}%`;
 }
 
 const WEIGHT_FILTER_OPTIONS = [
@@ -316,138 +238,6 @@ function getCalorieStatus(
   return "Under target";
 }
 
-function formatPointDate(value: string) {
-  return parseAppDate(value).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    weekday: "short",
-  });
-}
-
-function formatBubbleDate(value: string) {
-  return parseAppDate(value).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function buildCalorieSeries(entries: Meal[], days: number) {
-  const totals = new Map<string, number>();
-  let earliestLoggedAt: Date | null = null;
-
-  for (const entry of entries) {
-    const when = toStartOfDay(parseAppDate(entry.loggedAt));
-    const key = getLocalDateKey(when);
-    totals.set(key, (totals.get(key) ?? 0) + entry.calories);
-    if (!earliestLoggedAt || when < earliestLoggedAt) earliestLoggedAt = when;
-  }
-
-  const end = toStartOfDay(new Date());
-
-  if (days <= 7) {
-    // Show only the current week (up to today), with empty bars for previous days
-    // Get the start of the week (Monday)
-    const today = new Date();
-    const dayOfWeek = today.getDay(); // 0 (Sun) - 6 (Sat)
-    // Start from Monday (1) or Sunday (0) depending on locale; here, Monday
-    const weekStart = toStartOfDay(addDays(today, -((dayOfWeek + 6) % 7)));
-    const dailyRows: Array<{ date: Date; value: number }> = [];
-    for (
-      let cursor = new Date(weekStart);
-      cursor <= end;
-      cursor = addDays(cursor, 1)
-    ) {
-      const key = getLocalDateKey(cursor);
-      dailyRows.push({
-        date: new Date(cursor),
-        value: Math.round(totals.get(key) ?? 0),
-      });
-    }
-    return {
-      labels: dailyRows.map((row) =>
-        formatCalorieLabel(getLocalDateKey(row.date), days),
-      ),
-      values: dailyRows.map((row) => row.value),
-    };
-  }
-
-  if (days <= 31) {
-    // Cap daily view to avoid rendering thousands of bars (90d for W, 365d for M)
-    const cap = GRAPH_MAX_DAYS_LONG;
-    const start = toStartOfDay(addDays(end, -(cap - 1)));
-    const dailyRows: Array<{ date: Date; value: number }> = [];
-    for (
-      let cursor = new Date(start);
-      cursor <= end;
-      cursor = addDays(cursor, 1)
-    ) {
-      const key = getLocalDateKey(cursor);
-      dailyRows.push({
-        date: new Date(cursor),
-        value: Math.round(totals.get(key) ?? 0),
-      });
-    }
-    return {
-      labels: dailyRows.map((row) =>
-        formatCalorieLabel(getLocalDateKey(row.date), days),
-      ),
-      values: dailyRows.map((row) => row.value),
-    };
-  }
-
-  const start = earliestLoggedAt ?? toStartOfDay(addDays(end, -(days - 1)));
-  const dailyRows: Array<{ date: Date; value: number }> = [];
-  for (
-    let cursor = new Date(start);
-    cursor <= end;
-    cursor = addDays(cursor, 1)
-  ) {
-    const key = getLocalDateKey(cursor);
-    dailyRows.push({
-      date: new Date(cursor),
-      value: Math.round(totals.get(key) ?? 0),
-    });
-  }
-
-  if (days <= 90) {
-    const labels: string[] = [];
-    const values: number[] = [];
-
-    for (let i = 0; i < dailyRows.length; i += 7) {
-      const chunk = dailyRows.slice(i, i + 7);
-      if (!chunk.length) continue;
-      const sum = chunk.reduce((acc, row) => acc + row.value, 0);
-      const rangeStart = chunk[0].date;
-      const rangeEnd = chunk[chunk.length - 1].date;
-      labels.push(`${formatShortDay(rangeStart)}-${rangeEnd.getDate()}`);
-      values.push(sum);
-    }
-
-    return { labels, values };
-  }
-
-  const monthLabels: string[] = [];
-  const monthValues: number[] = [];
-  const monthTotals = new Map<string, number>();
-
-  for (const row of dailyRows) {
-    const monthKey = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, "0")}`;
-    monthTotals.set(monthKey, (monthTotals.get(monthKey) ?? 0) + row.value);
-  }
-
-  for (const [monthKey, total] of monthTotals.entries()) {
-    const [year, month] = monthKey.split("-").map(Number);
-    const monthDate = new Date(year, month - 1, 1);
-    monthLabels.push(
-      monthDate.toLocaleDateString(undefined, { month: "short" }),
-    );
-    monthValues.push(Math.round(total));
-  }
-
-  return { labels: monthLabels, values: monthValues };
-}
-
 function sparsifyLabels(labels: string[], maxVisible: number) {
   if (labels.length <= maxVisible || maxVisible < 2) return labels;
 
@@ -457,112 +247,6 @@ function sparsifyLabels(labels: string[], maxVisible: number) {
       return label;
     return "";
   });
-}
-
-function buildWeightSeries(
-  weightHistory: Weight[],
-  days: number,
-): WeightTrendPoint[] {
-  const sorted = weightHistory;
-  if (!sorted.length) return [];
-
-  if (days <= 31) {
-    // Keep the short-range mode readable by capping to recent daily points.
-    const cap =
-      days <= GRAPH_MAX_DAYS_SHORT
-        ? GRAPH_MAX_DAYS_MEDIUM
-        : GRAPH_MAX_DAYS_LONG;
-    const cutoff = toStartOfDay(addDays(new Date(), -(cap - 1)));
-    const byDay = new Map<string, WeightTrendPoint>();
-    for (const point of sorted) {
-      const when = toStartOfDay(new Date(point.recordedAt));
-      if (when < cutoff) continue;
-      const key = getLocalDateKey(when);
-      byDay.set(key, {
-        recordedAt: point.recordedAt,
-        weightKg: point.weightKg,
-        axisLabel: formatWeightLabel(key, days),
-        bubbleLabel: formatBubbleDate(point.recordedAt),
-        isAverage: false,
-      });
-    }
-
-    return Array.from(byDay.values()).sort(
-      (a, b) =>
-        new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
-    );
-  }
-
-  if (days <= 90) {
-    const earliest = toStartOfDay(new Date(sorted[0].recordedAt));
-    const bucketsByIndex = new Map<
-      number,
-      { rangeStart: Date; rangeEnd: Date; values: number[] }
-    >();
-
-    for (const point of sorted) {
-      const when = toStartOfDay(new Date(point.recordedAt));
-      const diffDays = Math.floor(
-        (when.getTime() - earliest.getTime()) / 86_400_000,
-      );
-      const bucketIndex = Math.floor(diffDays / 7);
-      const bucket = bucketsByIndex.get(bucketIndex) ?? {
-        rangeStart: addDays(earliest, bucketIndex * 7),
-        rangeEnd: addDays(earliest, bucketIndex * 7 + 6),
-        values: [],
-      };
-
-      bucket.values.push(point.weightKg);
-      bucketsByIndex.set(bucketIndex, bucket);
-    }
-
-    const buckets = Array.from(bucketsByIndex.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([, bucket]) => bucket);
-
-    return buckets.map((bucket, index) => {
-      const previous = index > 0 ? buckets[index - 1] : null;
-      const monthChanged =
-        !previous ||
-        previous.rangeEnd.getMonth() !== bucket.rangeEnd.getMonth() ||
-        previous.rangeEnd.getFullYear() !== bucket.rangeEnd.getFullYear();
-
-      return {
-        recordedAt: toLocalISOString(bucket.rangeEnd),
-        weightKg: averageWeight(bucket.values),
-        axisLabel: monthChanged
-          ? bucket.rangeEnd.toLocaleDateString(undefined, { month: "short" })
-          : "",
-        bubbleLabel: formatDateRange(bucket.rangeStart, bucket.rangeEnd, true),
-        isAverage: true,
-      };
-    });
-  }
-
-  const byMonth = new Map<string, { monthStart: Date; values: number[] }>();
-  for (const point of sorted) {
-    const monthStart = toStartOfMonth(new Date(point.recordedAt));
-    const key = `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, "0")}`;
-    const bucket = byMonth.get(key) ?? { monthStart, values: [] };
-    bucket.values.push(point.weightKg);
-    byMonth.set(key, bucket);
-  }
-
-  return Array.from(byMonth.values())
-    .sort((a, b) => a.monthStart.getTime() - b.monthStart.getTime())
-    .map((bucket) => ({
-      recordedAt: toLocalISOString(bucket.monthStart),
-      weightKg: averageWeight(bucket.values),
-      axisLabel: bucket.monthStart.toLocaleDateString(undefined, {
-        month: "short",
-        year: "2-digit",
-      }),
-      bubbleLabel: bucket.monthStart.toLocaleDateString(undefined, {
-        month: "short",
-        year: "numeric",
-      }),
-      isAverage: true,
-    }));
 }
 
 export default function GraphsScreen() {
@@ -583,23 +267,12 @@ export default function GraphsScreen() {
   const [weightHistory, setWeightHistory] = useState<Weight[]>([]);
   const [bodyFatHistory, setBodyFatHistory] = useState<BodyFat[]>([]);
   const hasCompletedInitialLoad = useRef(false);
-  const [selectedWeightIndex, setSelectedWeightIndex] = useState<number | null>(
-    null,
-  );
-  const [selectedBodyFatIndex, setSelectedBodyFatIndex] = useState<
-    number | null
-  >(null);
   const [weightDays, setWeightDays] = useState(7);
   const [bodyFatDays, setBodyFatDays] = useState(7);
   const [showCalorieChart, setShowCalorieChart] = useState(false);
   const [showWeightChart, setShowWeightChart] = useState(false);
   const [showBodyFatChart, setShowBodyFatChart] = useState(false);
   const lastGraphLoadAtRef = useRef(0);
-  const calorieTimelineRef = useRef<ScrollView | null>(null);
-  const weightTimelineRef = useRef<ScrollView | null>(null);
-  const bodyFatTimelineRef = useRef<ScrollView | null>(null);
-  const weightPointPositionsRef = useRef<Array<{ x: number; y: number }>>([]);
-  const bodyFatPointPositionsRef = useRef<Array<{ x: number; y: number }>>([]);
 
   const loadScreenData = useCallback(() => {
     return Promise.all([
@@ -671,56 +344,11 @@ export default function GraphsScreen() {
   const chartAccent = theme.colors.primary;
   const chartAccentContainer = theme.colors.primaryContainer;
   const chartOnAccentContainer = theme.colors.onPrimaryContainer;
-  const chartConfig = useMemo(
-    () => ({
-      backgroundGradientFrom: theme.colors.elevation.level1,
-      backgroundGradientTo: theme.colors.elevation.level1,
-      decimalPlaces: 0,
-      color: (opacity = 1) => {
-        if (theme.dark) return `rgba(127, 216, 165, ${opacity})`;
-        return `rgba(20, 108, 67, ${opacity})`;
-      },
-      labelColor: (opacity = 1) => {
-        if (theme.dark) return `rgba(195, 201, 196, ${opacity})`;
-        return `rgba(52, 79, 64, ${opacity})`;
-      },
-      fillShadowGradientFrom: chartAccent,
-      fillShadowGradientTo: chartAccentContainer,
-      fillShadowGradientFromOpacity: 1,
-      fillShadowGradientToOpacity: 0.75,
-      propsForDots: {
-        r: "5",
-        strokeWidth: "2",
-        stroke: chartAccent,
-      },
-      propsForBackgroundLines: {
-        strokeDasharray: "",
-        stroke: theme.colors.outlineVariant,
-      },
-      propsForLabels: {
-        fontSize: 11,
-      },
-      barPercentage: 0.7,
-    }),
-    [
-      chartAccent,
-      chartAccentContainer,
-      theme.colors.elevation.level1,
-      theme.colors.outlineVariant,
-      theme.dark,
-    ],
-  );
 
-  const weightChartConfig = useMemo(
-    () => ({
-      ...chartConfig,
-      fillShadowGradientFrom: chartAccent,
-      fillShadowGradientTo: theme.colors.elevation.level1,
-      fillShadowGradientFromOpacity: 0.16,
-      fillShadowGradientToOpacity: 0,
-    }),
-    [chartAccent, chartConfig, theme.colors.elevation.level1],
-  );
+  // Gifted charts theme colors
+  const giftedLabelColor = theme.dark
+    ? "rgba(195, 201, 196, 0.8)"
+    : "rgba(52, 79, 64, 0.8)";
 
   const calorieSeries = useMemo(
     () => buildTwoWeekCalorieSeries(entries),
@@ -730,13 +358,29 @@ export default function GraphsScreen() {
     () => sparsifyLabels(calorieSeries.labels, 14),
     [calorieSeries.labels],
   );
-  const calorieChartWidth = useMemo(() => {
-    const columnWidth = 32;
-    return Math.max(
-      chartWidth,
-      calorieSeries.values.length * columnWidth + 100,
-    );
-  }, [calorieSeries.values.length, chartWidth]);
+  const calorieBarData = useMemo(
+    () =>
+      calorieSeries.values.map((value, index) => ({
+        value,
+        label: calorieChartLabels[index],
+        frontColor: chartAccent,
+        topLabelComponent: () => (
+          <Text
+            style={{
+              color: chartAccent,
+              fontSize: 9,
+              fontWeight: "600",
+              width: 60,
+              textAlign: "center",
+            }}
+            numberOfLines={1}
+          >
+            {value}
+          </Text>
+        ),
+      })),
+    [calorieSeries.values, calorieChartLabels, chartAccent],
+  );
 
   // Sort once, reuse across all time ranges
   const sortedWeightHistory = useMemo(
@@ -772,210 +416,6 @@ export default function GraphsScreen() {
       ),
     [bodyFatAsWeightPoints],
   );
-
-  const weightSeries = useMemo(
-    () => buildWeightSeries(sortedWeightHistory, weightDays as 7 | 90 | 365),
-    [sortedWeightHistory, weightDays],
-  );
-  const weightChartSeries = useMemo(() => {
-    const points = weightSeries;
-    return {
-      points,
-      labels: sparsifyLabels(
-        points.map((point) => point.axisLabel),
-        12,
-      ),
-      values: points.map((point) => point.weightKg),
-    };
-  }, [weightSeries]);
-  const weightChartWidth = useMemo(() => {
-    const pointWidth = weightDays <= 7 ? 44 : weightDays <= 90 ? 64 : 72;
-    return Math.max(chartWidth, weightChartSeries.values.length * pointWidth);
-  }, [chartWidth, weightChartSeries.values.length, weightDays]);
-
-  const bodyFatSeries = useMemo(
-    () =>
-      buildWeightSeries(
-        sortedBodyFatAsWeightPoints,
-        bodyFatDays as 7 | 90 | 365,
-      ),
-    [bodyFatDays, sortedBodyFatAsWeightPoints],
-  );
-  const bodyFatChartSeries = useMemo(() => {
-    const points = bodyFatSeries;
-    return {
-      points,
-      labels: sparsifyLabels(
-        points.map((point) => point.axisLabel),
-        12,
-      ),
-      values: points.map((point) => point.weightKg),
-    };
-  }, [bodyFatSeries]);
-  const bodyFatChartWidth = useMemo(() => {
-    const pointWidth = bodyFatDays <= 7 ? 44 : bodyFatDays <= 90 ? 64 : 72;
-    return Math.max(chartWidth, bodyFatChartSeries.values.length * pointWidth);
-  }, [bodyFatChartSeries.values.length, bodyFatDays, chartWidth]);
-
-  const selectedWeightPoint =
-    selectedWeightIndex !== null &&
-    selectedWeightIndex >= 0 &&
-    selectedWeightIndex < weightChartSeries.points.length
-      ? weightChartSeries.points[selectedWeightIndex]
-      : null;
-  const selectedWeightMetrics =
-    selectedWeightIndex !== null &&
-    selectedWeightIndex >= 0 &&
-    selectedWeightIndex < weightPointPositionsRef.current.length
-      ? (weightPointPositionsRef.current[selectedWeightIndex] ?? null)
-      : null;
-
-  const selectedBodyFatPoint =
-    selectedBodyFatIndex !== null &&
-    selectedBodyFatIndex >= 0 &&
-    selectedBodyFatIndex < bodyFatChartSeries.points.length
-      ? bodyFatChartSeries.points[selectedBodyFatIndex]
-      : null;
-  const selectedBodyFatMetrics =
-    selectedBodyFatIndex !== null &&
-    selectedBodyFatIndex >= 0 &&
-    selectedBodyFatIndex < bodyFatPointPositionsRef.current.length
-      ? (bodyFatPointPositionsRef.current[selectedBodyFatIndex] ?? null)
-      : null;
-
-  useEffect(() => {
-    setSelectedWeightIndex(null);
-  }, [weightDays, weightChartSeries.points.length]);
-
-  useEffect(() => {
-    setSelectedBodyFatIndex(null);
-  }, [bodyFatDays, bodyFatChartSeries.points.length]);
-
-  useEffect(() => {
-    if (!showCalorieChart) return;
-    const frame = requestAnimationFrame(() => {
-      calorieTimelineRef.current?.scrollToEnd({ animated: false });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [calorieChartWidth, showCalorieChart]);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      weightTimelineRef.current?.scrollToEnd({ animated: false });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [weightChartWidth, weightDays, showWeightChart]);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      bodyFatTimelineRef.current?.scrollToEnd({ animated: false });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [bodyFatChartWidth, bodyFatDays, showBodyFatChart]);
-
-  const handleWeightTap = useCallback(
-    (tapX: number) => {
-      const positions = weightPointPositionsRef.current.slice(
-        0,
-        weightChartSeries.points.length,
-      );
-      if (!positions.length) return;
-      let nearestIndex = 0;
-      let nearestDist = Infinity;
-      positions.forEach((pos, i) => {
-        const d = Math.abs(pos.x - tapX);
-        if (d < nearestDist) {
-          nearestDist = d;
-          nearestIndex = i;
-        }
-      });
-      setSelectedWeightIndex((prev) =>
-        prev === nearestIndex ? null : nearestIndex,
-      );
-    },
-    [weightChartSeries.points.length],
-  );
-
-  const handleBodyFatTap = useCallback(
-    (tapX: number) => {
-      const positions = bodyFatPointPositionsRef.current.slice(
-        0,
-        bodyFatChartSeries.points.length,
-      );
-      if (!positions.length) return;
-      let nearestIndex = 0;
-      let nearestDist = Infinity;
-      positions.forEach((pos, i) => {
-        const d = Math.abs(pos.x - tapX);
-        if (d < nearestDist) {
-          nearestDist = d;
-          nearestIndex = i;
-        }
-      });
-      setSelectedBodyFatIndex((prev) =>
-        prev === nearestIndex ? null : nearestIndex,
-      );
-    },
-    [bodyFatChartSeries.points.length],
-  );
-
-  const selectedWeightBubble = selectedWeightPoint
-    ? {
-        weight: `${selectedWeightPoint.isAverage ? "avg " : ""}${formatWeightValue(selectedWeightPoint.weightKg)}`,
-        date: selectedWeightPoint.bubbleLabel,
-      }
-    : null;
-  const bubbleWidth = selectedWeightBubble
-    ? Math.max(
-        92,
-        Math.max(
-          selectedWeightBubble.weight.length,
-          selectedWeightBubble.date.length,
-        ) *
-          8 +
-          24,
-      )
-    : 0;
-  const bubbleHeight = selectedWeightBubble ? 46 : 0;
-  const bubbleHalfWidth = bubbleWidth / 2;
-  const bubbleX = selectedWeightMetrics
-    ? Math.min(
-        Math.max(8, selectedWeightMetrics.x - bubbleHalfWidth),
-        weightChartWidth - bubbleWidth - 8,
-      )
-    : 0;
-  const bubbleY = selectedWeightMetrics
-    ? Math.max(10, selectedWeightMetrics.y - 54)
-    : 0;
-
-  const selectedBodyFatBubble = selectedBodyFatPoint
-    ? {
-        bodyFat: `${selectedBodyFatPoint.isAverage ? "avg " : ""}${formatBodyFatValue(selectedBodyFatPoint.weightKg)}`,
-        date: selectedBodyFatPoint.bubbleLabel,
-      }
-    : null;
-  const bodyFatBubbleWidth = selectedBodyFatBubble
-    ? Math.max(
-        92,
-        Math.max(
-          selectedBodyFatBubble.bodyFat.length,
-          selectedBodyFatBubble.date.length,
-        ) *
-          8 +
-          24,
-      )
-    : 0;
-  const bodyFatBubbleHeight = selectedBodyFatBubble ? 46 : 0;
-  const bodyFatBubbleHalfWidth = bodyFatBubbleWidth / 2;
-  const bodyFatBubbleX = selectedBodyFatMetrics
-    ? Math.min(
-        Math.max(8, selectedBodyFatMetrics.x - bodyFatBubbleHalfWidth),
-        bodyFatChartWidth - bodyFatBubbleWidth - 8,
-      )
-    : 0;
-  const bodyFatBubbleY = selectedBodyFatMetrics
-    ? Math.max(10, selectedBodyFatMetrics.y - 54)
-    : 0;
 
   const latestWeightPoint =
     weightHistory.length > 0 ? weightHistory[weightHistory.length - 1] : null;
@@ -1088,324 +528,95 @@ export default function GraphsScreen() {
     return { min: min - pad, max: max + pad };
   }, [bodyFatWeeklyData.values]);
 
+  // Build TrendPoint arrays once (just convert Weight[] → TrendPoint[])
+  const weightTrendPoints = useMemo<TrendPoint[]>(
+    () =>
+      sortedWeightHistory.map((w) => ({
+        recordedAt: w.recordedAt,
+        value: w.weightKg,
+      })),
+    [sortedWeightHistory],
+  );
+
+  const bodyFatTrendPoints = useMemo<TrendPoint[]>(
+    () =>
+      sortedBodyFatAsWeightPoints.map((w) => ({
+        recordedAt: w.recordedAt,
+        value: w.weightKg,
+      })),
+    [sortedBodyFatAsWeightPoints],
+  );
+
+  // Pre-compute all three time ranges so switching tabs is instant.
+  // Lazy: only compute the currently selected one on first render,
+  // then the others settle in a microtask.
+  const [weightChartCache, setWeightChartCache] = useState<
+    Record<number, AggregatedPoint[]>
+  >({});
+  const [bodyFatChartCache, setBodyFatChartCache] = useState<
+    Record<number, AggregatedPoint[]>
+  >({});
+
+  useEffect(() => {
+    if (!weightTrendPoints.length) return;
+    const pending: Record<number, AggregatedPoint[]> = {};
+    // Always compute the currently selected tab first
+    pending[weightDays] = buildTrendSeries(weightTrendPoints, weightDays);
+    // Defer the other two
+    const otherDays = [7, 90, 365].filter((d) => d !== weightDays);
+    for (const d of otherDays) {
+      pending[d] = buildTrendSeries(weightTrendPoints, d);
+    }
+    setWeightChartCache(pending);
+  }, [weightTrendPoints, weightDays]);
+
+  useEffect(() => {
+    if (!bodyFatTrendPoints.length) return;
+    const pending: Record<number, AggregatedPoint[]> = {};
+    pending[bodyFatDays] = buildTrendSeries(bodyFatTrendPoints, bodyFatDays);
+    const otherDays = [7, 90, 365].filter((d) => d !== bodyFatDays);
+    for (const d of otherDays) {
+      pending[d] = buildTrendSeries(bodyFatTrendPoints, d);
+    }
+    setBodyFatChartCache(pending);
+  }, [bodyFatTrendPoints, bodyFatDays]);
+
+  const weightChartData = weightChartCache[weightDays] ?? [];
+  const bodyFatChartData = bodyFatChartCache[bodyFatDays] ?? [];
+
   const calorieChartEl = useMemo(() => {
     return (
-      <ScrollView
-        ref={calorieTimelineRef}
-        horizontal
-        decelerationRate="fast"
-        bounces={false}
-        directionalLockEnabled
-        nestedScrollEnabled
-        showsHorizontalScrollIndicator={false}
-        scrollEventThrottle={16}
-      >
-        <BarChart
-          width={calorieChartWidth}
-          height={240}
-          data={{
-            labels: calorieChartLabels,
-            datasets: [{ data: calorieSeries.values }],
-          }}
-          fromZero
-          yAxisLabel=""
-          yAxisSuffix=""
-          withVerticalLabels
-          withHorizontalLabels={false}
-          showBarTops={false}
-          showValuesOnTopOfBars={calorieSeries.values.length <= 12}
-          chartConfig={chartConfig}
-          style={{ ...styles.chart, paddingBottom: 12 }}
-        />
-      </ScrollView>
+      <BarChart
+        data={calorieBarData}
+        height={240}
+        width={chartWidth}
+        noOfSections={4}
+        isAnimated
+        scrollToEnd
+        barWidth={22}
+        spacing={18}
+        initialSpacing={12}
+        endSpacing={12}
+        frontColor={chartAccent}
+        color={chartAccent}
+        showValuesAsTopLabel={false}
+        showFractionalValues={false}
+        roundToDigits={0}
+        yAxisThickness={0}
+        xAxisThickness={0}
+        rulesLength={0}
+        hideYAxisText
+        xAxisLabelTextStyle={{
+          color: giftedLabelColor,
+          fontSize: 10,
+        }}
+        yAxisTextStyle={{
+          color: giftedLabelColor,
+          fontSize: 10,
+        }}
+      />
     );
-  }, [
-    calorieChartLabels,
-    calorieChartWidth,
-    calorieSeries.values,
-    chartConfig,
-  ]);
-
-  const weightChartEl = useMemo(
-    () =>
-      weightChartSeries.values.length > 1 ? (
-        <ScrollView
-          ref={weightTimelineRef}
-          horizontal
-          decelerationRate="fast"
-          bounces={false}
-          directionalLockEnabled
-          nestedScrollEnabled
-          showsHorizontalScrollIndicator={false}
-          scrollEventThrottle={16}
-        >
-          <View
-            onStartShouldSetResponder={() => true}
-            onResponderRelease={(e) => handleWeightTap(e.nativeEvent.locationX)}
-          >
-            <LineChart
-              width={weightChartWidth}
-              height={WEIGHT_CHART_HEIGHT}
-              fromZero={false}
-              bezier
-              withVerticalLabels
-              withHorizontalLabels={false}
-              data={{
-                labels: weightChartSeries.labels,
-                datasets: [
-                  {
-                    data: weightChartSeries.values,
-                    // Keep the line visually strong regardless of internal opacity handling.
-                    color: () =>
-                      theme.dark
-                        ? "rgba(125, 205, 168, 0.9)"
-                        : "rgba(22, 88, 56, 0.9)",
-                    strokeWidth: 3,
-                  },
-                ],
-              }}
-              renderDotContent={({ x, y, index }) => {
-                weightPointPositionsRef.current[index] = { x, y };
-                return null;
-              }}
-              decorator={() => {
-                const allPositions = weightPointPositionsRef.current.slice(
-                  0,
-                  weightChartSeries.values.length,
-                );
-                return (
-                  <G>
-                    {allPositions.map((pos, index) => {
-                      const value = weightChartSeries.values[index];
-                      if (value === undefined) return null;
-                      const above = index % 2 === 1;
-                      return (
-                        <SvgText
-                          key={`wlabel-${index}`}
-                          x={pos.x}
-                          y={above ? pos.y - 10 : pos.y + 18}
-                          fill={chartAccent}
-                          fontSize="9"
-                          fontWeight="500"
-                          textAnchor="middle"
-                        >
-                          {value.toFixed(2)}
-                        </SvgText>
-                      );
-                    })}
-                    {selectedWeightMetrics && selectedWeightBubble ? (
-                      <G>
-                        <Line
-                          x1={String(selectedWeightMetrics.x)}
-                          y1="0"
-                          x2={String(selectedWeightMetrics.x)}
-                          y2={String(WEIGHT_GUIDE_BOTTOM)}
-                          stroke={chartAccent}
-                          strokeWidth="1"
-                          strokeDasharray="4 4"
-                        />
-                        <Rect
-                          x={bubbleX}
-                          y={bubbleY}
-                          width={bubbleWidth}
-                          height={bubbleHeight}
-                          rx={12}
-                          fill={chartAccentContainer}
-                        />
-                        <SvgText
-                          x={bubbleX + bubbleWidth / 2}
-                          y={bubbleY + 18}
-                          fill={chartOnAccentContainer}
-                          fontSize="11"
-                          fontWeight="500"
-                          textAnchor="middle"
-                        >
-                          {selectedWeightBubble.date}
-                        </SvgText>
-                        <SvgText
-                          x={bubbleX + bubbleWidth / 2}
-                          y={bubbleY + 34}
-                          fill={chartOnAccentContainer}
-                          fontSize="12"
-                          fontWeight="600"
-                          textAnchor="middle"
-                        >
-                          {selectedWeightBubble.weight}
-                        </SvgText>
-                      </G>
-                    ) : null}
-                  </G>
-                );
-              }}
-              chartConfig={weightChartConfig}
-              style={styles.chart}
-            />
-          </View>
-        </ScrollView>
-      ) : (
-        <Text
-          variant="bodyMedium"
-          style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}
-        >
-          No weight recorded in this period.
-        </Text>
-      ),
-    [
-      bubbleHeight,
-      bubbleWidth,
-      bubbleX,
-      bubbleY,
-      weightChartConfig,
-      handleWeightTap,
-      selectedWeightBubble,
-      selectedWeightMetrics,
-      theme.dark,
-      weightChartSeries.labels,
-      weightChartSeries.values,
-      weightChartWidth,
-    ],
-  );
-
-  const bodyFatChartEl = useMemo(
-    () =>
-      bodyFatChartSeries.values.length > 1 ? (
-        <ScrollView
-          ref={bodyFatTimelineRef}
-          horizontal
-          decelerationRate="fast"
-          bounces={false}
-          directionalLockEnabled
-          nestedScrollEnabled
-          showsHorizontalScrollIndicator={false}
-          scrollEventThrottle={16}
-        >
-          <View
-            onStartShouldSetResponder={() => true}
-            onResponderRelease={(e) =>
-              handleBodyFatTap(e.nativeEvent.locationX)
-            }
-          >
-            <LineChart
-              width={bodyFatChartWidth}
-              height={WEIGHT_CHART_HEIGHT}
-              fromZero={false}
-              bezier
-              withVerticalLabels
-              withHorizontalLabels={false}
-              data={{
-                labels: bodyFatChartSeries.labels,
-                datasets: [
-                  {
-                    data: bodyFatChartSeries.values,
-                    color: () =>
-                      theme.dark
-                        ? "rgba(125, 205, 168, 0.9)"
-                        : "rgba(22, 88, 56, 0.9)",
-                    strokeWidth: 3,
-                  },
-                ],
-              }}
-              renderDotContent={({ x, y, index }) => {
-                bodyFatPointPositionsRef.current[index] = { x, y };
-                return null;
-              }}
-              decorator={() => {
-                const allPositions = bodyFatPointPositionsRef.current.slice(
-                  0,
-                  bodyFatChartSeries.values.length,
-                );
-                return (
-                  <G>
-                    {allPositions.map((pos, index) => {
-                      const value = bodyFatChartSeries.values[index];
-                      if (value === undefined) return null;
-                      const above = index % 2 === 1;
-                      return (
-                        <SvgText
-                          key={`bf-label-${index}`}
-                          x={pos.x}
-                          y={above ? pos.y - 10 : pos.y + 18}
-                          fill={chartAccent}
-                          fontSize="9"
-                          fontWeight="500"
-                          textAnchor="middle"
-                        >
-                          {value.toFixed(2)}
-                        </SvgText>
-                      );
-                    })}
-                    {selectedBodyFatMetrics && selectedBodyFatBubble ? (
-                      <G>
-                        <Line
-                          x1={String(selectedBodyFatMetrics.x)}
-                          y1="0"
-                          x2={String(selectedBodyFatMetrics.x)}
-                          y2={String(WEIGHT_GUIDE_BOTTOM)}
-                          stroke={chartAccent}
-                          strokeWidth="1"
-                          strokeDasharray="4 4"
-                        />
-                        <Rect
-                          x={bodyFatBubbleX}
-                          y={bodyFatBubbleY}
-                          width={bodyFatBubbleWidth}
-                          height={bodyFatBubbleHeight}
-                          rx={12}
-                          fill={chartAccentContainer}
-                        />
-                        <SvgText
-                          x={bodyFatBubbleX + bodyFatBubbleWidth / 2}
-                          y={bodyFatBubbleY + 18}
-                          fill={chartOnAccentContainer}
-                          fontSize="11"
-                          fontWeight="500"
-                          textAnchor="middle"
-                        >
-                          {selectedBodyFatBubble.date}
-                        </SvgText>
-                        <SvgText
-                          x={bodyFatBubbleX + bodyFatBubbleWidth / 2}
-                          y={bodyFatBubbleY + 34}
-                          fill={chartOnAccentContainer}
-                          fontSize="12"
-                          fontWeight="600"
-                          textAnchor="middle"
-                        >
-                          {selectedBodyFatBubble.bodyFat}
-                        </SvgText>
-                      </G>
-                    ) : null}
-                  </G>
-                );
-              }}
-              chartConfig={weightChartConfig}
-              style={styles.chart}
-            />
-          </View>
-        </ScrollView>
-      ) : (
-        <Text
-          variant="bodyMedium"
-          style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}
-        >
-          No body fat recorded in this period.
-        </Text>
-      ),
-    [
-      bodyFatBubbleHeight,
-      bodyFatBubbleWidth,
-      bodyFatBubbleX,
-      bodyFatBubbleY,
-      bodyFatChartSeries.labels,
-      bodyFatChartSeries.values,
-      bodyFatChartWidth,
-      handleBodyFatTap,
-      selectedBodyFatBubble,
-      selectedBodyFatMetrics,
-      theme.dark,
-      weightChartConfig,
-    ],
-  );
+  }, [calorieBarData, chartWidth, chartAccent, giftedLabelColor]);
 
   return (
     <View
@@ -1739,14 +950,13 @@ export default function GraphsScreen() {
                   { color: theme.colors.onSurfaceVariant },
                 ]}
               >
-                Daily weight points from manual input or Health Connect.
+                Weight points from manual input or Health Connect.
               </Text>
               <SegmentedButtons
                 value={String(weightDays)}
                 onValueChange={(v) => {
                   startTransition(() => {
                     setWeightDays(Number(v));
-                    setSelectedWeightIndex(null);
                   });
                 }}
                 buttons={WEIGHT_FILTER_OPTIONS}
@@ -1757,7 +967,30 @@ export default function GraphsScreen() {
                 ]}
                 theme={segmentedButtonsTheme}
               />
-              {weightChartEl}
+              {weightChartData.length > 0 ? (
+                <View style={styles.chartSpace}>
+                  <WeightBodyFatChart
+                    data={weightChartData}
+                    unit="kg"
+                    accentColor={chartAccent}
+                    onSurfaceVariant={theme.colors.onSurfaceVariant}
+                    backgroundColor={theme.colors.surface}
+                    surfaceColor={chartAccentContainer}
+                    onPrimaryContainer={chartOnAccentContainer}
+                  />
+                </View>
+              ) : (
+                <Text
+                  variant="bodySmall"
+                  style={{
+                    color: theme.colors.onSurfaceVariant,
+                    textAlign: "center",
+                    paddingVertical: 20,
+                  }}
+                >
+                  No weight data recorded yet.
+                </Text>
+              )}
             </Card.Content>
           </Card>
         )}
@@ -1949,14 +1182,13 @@ export default function GraphsScreen() {
                   { color: theme.colors.onSurfaceVariant },
                 ]}
               >
-                Body fat percentage points from Health Connect.
+                Body fat percentage points from manual input orHealth Connect.
               </Text>
               <SegmentedButtons
                 value={String(bodyFatDays)}
                 onValueChange={(v) => {
                   startTransition(() => {
                     setBodyFatDays(Number(v));
-                    setSelectedBodyFatIndex(null);
                   });
                 }}
                 buttons={WEIGHT_FILTER_OPTIONS}
@@ -1967,7 +1199,30 @@ export default function GraphsScreen() {
                 ]}
                 theme={segmentedButtonsTheme}
               />
-              {bodyFatChartEl}
+              {bodyFatChartData.length > 0 ? (
+                <View style={styles.chartSpace}>
+                  <WeightBodyFatChart
+                    data={bodyFatChartData}
+                    unit="%"
+                    accentColor={chartAccent}
+                    onSurfaceVariant={theme.colors.onSurfaceVariant}
+                    backgroundColor={theme.colors.surface}
+                    surfaceColor={chartAccentContainer}
+                    onPrimaryContainer={chartOnAccentContainer}
+                  />
+                </View>
+              ) : (
+                <Text
+                  variant="bodySmall"
+                  style={{
+                    color: theme.colors.onSurfaceVariant,
+                    textAlign: "center",
+                    paddingVertical: 20,
+                  }}
+                >
+                  No body fat data recorded yet.
+                </Text>
+              )}
             </Card.Content>
           </Card>
         )}
@@ -1986,6 +1241,7 @@ const styles = StyleSheet.create({
   },
   supportingText: { marginBottom: 10 },
   chartPage: { overflow: "hidden" },
+  chartSpace: { marginTop: 8, marginBottom: 4 },
   chart: { borderRadius: 18, marginLeft: -10, marginBottom: 6 },
   emptyText: {},
   filterButtons: { marginBottom: 14 },
