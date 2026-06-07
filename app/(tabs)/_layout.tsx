@@ -110,8 +110,6 @@ export default function TabLayout() {
           borderTopColor: theme.colors.outlineVariant,
           borderTopWidth: 1,
           height: TAB_BAR_HEIGHT_BASE + insets.bottom,
-          paddingTop: TAB_BAR_PADDING_TOP,
-          paddingBottom: Math.max(TAB_BAR_PADDING_BOTTOM_MIN, insets.bottom),
         },
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
