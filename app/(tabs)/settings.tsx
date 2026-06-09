@@ -2544,7 +2544,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { padding: 16, gap: 16 },
   card: { borderRadius: 24 },
-  formArea: { gap: 10 },
+  formArea: { gap: 10, paddingBottom: 10 },
   segmentedControl: {
     borderRadius: 14,
     overflow: "hidden",
