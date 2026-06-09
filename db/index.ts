@@ -14,7 +14,12 @@ import {
   open,
 } from "@op-engineering/op-sqlite";
 import * as schema from "./schema";
-import { makeWeightId, makeBodyFatId, makeMealId } from "./helpers";
+import {
+  makeWeightId,
+  makeBodyFatId,
+  makeMealId,
+  makeRecipeId,
+} from "./helpers";
 
 const sqlite = open({
   name: SQLITE_DB_NAME,
@@ -252,6 +257,102 @@ export async function deleteWeightBySource(
   await db
     .delete(schema.weightHistory)
     .where(eq(schema.weightHistory.source, source));
+}
+
+// ── Recipes ────────────────────────────────────────────────────────────────
+export type Recipe = typeof schema.recipes.$inferInsert;
+export type RecipeItem = {
+  title: string;
+  calories: number;
+  proteinGrams?: number | null;
+  fatGrams?: number | null;
+  carbsGrams?: number | null;
+  fibreGrams?: number | null;
+};
+
+export async function insertRecipe(recipe: {
+  name: string;
+  items: RecipeItem[];
+}): Promise<void> {
+  const totalCalories = recipe.items.reduce((s, i) => s + i.calories, 0);
+  const totalProtein = recipe.items.reduce(
+    (s, i) => s + (i.proteinGrams ?? 0),
+    0,
+  );
+  const totalFat = recipe.items.reduce((s, i) => s + (i.fatGrams ?? 0), 0);
+  const totalCarbs = recipe.items.reduce((s, i) => s + (i.carbsGrams ?? 0), 0);
+  const totalFibre = recipe.items.reduce((s, i) => s + (i.fibreGrams ?? 0), 0);
+
+  await db.insert(schema.recipes).values({
+    id: makeRecipeId(recipe.name),
+    name: recipe.name,
+    itemsJson: JSON.stringify(recipe.items),
+    totalCalories: totalCalories,
+    totalProteinGrams: totalProtein > 0 ? totalProtein : null,
+    totalFatGrams: totalFat > 0 ? totalFat : null,
+    totalCarbsGrams: totalCarbs > 0 ? totalCarbs : null,
+    totalFibreGrams: totalFibre > 0 ? totalFibre : null,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+export async function getAllRecipes(): Promise<Recipe[]> {
+  return await db
+    .select()
+    .from(schema.recipes)
+    .orderBy(desc(schema.recipes.createdAt));
+}
+
+export async function deleteRecipe(id: string): Promise<void> {
+  await db.delete(schema.recipes).where(eq(schema.recipes.id, id));
+}
+
+/** Bulk import recipes (INSERT OR IGNORE for idempotency) */
+export async function importRecipesBulk(
+  recipesData: Recipe[],
+): Promise<{ imported: number; failed: number }> {
+  return db.transaction(async (tx) => {
+    let imported = 0;
+    let failed = 0;
+    for (const recipe of recipesData) {
+      try {
+        const row = { ...recipe };
+        await tx.insert(schema.recipes).values(row).onConflictDoNothing();
+        imported++;
+      } catch {
+        failed++;
+      }
+    }
+    return { imported, failed };
+  });
+}
+
+export async function updateRecipe(
+  id: string,
+  data: { name?: string; items?: RecipeItem[] },
+): Promise<void> {
+  const updateData: Record<string, unknown> = {};
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.items !== undefined) {
+    updateData.itemsJson = JSON.stringify(data.items);
+    const totalCalories = data.items.reduce((s, i) => s + i.calories, 0);
+    const totalProtein = data.items.reduce(
+      (s, i) => s + (i.proteinGrams ?? 0),
+      0,
+    );
+    const totalFat = data.items.reduce((s, i) => s + (i.fatGrams ?? 0), 0);
+    const totalCarbs = data.items.reduce((s, i) => s + (i.carbsGrams ?? 0), 0);
+    const totalFibre = data.items.reduce((s, i) => s + (i.fibreGrams ?? 0), 0);
+    updateData.totalCalories = totalCalories;
+    updateData.totalProteinGrams = totalProtein > 0 ? totalProtein : null;
+    updateData.totalFatGrams = totalFat > 0 ? totalFat : null;
+    updateData.totalCarbsGrams = totalCarbs > 0 ? totalCarbs : null;
+    updateData.totalFibreGrams = totalFibre > 0 ? totalFibre : null;
+  }
+  await db
+    .update(schema.recipes)
+    .set(updateData)
+    .where(eq(schema.recipes.id, id));
 }
 
 // ── Combined ───────────────────────────────────────────────────────────────

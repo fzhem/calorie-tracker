@@ -79,8 +79,14 @@ import {
   updateMeal,
   getLatestWeightBySource,
   getLatestBodyFatBySource,
+  insertRecipe,
+  getAllRecipes,
+  deleteRecipe,
+  updateRecipe,
+  type Recipe,
+  type RecipeItem,
 } from "@/db/index";
-import { makeMealId } from "@/db/helpers";
+import { makeMealId, makeRecipeId } from "@/db/helpers";
 import { createLLM, type LiteRTLMInstance } from "react-native-litert-lm";
 import { invalidateMealCaches } from "@/lib/queryCache";
 
@@ -131,6 +137,15 @@ type QuickAddTab = "recent" | "favourites";
 
 type EditEntryDraft = {
   id: string;
+  title: string;
+  calories: string;
+  protein: string;
+  fat: string;
+  carbs: string;
+  fibre: string;
+};
+
+type EditRecipeItemDraft = {
   title: string;
   calories: string;
   protein: string;
@@ -854,6 +869,19 @@ export default function LogScreen() {
   const [showEditMacros, setShowEditMacros] = useState(false);
   const [llmModalVisible, setLlmModalVisible] = useState(false);
 
+  // ── Recipe state ──────────────────────────────────────────────
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [recipeModalVisible, setRecipeModalVisible] = useState(false);
+  const [createRecipeModalVisible, setCreateRecipeModalVisible] =
+    useState(false);
+  const [createRecipeName, setCreateRecipeName] = useState("");
+  const [selectedRecipeItems, setSelectedRecipeItems] = useState<
+    QuickAddItem[]
+  >([]);
+  const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(
+    new Set(),
+  );
+
   useEffect(() => {
     loadStoredData()
       .then((next) => setData(next))
@@ -864,6 +892,10 @@ export default function LogScreen() {
         hasCompletedInitialLoad.current = true;
         setIsReady(true);
       });
+    // Load recipes on initial mount (useFocusEffect only runs after focus changes)
+    getAllRecipes()
+      .then(setRecipes)
+      .catch(() => {});
   }, []);
 
   // Load today's entries from DB
@@ -904,6 +936,10 @@ export default function LogScreen() {
       const key = getLocalDateKey(new Date());
       getMealsForDay(key)
         .then(setEntries)
+        .catch(() => {});
+      // Refresh saved recipes
+      getAllRecipes()
+        .then(setRecipes)
         .catch(() => {});
       // Refresh HC weight and body fat so metabolism recalculates
       getLatestWeightBySource("health-connect")
@@ -1110,10 +1146,10 @@ export default function LogScreen() {
       ? theme.colors.onErrorContainer
       : data.goalPhase === "bulk"
         ? theme.colors.onPrimaryContainer
-        : theme.colors.secondaryContainer;
+        : theme.colors.onSecondaryContainer;
   const goalModeDetail =
     data.goalPhase === "maintain"
-      ? "Maintenance calories"
+      ? ""
       : activeGoalAdjustmentType === "percent"
         ? `${data.goalPhase === "cut" ? "-" : "+"}${data.goalPhase === "cut" ? (data.cutPercentPerWeek ?? 1) : (data.bulkPercentPerWeek ?? 1)}% / week`
         : `${goalDelta > 0 ? "+" : ""}${goalDelta} kcal / day`;
@@ -1181,6 +1217,18 @@ export default function LogScreen() {
     invalidateMealCaches();
     setEntries((prev) => [meal, ...prev]);
     Vibration.vibrate(10);
+  }, []);
+
+  const toggleEntrySelection = useCallback((id: string) => {
+    setSelectedEntryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   }, []);
 
   const toggleFavouriteQuickAdd = useCallback((item: QuickAddItem) => {
@@ -1281,6 +1329,7 @@ export default function LogScreen() {
 
   const renderedEntries = useMemo(() => {
     return visibleEntries.map((entry) => {
+      const isSelected = selectedEntryIds.has(entry.id);
       const mismatch = getMacroCalorieMismatch(entry.calories, entry, {
         tolerancePercent: data.calorieTolerancePercent,
       });
@@ -1356,6 +1405,26 @@ export default function LogScreen() {
           </View>
           <View style={styles.entryActions}>
             <IconButton
+              icon={
+                selectedEntryIds.has(entry.id)
+                  ? "checkbox-marked-outline"
+                  : "checkbox-blank-outline"
+              }
+              size={18}
+              iconColor={
+                selectedEntryIds.has(entry.id)
+                  ? theme.colors.primary
+                  : theme.colors.onSurfaceVariant
+              }
+              style={styles.entryActionIcon}
+              onPress={() => toggleEntrySelection(entry.id)}
+              accessibilityLabel={
+                selectedEntryIds.has(entry.id)
+                  ? "Deselect entry"
+                  : "Select entry for recipe"
+              }
+            />
+            <IconButton
               icon={isEntryFavourite ? "star" : "star-outline"}
               size={18}
               iconColor={theme.colors.tertiary}
@@ -1388,12 +1457,14 @@ export default function LogScreen() {
     deleteEntry,
     favouriteQuickAddKeys,
     openEditEntry,
+    selectedEntryIds,
     theme.colors.elevation.level1,
     theme.colors.error,
     theme.colors.onSurface,
     theme.colors.onSurfaceVariant,
     theme.colors.outlineVariant,
     theme.colors.primary,
+    toggleEntrySelection,
     toggleFavouriteQuickAdd,
     visibleEntries,
     data.calorieTolerancePercent,
@@ -1487,6 +1558,224 @@ export default function LogScreen() {
     isArchitectureBlocked || memoryCheck?.status === "blocked";
   const isModelWarning = memoryCheck?.status === "warning";
 
+  // ── Recipe handlers ──────────────────────────────────────────
+  const handleSaveAsRecipe = useCallback(() => {
+    if (selectedEntryIds.size === 0) {
+      m3Alert.alert(
+        "No entries selected",
+        "Select entries to save as a recipe.",
+      );
+      return;
+    }
+    const items: QuickAddItem[] = entries
+      .filter((e) => selectedEntryIds.has(e.id))
+      .map((e) => ({
+        title: e.title,
+        calories: e.calories,
+        proteinGrams: e.proteinGrams ?? null,
+        fatGrams: e.fatGrams ?? null,
+        carbsGrams: e.carbsGrams ?? null,
+        fibreGrams: e.fibreGrams ?? null,
+      }));
+    setSelectedRecipeItems(items);
+    setCreateRecipeName("");
+    setCreateRecipeModalVisible(true);
+  }, [entries, selectedEntryIds]);
+
+  const handleCreateRecipe = useCallback(async () => {
+    if (!createRecipeName.trim()) {
+      m3Alert.alert("Missing name", "Enter a name for your recipe.");
+      return;
+    }
+    if (selectedRecipeItems.length === 0) {
+      m3Alert.alert("No items", "Add at least one item to the recipe.");
+      return;
+    }
+    try {
+      await insertRecipe({
+        name: createRecipeName.trim(),
+        items: selectedRecipeItems,
+      });
+      const updated = await getAllRecipes();
+      setRecipes(updated);
+      setCreateRecipeModalVisible(false);
+      setSelectedEntryIds(new Set());
+      setCreateRecipeName("");
+      setSelectedRecipeItems([]);
+      Vibration.vibrate(10);
+    } catch {
+      m3Alert.alert("Error", "Could not save recipe.");
+    }
+  }, [createRecipeName, selectedRecipeItems]);
+
+  const [editRecipeId, setEditRecipeId] = useState<string | null>(null);
+  const [editRecipeName, setEditRecipeName] = useState("");
+  const [editRecipeItems, setEditRecipeItems] = useState<EditRecipeItemDraft[]>(
+    [],
+  );
+  const [editRecipeShowMacros, setEditRecipeShowMacros] = useState<Set<number>>(
+    new Set(),
+  );
+
+  const handleEditRecipe = useCallback((recipe: Recipe) => {
+    setEditRecipeId(recipe.id);
+    setEditRecipeName(recipe.name);
+    const items: RecipeItem[] = JSON.parse(recipe.itemsJson);
+    setEditRecipeItems(
+      items.map((i) => ({
+        title: i.title,
+        calories: `${i.calories}`,
+        protein: typeof i.proteinGrams === "number" ? `${i.proteinGrams}` : "",
+        fat: typeof i.fatGrams === "number" ? `${i.fatGrams}` : "",
+        carbs: typeof i.carbsGrams === "number" ? `${i.carbsGrams}` : "",
+        fibre: typeof i.fibreGrams === "number" ? `${i.fibreGrams}` : "",
+      })),
+    );
+    setEditRecipeShowMacros(new Set());
+  }, []);
+
+  const handleEditRecipeItemChange = useCallback(
+    (idx: number, field: keyof EditRecipeItemDraft, value: string) => {
+      setEditRecipeItems((prev) =>
+        prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)),
+      );
+    },
+    [],
+  );
+
+  const handleEditRecipeRemoveItem = useCallback((idx: number) => {
+    setEditRecipeItems((prev) => prev.filter((_, i) => i !== idx));
+    setEditRecipeShowMacros((prev) => {
+      const next = new Set(prev);
+      next.delete(idx);
+      // Decrement all indices >= idx
+      const adjusted = new Set<number>();
+      for (const v of next) {
+        if (v > idx) adjusted.add(v - 1);
+        else adjusted.add(v);
+      }
+      return adjusted;
+    });
+  }, []);
+
+  const handleEditRecipeAddItem = useCallback(() => {
+    setEditRecipeItems((prev) => [
+      ...prev,
+      { title: "", calories: "", protein: "", fat: "", carbs: "", fibre: "" },
+    ]);
+  }, []);
+
+  const toggleEditRecipeMacros = useCallback((idx: number) => {
+    setEditRecipeShowMacros((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  }, []);
+
+  const handleSaveRecipeEdit = useCallback(async () => {
+    if (!editRecipeId || !editRecipeName.trim()) {
+      setEditRecipeId(null);
+      setTimeout(
+        () => m3Alert.alert("Missing name", "Enter a name for your recipe."),
+        100,
+      );
+      return;
+    }
+    // Validate and build RecipeItem[] from editRecipeItems
+    const items: RecipeItem[] = [];
+    for (let i = 0; i < editRecipeItems.length; i++) {
+      const draft = editRecipeItems[i];
+      const calories = parseNumberInput(draft.calories);
+      if (!draft.title.trim()) {
+        setTimeout(
+          () =>
+            m3Alert.alert("Missing item name", `Item ${i + 1} needs a name.`),
+          100,
+        );
+        return;
+      }
+      if (!calories || calories <= 0) {
+        setTimeout(
+          () =>
+            m3Alert.alert(
+              "Invalid calories",
+              `Item ${i + 1} needs valid calories.`,
+            ),
+          100,
+        );
+        return;
+      }
+      const protein = draft.protein.trim()
+        ? parseNumberInput(draft.protein)
+        : null;
+      const fat = draft.fat.trim() ? parseNumberInput(draft.fat) : null;
+      const carbs = draft.carbs.trim() ? parseNumberInput(draft.carbs) : null;
+      const fibre = draft.fibre.trim() ? parseNumberInput(draft.fibre) : null;
+      items.push({
+        title: draft.title.trim(),
+        calories: Math.round(calories),
+        proteinGrams: protein !== null ? Math.round(protein * 10) / 10 : null,
+        fatGrams: fat !== null ? Math.round(fat * 10) / 10 : null,
+        carbsGrams: carbs !== null ? Math.round(carbs * 10) / 10 : null,
+        fibreGrams: fibre !== null ? Math.round(fibre * 10) / 10 : null,
+      });
+    }
+    if (items.length === 0) {
+      setTimeout(
+        () => m3Alert.alert("No items", "Add at least one item to the recipe."),
+        100,
+      );
+      return;
+    }
+    try {
+      await updateRecipe(editRecipeId, { name: editRecipeName.trim(), items });
+      const updated = await getAllRecipes();
+      setRecipes(updated);
+      setEditRecipeId(null);
+      setEditRecipeName("");
+      setEditRecipeItems([]);
+      setEditRecipeShowMacros(new Set());
+      Vibration.vibrate(10);
+    } catch {
+      setEditRecipeId(null);
+      setTimeout(() => m3Alert.alert("Error", "Could not update recipe."), 100);
+    }
+  }, [editRecipeId, editRecipeName, editRecipeItems]);
+
+  const handleDeleteRecipe = useCallback(
+    async (id: string) => {
+      // Optimistic removal: remove immediately, restore on failure
+      const snapshot = recipes;
+      setRecipes((prev) => prev.filter((r) => r.id !== id));
+      try {
+        await deleteRecipe(id);
+      } catch {
+        setRecipes(snapshot);
+      }
+    },
+    [recipes],
+  );
+
+  const handleAddRecipeToLog = useCallback(
+    (recipe: Recipe) => {
+      const items: RecipeItem[] = JSON.parse(recipe.itemsJson);
+      for (const item of items) {
+        addMeal(item);
+      }
+      Vibration.vibrate(10);
+    },
+    [addMeal],
+  );
+
+  const handleOpenRecipeModal = useCallback(() => {
+    getAllRecipes()
+      .then(setRecipes)
+      .catch(() => {});
+    setRecipeModalVisible(true);
+  }, []);
+
   const handleOpenLlmEstimator = useCallback(() => {
     if (isArchitectureBlocked && deviceArchitecture) {
       m3Alert.alert(
@@ -1512,113 +1801,632 @@ export default function LogScreen() {
   ]);
 
   return (
-    <View
-      style={[
-        styles.root,
-        { paddingTop: insets.top, backgroundColor: theme.colors.background },
-      ]}
-    >
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Surface
-          style={[
-            styles.heroCard,
-            { backgroundColor: theme.colors.elevation.level2 },
-          ]}
-          elevation={3}
-        >
-          <View style={styles.goalBadgeRow}>
-            <Chip
-              icon={goalModeIcon}
-              compact
-              style={[styles.goalBadge, { backgroundColor: goalModeBg }]}
-              textStyle={{ color: goalModeOnBg, fontWeight: "700" }}
-            >
-              {goalModeLabel}
-            </Chip>
-            <Text
-              variant="bodySmall"
-              style={{ color: goalModeTint, fontWeight: "700" }}
-            >
-              {goalModeDetail}
-            </Text>
-          </View>
-          <View style={styles.progressSection}>
-            <View style={styles.progressRow}>
-              <Text
-                variant="bodyMedium"
-                style={{ color: theme.colors.onSurfaceVariant }}
+    <>
+      {m3Alert.alertDialog}
+      <View
+        style={[
+          styles.root,
+          { paddingTop: insets.top, backgroundColor: theme.colors.background },
+        ]}
+      >
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <Surface
+            style={[
+              styles.heroCard,
+              { backgroundColor: theme.colors.elevation.level2 },
+            ]}
+            elevation={3}
+          >
+            <View style={styles.goalBadgeRow}>
+              <Chip
+                icon={goalModeIcon}
+                compact
+                style={[styles.goalBadge, { backgroundColor: goalModeBg }]}
+                textStyle={{ color: goalModeOnBg, fontWeight: "700" }}
               >
-                {todayCalories} / {adjustedTarget} kcal
-              </Text>
+                {goalModeLabel}
+              </Chip>
               <Text
-                variant="bodyMedium"
-                style={{
-                  color:
-                    remaining < 0 ? theme.colors.error : theme.colors.primary,
-                }}
+                variant="bodySmall"
+                style={{ color: goalModeTint, fontWeight: "700" }}
               >
-                {remaining >= 0
-                  ? `${remaining} kcal left`
-                  : `${Math.abs(remaining)} kcal over`}
+                {goalModeDetail}
               </Text>
             </View>
-            <View style={styles.metabolismRow}>
-              <View style={styles.metabolismChip}>
-                <MaterialCommunityIcons
-                  name="fire"
-                  size={12}
-                  color={theme.colors.onSurfaceVariant}
-                />
+            <View style={styles.progressSection}>
+              <View style={styles.progressRow}>
                 <Text
-                  variant="labelSmall"
+                  variant="bodyMedium"
                   style={{ color: theme.colors.onSurfaceVariant }}
                 >
-                  BMR {metabolism.bmr ? `${metabolism.bmr}` : "N/A"}
+                  {todayCalories} / {adjustedTarget} kcal
                 </Text>
-              </View>
-              <View style={styles.metabolismChip}>
-                <MaterialCommunityIcons
-                  name="lightning-bolt"
-                  size={12}
-                  color={theme.colors.onSurfaceVariant}
-                />
                 <Text
-                  variant="labelSmall"
-                  style={{ color: theme.colors.onSurfaceVariant }}
+                  variant="bodyMedium"
+                  style={{
+                    color:
+                      remaining < 0 ? theme.colors.error : theme.colors.primary,
+                  }}
                 >
-                  TDEE {metabolism.tdee ? `${metabolism.tdee}` : "N/A"}
+                  {remaining >= 0
+                    ? `${remaining} kcal left`
+                    : `${Math.abs(remaining)} kcal over`}
                 </Text>
               </View>
-              <View style={styles.metabolismChip}>
-                <MaterialCommunityIcons
-                  name="target"
-                  size={12}
-                  color={theme.colors.onSurfaceVariant}
-                />
-                <Text
-                  variant="labelSmall"
-                  style={{ color: theme.colors.onSurfaceVariant }}
-                >
-                  Maintenance{" "}
-                  {metabolism.maintenanceCalories
-                    ? `${metabolism.maintenanceCalories}`
-                    : "N/A"}
-                </Text>
+              <View style={styles.metabolismRow}>
+                <View style={styles.metabolismChip}>
+                  <MaterialCommunityIcons
+                    name="fire"
+                    size={12}
+                    color={theme.colors.onSurfaceVariant}
+                  />
+                  <Text
+                    variant="labelSmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    BMR {metabolism.bmr ? `${metabolism.bmr}` : "N/A"}
+                  </Text>
+                </View>
+                <View style={styles.metabolismChip}>
+                  <MaterialCommunityIcons
+                    name="lightning-bolt"
+                    size={12}
+                    color={theme.colors.onSurfaceVariant}
+                  />
+                  <Text
+                    variant="labelSmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    TDEE {metabolism.tdee ? `${metabolism.tdee}` : "N/A"}
+                  </Text>
+                </View>
+                <View style={styles.metabolismChip}>
+                  <MaterialCommunityIcons
+                    name="target"
+                    size={12}
+                    color={theme.colors.onSurfaceVariant}
+                  />
+                  <Text
+                    variant="labelSmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    Maintenance{" "}
+                    {metabolism.maintenanceCalories
+                      ? `${metabolism.maintenanceCalories}`
+                      : "N/A"}
+                  </Text>
+                </View>
               </View>
+              <ProgressBar
+                progress={progress}
+                color={
+                  remaining < 0 ? theme.colors.error : theme.colors.primary
+                }
+                style={styles.progressBar}
+              />
+              {hasMacroGoals ? (
+                <Pressable
+                  onPress={() => {
+                    Vibration.vibrate(10);
+                    setMacroModalVisible(true);
+                  }}
+                  style={({ pressed }) => [
+                    styles.macroSummaryBar,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.elevation.level3
+                        : theme.colors.elevation.level1,
+                      borderColor: pressed
+                        ? theme.colors.primary
+                        : theme.colors.outlineVariant,
+                    },
+                  ]}
+                >
+                  <View style={styles.macroSummaryContent}>
+                    {proteinGoal !== null ? (
+                      <View
+                        style={[
+                          styles.macroToken,
+                          { backgroundColor: macroPalette.protein.background },
+                        ]}
+                      >
+                        <Text
+                          variant="labelSmall"
+                          style={{
+                            color: macroPalette.protein.color,
+                            fontWeight: "700",
+                          }}
+                        >
+                          P {Math.round(todayTotalProtein)}/
+                          {Math.round(proteinGoal)}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {carbsGoal !== null ? (
+                      <View
+                        style={[
+                          styles.macroToken,
+                          { backgroundColor: macroPalette.carbs.background },
+                        ]}
+                      >
+                        <Text
+                          variant="labelSmall"
+                          style={{
+                            color: macroPalette.carbs.color,
+                            fontWeight: "700",
+                          }}
+                        >
+                          C {Math.round(todayTotalCarbs)}/
+                          {Math.round(carbsGoal)}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {fatGoal !== null ? (
+                      <View
+                        style={[
+                          styles.macroToken,
+                          { backgroundColor: macroPalette.fat.background },
+                        ]}
+                      >
+                        <Text
+                          variant="labelSmall"
+                          style={{
+                            color: macroPalette.fat.color,
+                            fontWeight: "700",
+                          }}
+                        >
+                          F {Math.round(todayTotalFat)}/{Math.round(fatGoal)}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <View
+                      style={[
+                        styles.macroToken,
+                        { backgroundColor: macroPalette.fibre.background },
+                      ]}
+                    >
+                      <Text
+                        variant="labelSmall"
+                        style={{
+                          color: macroPalette.fibre.color,
+                          fontWeight: "700",
+                        }}
+                      >
+                        Fib {Math.round(todayTotalFibre)}/
+                        {Math.round(fibreGoal)}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.macroSummaryMeta}>
+                    <MaterialCommunityIcons
+                      name={macroGoalModeIcon}
+                      size={16}
+                      color={theme.colors.onSurfaceVariant}
+                    />
+                    <MaterialCommunityIcons
+                      name="chevron-down"
+                      size={16}
+                      color={theme.colors.onSurfaceVariant}
+                    />
+                  </View>
+                </Pressable>
+              ) : null}
             </View>
-            <ProgressBar
-              progress={progress}
-              color={remaining < 0 ? theme.colors.error : theme.colors.primary}
-              style={styles.progressBar}
+          </Surface>
+
+          <QuickLogCard
+            recentQuickAdds={recentQuickAdds}
+            favouriteQuickAdds={favouriteQuickAdds}
+            favouriteQuickAddKeys={favouriteQuickAddKeys}
+            isMacrosExpanded={data.quickLogMacrosExpanded}
+            onSetMacrosExpanded={(next) =>
+              setData((prev) => ({ ...prev, quickLogMacrosExpanded: next }))
+            }
+            onAddMeal={addMeal}
+            onQuickAddMeal={quickAddMeal}
+            onToggleFavouriteQuickAdd={toggleFavouriteQuickAdd}
+            onOpenLlmEstimator={handleOpenLlmEstimator}
+            data={data}
+            isModelBlocked={isModelBlocked}
+            isModelWarning={isModelWarning}
+            memoryUsagePercent={memoryCheck?.usagePercent}
+          />
+
+          <Card style={styles.card} mode="elevated">
+            <Card.Title
+              title="Today's Entries"
+              titleVariant="titleLarge"
+              rightStyle={styles.entriesHeaderRight}
+              right={() => (
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  {selectedEntryIds.size > 0 ? (
+                    <Button
+                      mode="contained-tonal"
+                      compact
+                      icon="bookmark-outline"
+                      onPress={handleSaveAsRecipe}
+                      style={{ marginRight: 8 }}
+                    >
+                      Save ({selectedEntryIds.size})
+                    </Button>
+                  ) : null}
+                  <Button
+                    mode="text"
+                    compact
+                    icon={
+                      sortMode === "newest"
+                        ? "sort-clock-descending"
+                        : "sort-clock-ascending"
+                    }
+                    style={styles.entriesSortButton}
+                    contentStyle={styles.entriesSortButtonContent}
+                    labelStyle={styles.entriesSortButtonLabel}
+                    onPress={() =>
+                      setSortMode((prev) =>
+                        prev === "newest" ? "oldest" : "newest",
+                      )
+                    }
+                  >
+                    {sortMode === "newest" ? "Newest" : "Oldest"}
+                  </Button>
+                </View>
+              )}
             />
-            {hasMacroGoals ? (
+            <Card.Content style={styles.entriesList}>
+              {visibleEntries.length ? (
+                renderedEntries
+              ) : (
+                <View style={styles.emptyState}>
+                  <MaterialCommunityIcons
+                    name="silverware-fork-knife"
+                    size={40}
+                    color={theme.colors.onSurfaceVariant}
+                    style={{ opacity: 0.4 }}
+                  />
+                  <Text
+                    variant="bodyMedium"
+                    style={[
+                      styles.emptyText,
+                      { color: theme.colors.onSurfaceVariant },
+                    ]}
+                  >
+                    No entries logged today yet.
+                  </Text>
+                  <Text
+                    variant="bodySmall"
+                    style={{
+                      color: theme.colors.onSurfaceVariant,
+                      opacity: 0.6,
+                    }}
+                  >
+                    Use the Quick Log above to add a meal.
+                  </Text>
+                </View>
+              )}
+            </Card.Content>
+          </Card>
+
+          {recipes.length > 0 ? (
+            <Card style={styles.card} mode="elevated">
+              <Card.Title
+                title="My Recipes"
+                titleVariant="titleLarge"
+                right={() => (
+                  <IconButton
+                    icon="book-open-variant"
+                    size={20}
+                    onPress={handleOpenRecipeModal}
+                  />
+                )}
+              />
+              <Card.Content style={styles.entriesList}>
+                {recipes.slice(0, 5).map((recipe) => {
+                  const itemCount = JSON.parse(recipe.itemsJson).length;
+                  return (
+                    <Surface
+                      key={recipe.id}
+                      style={[
+                        styles.entryRow,
+                        {
+                          backgroundColor: theme.colors.elevation.level1,
+                          borderColor: theme.colors.outlineVariant,
+                        },
+                      ]}
+                      elevation={1}
+                    >
+                      <View style={styles.entryMain}>
+                        <View style={styles.entryTitleRow}>
+                          <Text
+                            variant="titleSmall"
+                            numberOfLines={1}
+                            style={[
+                              styles.entryTitle,
+                              { color: theme.colors.onSurface },
+                            ]}
+                          >
+                            {recipe.name}
+                          </Text>
+                          <Text
+                            variant="labelMedium"
+                            style={{
+                              color: theme.colors.primary,
+                              fontWeight: "700",
+                            }}
+                          >
+                            {recipe.totalCalories} kcal
+                          </Text>
+                        </View>
+                        <Text
+                          variant="bodySmall"
+                          style={{ color: theme.colors.onSurfaceVariant }}
+                        >
+                          {itemCount} items
+                          {recipe.totalProteinGrams
+                            ? `  •  P ${recipe.totalProteinGrams}g`
+                            : ""}
+                          {recipe.totalCarbsGrams
+                            ? `  C ${recipe.totalCarbsGrams}g`
+                            : ""}
+                          {recipe.totalFatGrams
+                            ? `  F ${recipe.totalFatGrams}g`
+                            : ""}
+                        </Text>
+                      </View>
+                      <View style={styles.entryActions}>
+                        <IconButton
+                          icon="plus-circle-outline"
+                          size={20}
+                          iconColor={theme.colors.primary}
+                          onPress={() => handleAddRecipeToLog(recipe)}
+                          accessibilityLabel="Add recipe to log"
+                        />
+                      </View>
+                    </Surface>
+                  );
+                })}
+                {recipes.length > 5 ? (
+                  <Button
+                    mode="text"
+                    compact
+                    icon="dots-horizontal"
+                    onPress={handleOpenRecipeModal}
+                  >
+                    Show all {recipes.length} recipes
+                  </Button>
+                ) : null}
+              </Card.Content>
+            </Card>
+          ) : null}
+        </ScrollView>
+
+        <Modal
+          visible={llmModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setLlmModalVisible(false)}
+        >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setLlmModalVisible(false)}
+          >
+            <Pressable
+              style={[
+                styles.modalCard,
+                { backgroundColor: theme.colors.surface },
+              ]}
+              onPress={() => {}}
+            >
+              <Text variant="titleMedium" style={{ fontWeight: "700" }}>
+                Meal Estimator
+              </Text>
+              {isModelWarning && !isModelBlocked && memoryCheck && (
+                <View
+                  style={[
+                    styles.llmMemoryWarning,
+                    { backgroundColor: theme.colors.tertiaryContainer },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="alert"
+                    size={16}
+                    color={theme.colors.tertiary}
+                  />
+                  <Text
+                    variant="labelSmall"
+                    style={{ color: theme.colors.tertiary, flex: 1 }}
+                  >
+                    Model uses {memoryCheck.usagePercent}% of available RAM
+                  </Text>
+                </View>
+              )}
+              <TextInput
+                label="Describe your meal"
+                value={llmPrompt}
+                onChangeText={setLlmPrompt}
+                placeholder="e.g. 2 eggs, 1 slice toast, 1 tbsp butter"
+                multiline
+                mode="outlined"
+                theme={QUICK_LOG_INPUT_THEME}
+                right={
+                  <TextInput.Icon
+                    icon={isModelInMemory ? "memory" : "circle-outline"}
+                    color={
+                      isModelInMemory
+                        ? theme.colors.primary
+                        : theme.colors.error
+                    }
+                    onPress={showModelStatusHint}
+                    style={{ alignSelf: "center" }}
+                  />
+                }
+              />
+              <Button
+                mode="contained"
+                icon="robot"
+                loading={llmLoading}
+                onPress={handleLlmPrompt}
+                disabled={llmLoading || !llmPrompt.trim()}
+              >
+                Estimate Calories & Macros
+              </Button>
+              {llmLoading ? (
+                <View style={{ marginTop: 8, gap: 6 }}>
+                  <ProgressBar indeterminate />
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    {llmStage === "loading-model"
+                      ? `Loading model into memory... ${llmStageElapsedSec}s`
+                      : `Estimating nutrition... ${llmStageElapsedSec}s`}
+                  </Text>
+                </View>
+              ) : null}
+              {llmError ? (
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.error, marginTop: 8 }}
+                >
+                  {llmError}
+                </Text>
+              ) : null}
+              {llmResult ? (
+                <View style={{ marginTop: 12 }}>
+                  {!llmResultParsed ? (
+                    <Text
+                      variant="bodySmall"
+                      style={{ color: theme.colors.onSurfaceVariant }}
+                    >
+                      Couldn't understand the model output. Try rephrasing your
+                      meal.
+                    </Text>
+                  ) : !llmResultParsed.items ||
+                    !Array.isArray(llmResultParsed.items) ||
+                    llmResultParsed.items.every(
+                      (item: LLMEstimateItem) => !item.calories,
+                    ) ? (
+                    <Text
+                      variant="bodySmall"
+                      style={{ color: theme.colors.onSurfaceVariant }}
+                    >
+                      No food items identified in the model output.
+                    </Text>
+                  ) : (
+                    <View style={{ marginTop: 4 }}>
+                      {llmResultParsed.items.map(
+                        (item: LLMEstimateItem, idx: number) => (
+                          <View
+                            key={idx}
+                            style={{
+                              marginBottom: 6,
+                              padding: 8,
+                              borderRadius: 8,
+                              backgroundColor: theme.colors.surfaceVariant,
+                            }}
+                          >
+                            <Text
+                              variant="labelLarge"
+                              style={{
+                                fontWeight: "700",
+                                color: theme.colors.primary,
+                              }}
+                            >
+                              {item.name}
+                            </Text>
+                            <Text variant="bodySmall">
+                              Calories: {item.calories} kcal
+                            </Text>
+                            <Text variant="bodySmall">
+                              Protein: {item.protein}g | Carbs: {item.carbs}g |
+                              Fat: {item.fat}g | Fibre: {item.fibre}g
+                            </Text>
+                          </View>
+                        ),
+                      )}
+                      <Button
+                        mode="outlined"
+                        icon="plus"
+                        style={{ marginTop: 8 }}
+                        onPress={() => {
+                          if (
+                            !llmResultParsed ||
+                            !Array.isArray(llmResultParsed.items)
+                          )
+                            return;
+                          llmResultParsed.items.forEach(
+                            (item: LLMEstimateItem) => {
+                              addMeal({
+                                title: item.name,
+                                calories: item.calories,
+                                proteinGrams: item.protein,
+                                fatGrams: item.fat,
+                                carbsGrams: item.carbs,
+                                fibreGrams: item.fibre,
+                              });
+                            },
+                          );
+                          setLlmPrompt("");
+                          setLlmResult(null);
+                          setLlmModalVisible(false);
+                        }}
+                      >
+                        Add to Log
+                      </Button>
+                    </View>
+                  )}
+                </View>
+              ) : null}
+              <Button mode="text" onPress={() => setLlmModalVisible(false)}>
+                Close
+              </Button>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        <Modal
+          visible={editDraft !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={closeEditModal}
+        >
+          <Pressable style={styles.modalBackdrop} onPress={closeEditModal}>
+            <Pressable
+              style={[
+                styles.modalCard,
+                { backgroundColor: theme.colors.surface },
+              ]}
+              onPress={() => {}}
+            >
+              <Text variant="titleMedium" style={{ fontWeight: "700" }}>
+                Edit Entry
+              </Text>
+              <TextInput
+                label="Meal"
+                value={editDraft?.title ?? ""}
+                onChangeText={(value) =>
+                  setEditDraft((prev) =>
+                    prev ? { ...prev, title: value } : prev,
+                  )
+                }
+                mode="outlined"
+                theme={QUICK_LOG_INPUT_THEME}
+              />
+              <TextInput
+                label="Calories (kcal)"
+                value={editDraft?.calories ?? ""}
+                onChangeText={(value) =>
+                  setEditDraft((prev) =>
+                    prev ? { ...prev, calories: value } : prev,
+                  )
+                }
+                keyboardType="numeric"
+                mode="outlined"
+                theme={QUICK_LOG_INPUT_THEME}
+              />
               <Pressable
-                onPress={() => {
-                  Vibration.vibrate(10);
-                  setMacroModalVisible(true);
-                }}
+                onPress={() => setShowEditMacros((prev) => !prev)}
                 style={({ pressed }) => [
-                  styles.macroSummaryBar,
+                  styles.macroSectionHeader,
                   {
                     backgroundColor: pressed
                       ? theme.colors.elevation.level3
@@ -1629,703 +2437,815 @@ export default function LogScreen() {
                   },
                 ]}
               >
-                <View style={styles.macroSummaryContent}>
-                  {proteinGoal !== null ? (
-                    <View
-                      style={[
-                        styles.macroToken,
-                        { backgroundColor: macroPalette.protein.background },
-                      ]}
-                    >
-                      <Text
-                        variant="labelSmall"
-                        style={{
-                          color: macroPalette.protein.color,
-                          fontWeight: "700",
-                        }}
-                      >
-                        P {Math.round(todayTotalProtein)}/
-                        {Math.round(proteinGoal)}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {carbsGoal !== null ? (
-                    <View
-                      style={[
-                        styles.macroToken,
-                        { backgroundColor: macroPalette.carbs.background },
-                      ]}
-                    >
-                      <Text
-                        variant="labelSmall"
-                        style={{
-                          color: macroPalette.carbs.color,
-                          fontWeight: "700",
-                        }}
-                      >
-                        C {Math.round(todayTotalCarbs)}/{Math.round(carbsGoal)}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {fatGoal !== null ? (
-                    <View
-                      style={[
-                        styles.macroToken,
-                        { backgroundColor: macroPalette.fat.background },
-                      ]}
-                    >
-                      <Text
-                        variant="labelSmall"
-                        style={{
-                          color: macroPalette.fat.color,
-                          fontWeight: "700",
-                        }}
-                      >
-                        F {Math.round(todayTotalFat)}/{Math.round(fatGoal)}
-                      </Text>
-                    </View>
-                  ) : null}
-                  <View
-                    style={[
-                      styles.macroToken,
-                      { backgroundColor: macroPalette.fibre.background },
-                    ]}
+                <View style={styles.macroSectionTitle}>
+                  <MaterialCommunityIcons
+                    name="nutrition"
+                    size={16}
+                    color={theme.colors.primary}
+                  />
+                  <Text
+                    variant="labelLarge"
+                    style={{ color: theme.colors.onSurface }}
                   >
-                    <Text
-                      variant="labelSmall"
-                      style={{
-                        color: macroPalette.fibre.color,
-                        fontWeight: "700",
-                      }}
-                    >
-                      Fib {Math.round(todayTotalFibre)}/{Math.round(fibreGoal)}
-                    </Text>
-                  </View>
+                    Macros
+                  </Text>
+                  <Chip
+                    compact
+                    mode="flat"
+                    style={{
+                      backgroundColor: theme.colors.surfaceVariant,
+                    }}
+                    textStyle={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    Optional
+                  </Chip>
                 </View>
-                <View style={styles.macroSummaryMeta}>
-                  <MaterialCommunityIcons
-                    name={macroGoalModeIcon}
-                    size={16}
-                    color={theme.colors.onSurfaceVariant}
-                  />
-                  <MaterialCommunityIcons
-                    name="chevron-down"
-                    size={16}
-                    color={theme.colors.onSurfaceVariant}
-                  />
-                </View>
-              </Pressable>
-            ) : null}
-          </View>
-        </Surface>
-
-        <QuickLogCard
-          recentQuickAdds={recentQuickAdds}
-          favouriteQuickAdds={favouriteQuickAdds}
-          favouriteQuickAddKeys={favouriteQuickAddKeys}
-          isMacrosExpanded={data.quickLogMacrosExpanded}
-          onSetMacrosExpanded={(next) =>
-            setData((prev) => ({ ...prev, quickLogMacrosExpanded: next }))
-          }
-          onAddMeal={addMeal}
-          onQuickAddMeal={quickAddMeal}
-          onToggleFavouriteQuickAdd={toggleFavouriteQuickAdd}
-          onOpenLlmEstimator={handleOpenLlmEstimator}
-          data={data}
-          isModelBlocked={isModelBlocked}
-          isModelWarning={isModelWarning}
-          memoryUsagePercent={memoryCheck?.usagePercent}
-        />
-
-        <Card style={styles.card} mode="elevated">
-          <Card.Title
-            title="Today's Entries"
-            titleVariant="titleLarge"
-            rightStyle={styles.entriesHeaderRight}
-            right={() => (
-              <Button
-                mode="text"
-                compact
-                icon={
-                  sortMode === "newest"
-                    ? "sort-clock-descending"
-                    : "sort-clock-ascending"
-                }
-                style={styles.entriesSortButton}
-                contentStyle={styles.entriesSortButtonContent}
-                labelStyle={styles.entriesSortButtonLabel}
-                onPress={() =>
-                  setSortMode((prev) =>
-                    prev === "newest" ? "oldest" : "newest",
-                  )
-                }
-              >
-                {sortMode === "newest" ? "Newest" : "Oldest"}
-              </Button>
-            )}
-          />
-          <Card.Content style={styles.entriesList}>
-            {visibleEntries.length ? (
-              renderedEntries
-            ) : (
-              <View style={styles.emptyState}>
                 <MaterialCommunityIcons
-                  name="silverware-fork-knife"
-                  size={40}
+                  name={showEditMacros ? "chevron-up" : "chevron-down"}
+                  size={18}
                   color={theme.colors.onSurfaceVariant}
-                  style={{ opacity: 0.4 }}
                 />
-                <Text
-                  variant="bodyMedium"
-                  style={[
-                    styles.emptyText,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
-                >
-                  No entries logged today yet.
-                </Text>
-                <Text
-                  variant="bodySmall"
-                  style={{ color: theme.colors.onSurfaceVariant, opacity: 0.6 }}
-                >
-                  Use the Quick Log above to add a meal.
-                </Text>
+              </Pressable>
+              {editDraftMismatch ? (
+                <View style={styles.mismatchRow}>
+                  <MaterialCommunityIcons
+                    name="alert-circle-outline"
+                    size={14}
+                    color={theme.colors.error}
+                  />
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: theme.colors.error }}
+                  >
+                    Macros estimate about {editDraftMismatch.macroCalories}{" "}
+                    kcal, which differs from logged calories.
+                  </Text>
+                </View>
+              ) : null}
+              {showEditMacros ? (
+                <View style={styles.macroGrid}>
+                  <TextInput
+                    label="Protein (g)"
+                    value={editDraft?.protein ?? ""}
+                    onChangeText={(value) =>
+                      setEditDraft((prev) =>
+                        prev ? { ...prev, protein: value } : prev,
+                      )
+                    }
+                    keyboardType="numeric"
+                    mode="outlined"
+                    style={styles.macroInput}
+                    theme={QUICK_LOG_INPUT_THEME}
+                  />
+                  <TextInput
+                    label="Carbs (g)"
+                    value={editDraft?.carbs ?? ""}
+                    onChangeText={(value) =>
+                      setEditDraft((prev) =>
+                        prev ? { ...prev, carbs: value } : prev,
+                      )
+                    }
+                    keyboardType="numeric"
+                    mode="outlined"
+                    style={styles.macroInput}
+                    theme={QUICK_LOG_INPUT_THEME}
+                  />
+                  <TextInput
+                    label="Fat (g)"
+                    value={editDraft?.fat ?? ""}
+                    onChangeText={(value) =>
+                      setEditDraft((prev) =>
+                        prev ? { ...prev, fat: value } : prev,
+                      )
+                    }
+                    keyboardType="numeric"
+                    mode="outlined"
+                    style={styles.macroInput}
+                    theme={QUICK_LOG_INPUT_THEME}
+                  />
+                  <TextInput
+                    label="Fibre (g)"
+                    value={editDraft?.fibre ?? ""}
+                    onChangeText={(value) =>
+                      setEditDraft((prev) =>
+                        prev ? { ...prev, fibre: value } : prev,
+                      )
+                    }
+                    keyboardType="numeric"
+                    mode="outlined"
+                    style={styles.macroInput}
+                    theme={QUICK_LOG_INPUT_THEME}
+                  />
+                </View>
+              ) : null}
+              <View style={styles.editActionsRow}>
+                <Button mode="text" onPress={closeEditModal}>
+                  Cancel
+                </Button>
+                <Button mode="contained" onPress={saveEditedEntry}>
+                  Save
+                </Button>
               </View>
-            )}
-          </Card.Content>
-        </Card>
-      </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
-      <Modal
-        visible={llmModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLlmModalVisible(false)}
-      >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setLlmModalVisible(false)}
+        <Modal
+          visible={macroModalVisible}
+          transparent
+          animationType="none"
+          onRequestClose={() => setMacroModalVisible(false)}
         >
           <Pressable
-            style={[
-              styles.modalCard,
-              { backgroundColor: theme.colors.surface },
-            ]}
-            onPress={() => {}}
+            style={styles.modalBackdrop}
+            onPress={() => setMacroModalVisible(false)}
           >
-            <Text variant="titleMedium" style={{ fontWeight: "700" }}>
-              Meal Estimator
-            </Text>
-            {isModelWarning && !isModelBlocked && memoryCheck && (
-              <View
-                style={[
-                  styles.llmMemoryWarning,
-                  { backgroundColor: theme.colors.tertiaryContainer },
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name="alert"
-                  size={16}
-                  color={theme.colors.tertiary}
-                />
-                <Text
-                  variant="labelSmall"
-                  style={{ color: theme.colors.tertiary, flex: 1 }}
-                >
-                  Model uses {memoryCheck.usagePercent}% of available RAM
-                </Text>
-              </View>
-            )}
-            <TextInput
-              label="Describe your meal"
-              value={llmPrompt}
-              onChangeText={setLlmPrompt}
-              placeholder="e.g. 2 eggs, 1 slice toast, 1 tbsp butter"
-              multiline
-              mode="outlined"
-              theme={QUICK_LOG_INPUT_THEME}
-              right={
-                <TextInput.Icon
-                  icon={isModelInMemory ? "memory" : "circle-outline"}
-                  color={
-                    isModelInMemory ? theme.colors.primary : theme.colors.error
-                  }
-                  onPress={showModelStatusHint}
-                  style={{ alignSelf: "center" }}
-                />
-              }
-            />
-            <Button
-              mode="contained"
-              icon="robot"
-              loading={llmLoading}
-              onPress={handleLlmPrompt}
-              disabled={llmLoading || !llmPrompt.trim()}
+            <Pressable
+              style={[
+                styles.modalCard,
+                { backgroundColor: theme.colors.surface },
+              ]}
+              onPress={() => {}}
             >
-              Estimate Calories & Macros
-            </Button>
-            {llmLoading ? (
-              <View style={{ marginTop: 8, gap: 6 }}>
-                <ProgressBar indeterminate />
+              <Text
+                variant="titleMedium"
+                style={{ fontWeight: "700", marginBottom: 4 }}
+              >
+                Today's Macros
+              </Text>
+              <View style={styles.macroModeRow}>
+                <MaterialCommunityIcons
+                  name={macroGoalModeIcon}
+                  size={16}
+                  color={theme.colors.onSurfaceVariant}
+                />
                 <Text
                   variant="bodySmall"
                   style={{ color: theme.colors.onSurfaceVariant }}
                 >
-                  {llmStage === "loading-model"
-                    ? `Loading model into memory... ${llmStageElapsedSec}s`
-                    : `Estimating nutrition... ${llmStageElapsedSec}s`}
+                  {macroGoalModeText}
                 </Text>
               </View>
-            ) : null}
-            {llmError ? (
-              <Text
-                variant="bodySmall"
-                style={{ color: theme.colors.error, marginTop: 8 }}
-              >
-                {llmError}
-              </Text>
-            ) : null}
-            {llmResult ? (
-              <View style={{ marginTop: 12 }}>
-                {!llmResultParsed ? (
-                  <Text
-                    variant="bodySmall"
-                    style={{ color: theme.colors.onSurfaceVariant }}
-                  >
-                    Couldn't understand the model output. Try rephrasing your
-                    meal.
-                  </Text>
-                ) : !llmResultParsed.items ||
-                  !Array.isArray(llmResultParsed.items) ||
-                  llmResultParsed.items.every(
-                    (item: LLMEstimateItem) => !item.calories,
-                  ) ? (
-                  <Text
-                    variant="bodySmall"
-                    style={{ color: theme.colors.onSurfaceVariant }}
-                  >
-                    No food items identified in the model output.
-                  </Text>
-                ) : (
-                  <View style={{ marginTop: 4 }}>
-                    {llmResultParsed.items.map(
-                      (item: LLMEstimateItem, idx: number) => (
-                        <View
-                          key={idx}
-                          style={{
-                            marginBottom: 6,
-                            padding: 8,
-                            borderRadius: 8,
-                            backgroundColor: theme.colors.surfaceVariant,
-                          }}
-                        >
-                          <Text
-                            variant="labelLarge"
-                            style={{
-                              fontWeight: "700",
-                              color: theme.colors.primary,
-                            }}
-                          >
-                            {item.name}
-                          </Text>
-                          <Text variant="bodySmall">
-                            Calories: {item.calories} kcal
-                          </Text>
-                          <Text variant="bodySmall">
-                            Protein: {item.protein}g | Carbs: {item.carbs}g |
-                            Fat: {item.fat}g | Fibre: {item.fibre}g
-                          </Text>
-                        </View>
-                      ),
-                    )}
-                    <Button
-                      mode="outlined"
-                      icon="plus"
-                      style={{ marginTop: 8 }}
-                      onPress={() => {
-                        if (
-                          !llmResultParsed ||
-                          !Array.isArray(llmResultParsed.items)
-                        )
-                          return;
-                        llmResultParsed.items.forEach(
-                          (item: LLMEstimateItem) => {
-                            addMeal({
-                              title: item.name,
-                              calories: item.calories,
-                              proteinGrams: item.protein,
-                              fatGrams: item.fat,
-                              carbsGrams: item.carbs,
-                              fibreGrams: item.fibre,
-                            });
-                          },
-                        );
-                        setLlmPrompt("");
-                        setLlmResult(null);
-                        setLlmModalVisible(false);
+
+              {proteinGoal !== null ? (
+                <View style={styles.macroRow}>
+                  <View style={styles.macroLabel}>
+                    <View style={styles.macroRowHeader}>
+                      <MaterialCommunityIcons
+                        name="food-steak"
+                        size={16}
+                        color={macroPalette.protein.color}
+                      />
+                      <Text
+                        variant="labelSmall"
+                        style={{
+                          fontWeight: "700",
+                          color: macroPalette.protein.color,
+                        }}
+                      >
+                        Protein
+                      </Text>
+                    </View>
+                    <Text
+                      variant="bodySmall"
+                      style={{ color: theme.colors.onSurfaceVariant }}
+                    >
+                      {Math.round(todayTotalProtein)} /{" "}
+                      {Math.round(proteinGoal)} g
+                    </Text>
+                  </View>
+                  <ProgressBar
+                    progress={proteinProgress}
+                    color={macroPalette.protein.color}
+                    style={styles.macroBar}
+                  />
+                </View>
+              ) : null}
+
+              {carbsGoal !== null ? (
+                <View style={styles.macroRow}>
+                  <View style={styles.macroLabel}>
+                    <View style={styles.macroRowHeader}>
+                      <MaterialCommunityIcons
+                        name="bread-slice-outline"
+                        size={16}
+                        color={macroPalette.carbs.color}
+                      />
+                      <Text
+                        variant="labelSmall"
+                        style={{
+                          fontWeight: "700",
+                          color: macroPalette.carbs.color,
+                        }}
+                      >
+                        Carbs
+                      </Text>
+                    </View>
+                    <Text
+                      variant="bodySmall"
+                      style={{ color: theme.colors.onSurfaceVariant }}
+                    >
+                      {Math.round(todayTotalCarbs)} / {Math.round(carbsGoal)} g
+                    </Text>
+                  </View>
+                  <ProgressBar
+                    progress={carbsProgress}
+                    color={macroPalette.carbs.color}
+                    style={styles.macroBar}
+                  />
+                </View>
+              ) : null}
+
+              {fatGoal !== null ? (
+                <View style={styles.macroRow}>
+                  <View style={styles.macroLabel}>
+                    <View style={styles.macroRowHeader}>
+                      <MaterialCommunityIcons
+                        name="water-outline"
+                        size={16}
+                        color={macroPalette.fat.color}
+                      />
+                      <Text
+                        variant="labelSmall"
+                        style={{
+                          fontWeight: "700",
+                          color: macroPalette.fat.color,
+                        }}
+                      >
+                        Fat
+                      </Text>
+                    </View>
+                    <Text
+                      variant="bodySmall"
+                      style={{ color: theme.colors.onSurfaceVariant }}
+                    >
+                      {Math.round(todayTotalFat)} / {Math.round(fatGoal)} g
+                    </Text>
+                  </View>
+                  <ProgressBar
+                    progress={fatProgress}
+                    color={macroPalette.fat.color}
+                    style={styles.macroBar}
+                  />
+                </View>
+              ) : null}
+
+              <View style={styles.macroRow}>
+                <View style={styles.macroLabel}>
+                  <View style={styles.macroRowHeader}>
+                    <MaterialCommunityIcons
+                      name="leaf"
+                      size={16}
+                      color={macroPalette.fibre.color}
+                    />
+                    <Text
+                      variant="labelSmall"
+                      style={{
+                        fontWeight: "700",
+                        color: macroPalette.fibre.color,
                       }}
                     >
-                      Add to Log
-                    </Button>
+                      Fibre
+                    </Text>
                   </View>
-                )}
-              </View>
-            ) : null}
-            <Button mode="text" onPress={() => setLlmModalVisible(false)}>
-              Close
-            </Button>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
-        visible={editDraft !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={closeEditModal}
-      >
-        <Pressable style={styles.modalBackdrop} onPress={closeEditModal}>
-          <Pressable
-            style={[
-              styles.modalCard,
-              { backgroundColor: theme.colors.surface },
-            ]}
-            onPress={() => {}}
-          >
-            <Text variant="titleMedium" style={{ fontWeight: "700" }}>
-              Edit Entry
-            </Text>
-            <TextInput
-              label="Meal"
-              value={editDraft?.title ?? ""}
-              onChangeText={(value) =>
-                setEditDraft((prev) =>
-                  prev ? { ...prev, title: value } : prev,
-                )
-              }
-              mode="outlined"
-              theme={QUICK_LOG_INPUT_THEME}
-            />
-            <TextInput
-              label="Calories (kcal)"
-              value={editDraft?.calories ?? ""}
-              onChangeText={(value) =>
-                setEditDraft((prev) =>
-                  prev ? { ...prev, calories: value } : prev,
-                )
-              }
-              keyboardType="numeric"
-              mode="outlined"
-              theme={QUICK_LOG_INPUT_THEME}
-            />
-            <Pressable
-              onPress={() => setShowEditMacros((prev) => !prev)}
-              style={({ pressed }) => [
-                styles.macroSectionHeader,
-                {
-                  backgroundColor: pressed
-                    ? theme.colors.elevation.level3
-                    : theme.colors.elevation.level1,
-                  borderColor: pressed
-                    ? theme.colors.primary
-                    : theme.colors.outlineVariant,
-                },
-              ]}
-            >
-              <View style={styles.macroSectionTitle}>
-                <MaterialCommunityIcons
-                  name="nutrition"
-                  size={16}
-                  color={theme.colors.primary}
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    {Math.round(todayTotalFibre)} / {Math.round(fibreGoal)} g
+                  </Text>
+                </View>
+                <ProgressBar
+                  progress={fibreProgress}
+                  color={macroPalette.fibre.color}
+                  style={styles.macroBar}
                 />
-                <Text
-                  variant="labelLarge"
-                  style={{ color: theme.colors.onSurface }}
-                >
-                  Macros
-                </Text>
-                <Chip
-                  compact
-                  mode="flat"
-                  style={{
-                    backgroundColor: theme.colors.surfaceVariant,
-                  }}
-                  textStyle={{ color: theme.colors.onSurfaceVariant }}
-                >
-                  Optional
-                </Chip>
               </View>
-              <MaterialCommunityIcons
-                name={showEditMacros ? "chevron-up" : "chevron-down"}
-                size={18}
-                color={theme.colors.onSurfaceVariant}
-              />
+
+              <Button
+                mode="text"
+                onPress={() => setMacroModalVisible(false)}
+                style={{ marginTop: 16 }}
+              >
+                Close
+              </Button>
             </Pressable>
-            {editDraftMismatch ? (
-              <View style={styles.mismatchRow}>
-                <MaterialCommunityIcons
-                  name="alert-circle-outline"
-                  size={14}
-                  color={theme.colors.error}
-                />
-                <Text variant="bodySmall" style={{ color: theme.colors.error }}>
-                  Macros estimate about {editDraftMismatch.macroCalories} kcal,
-                  which differs from logged calories.
-                </Text>
-              </View>
-            ) : null}
-            {showEditMacros ? (
-              <View style={styles.macroGrid}>
-                <TextInput
-                  label="Protein (g)"
-                  value={editDraft?.protein ?? ""}
-                  onChangeText={(value) =>
-                    setEditDraft((prev) =>
-                      prev ? { ...prev, protein: value } : prev,
-                    )
-                  }
-                  keyboardType="numeric"
-                  mode="outlined"
-                  style={styles.macroInput}
-                  theme={QUICK_LOG_INPUT_THEME}
-                />
-                <TextInput
-                  label="Carbs (g)"
-                  value={editDraft?.carbs ?? ""}
-                  onChangeText={(value) =>
-                    setEditDraft((prev) =>
-                      prev ? { ...prev, carbs: value } : prev,
-                    )
-                  }
-                  keyboardType="numeric"
-                  mode="outlined"
-                  style={styles.macroInput}
-                  theme={QUICK_LOG_INPUT_THEME}
-                />
-                <TextInput
-                  label="Fat (g)"
-                  value={editDraft?.fat ?? ""}
-                  onChangeText={(value) =>
-                    setEditDraft((prev) =>
-                      prev ? { ...prev, fat: value } : prev,
-                    )
-                  }
-                  keyboardType="numeric"
-                  mode="outlined"
-                  style={styles.macroInput}
-                  theme={QUICK_LOG_INPUT_THEME}
-                />
-                <TextInput
-                  label="Fibre (g)"
-                  value={editDraft?.fibre ?? ""}
-                  onChangeText={(value) =>
-                    setEditDraft((prev) =>
-                      prev ? { ...prev, fibre: value } : prev,
-                    )
-                  }
-                  keyboardType="numeric"
-                  mode="outlined"
-                  style={styles.macroInput}
-                  theme={QUICK_LOG_INPUT_THEME}
-                />
-              </View>
-            ) : null}
-            <View style={styles.editActionsRow}>
-              <Button mode="text" onPress={closeEditModal}>
-                Cancel
-              </Button>
-              <Button mode="contained" onPress={saveEditedEntry}>
-                Save
-              </Button>
-            </View>
           </Pressable>
-        </Pressable>
-      </Modal>
+        </Modal>
 
-      <Modal
-        visible={macroModalVisible}
-        transparent
-        animationType="none"
-        onRequestClose={() => setMacroModalVisible(false)}
-      >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setMacroModalVisible(false)}
+        {/* ── Recipe Browser Modal ───────────────────────────────── */}
+        <Modal
+          visible={recipeModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setRecipeModalVisible(false)}
         >
           <Pressable
-            style={[
-              styles.modalCard,
-              { backgroundColor: theme.colors.surface },
-            ]}
-            onPress={() => {}}
+            style={styles.modalBackdrop}
+            onPress={() => setRecipeModalVisible(false)}
           >
-            <Text
-              variant="titleMedium"
-              style={{ fontWeight: "700", marginBottom: 4 }}
+            <Pressable
+              style={[
+                styles.modalCard,
+                { backgroundColor: theme.colors.surface, maxHeight: 500 },
+              ]}
+              onPress={() => {}}
             >
-              Today's Macros
-            </Text>
-            <View style={styles.macroModeRow}>
-              <MaterialCommunityIcons
-                name={macroGoalModeIcon}
-                size={16}
-                color={theme.colors.onSurfaceVariant}
+              <Text variant="titleMedium" style={{ fontWeight: "700" }}>
+                My Recipes
+              </Text>
+              {recipes.length === 0 ? (
+                <Text
+                  variant="bodyMedium"
+                  style={{
+                    color: theme.colors.onSurfaceVariant,
+                    textAlign: "center",
+                    paddingVertical: 16,
+                  }}
+                >
+                  No saved recipes yet.
+                </Text>
+              ) : (
+                <ScrollView
+                  style={{ maxHeight: 360 }}
+                  showsVerticalScrollIndicator
+                  nestedScrollEnabled
+                >
+                  {recipes.map((recipe) => {
+                    const items: RecipeItem[] = JSON.parse(recipe.itemsJson);
+                    return (
+                      <Surface
+                        key={recipe.id}
+                        style={[
+                          styles.entryRow,
+                          {
+                            backgroundColor: theme.colors.elevation.level1,
+                            borderColor: theme.colors.outlineVariant,
+                            marginBottom: 8,
+                          },
+                        ]}
+                        elevation={1}
+                      >
+                        <View style={[styles.entryMain, { gap: 2 }]}>
+                          <View style={styles.entryTitleRow}>
+                            <Text
+                              variant="titleSmall"
+                              numberOfLines={1}
+                              style={{ flex: 1, color: theme.colors.onSurface }}
+                            >
+                              {recipe.name}
+                            </Text>
+                            <Text
+                              variant="labelMedium"
+                              style={{
+                                color: theme.colors.primary,
+                                fontWeight: "700",
+                              }}
+                            >
+                              {recipe.totalCalories} kcal
+                            </Text>
+                          </View>
+                          <Text
+                            variant="bodySmall"
+                            numberOfLines={2}
+                            style={{ color: theme.colors.onSurfaceVariant }}
+                          >
+                            {items.map((i) => i.title).join(", ")}
+                          </Text>
+                          {recipe.totalProteinGrams ? (
+                            <Text
+                              variant="bodySmall"
+                              style={{ color: theme.colors.onSurfaceVariant }}
+                            >
+                              P {recipe.totalProteinGrams}g C{" "}
+                              {recipe.totalCarbsGrams ?? 0}g F{" "}
+                              {recipe.totalFatGrams ?? 0}g
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View style={styles.entryActions}>
+                          <IconButton
+                            icon="plus-circle-outline"
+                            size={20}
+                            iconColor={theme.colors.primary}
+                            onPress={() => {
+                              handleAddRecipeToLog(recipe);
+                              setRecipeModalVisible(false);
+                            }}
+                            accessibilityLabel="Add recipe to log"
+                          />
+                          <IconButton
+                            icon="pencil-outline"
+                            size={18}
+                            onPress={() => handleEditRecipe(recipe)}
+                            accessibilityLabel="Edit recipe"
+                          />
+                          <IconButton
+                            icon="delete-outline"
+                            size={18}
+                            iconColor={theme.colors.error}
+                            onPress={() => handleDeleteRecipe(recipe.id)}
+                            accessibilityLabel="Delete recipe"
+                          />
+                        </View>
+                      </Surface>
+                    );
+                  })}
+                </ScrollView>
+              )}
+              <Button mode="text" onPress={() => setRecipeModalVisible(false)}>
+                Close
+              </Button>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        {/* ── Edit Recipe Modal ──────────────────────────────────── */}
+        <Modal
+          visible={editRecipeId !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            setEditRecipeId(null);
+            setEditRecipeName("");
+            setEditRecipeItems([]);
+            setEditRecipeShowMacros(new Set());
+          }}
+        >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => {
+              setEditRecipeId(null);
+              setEditRecipeName("");
+              setEditRecipeItems([]);
+              setEditRecipeShowMacros(new Set());
+            }}
+          >
+            <View
+              onStartShouldSetResponder={() => true}
+              style={[
+                styles.modalCard,
+                { backgroundColor: theme.colors.surface, maxHeight: 560 },
+              ]}
+            >
+              <Text variant="titleMedium" style={{ fontWeight: "700" }}>
+                Edit Recipe
+              </Text>
+              <TextInput
+                label="Recipe Name"
+                value={editRecipeName}
+                onChangeText={setEditRecipeName}
+                placeholder="Enter recipe name"
+                mode="outlined"
+                theme={QUICK_LOG_INPUT_THEME}
               />
+              <ScrollView
+                style={{ maxHeight: 300 }}
+                showsVerticalScrollIndicator
+                nestedScrollEnabled
+              >
+                {editRecipeItems.map((draft, idx) => {
+                  const showMacros = editRecipeShowMacros.has(idx);
+                  const draftCalories = parseNumberInput(draft.calories);
+                  const itemMismatch =
+                    draftCalories && draftCalories > 0
+                      ? getMacroCalorieMismatch(
+                          Math.round(draftCalories),
+                          {
+                            proteinGrams: draft.protein.trim()
+                              ? parseNumberInput(draft.protein)
+                              : null,
+                            fatGrams: draft.fat.trim()
+                              ? parseNumberInput(draft.fat)
+                              : null,
+                            carbsGrams: draft.carbs.trim()
+                              ? parseNumberInput(draft.carbs)
+                              : null,
+                          },
+                          { tolerancePercent: data.calorieTolerancePercent },
+                        )
+                      : null;
+                  return (
+                    <Surface
+                      key={idx}
+                      style={[
+                        styles.entryRow,
+                        {
+                          backgroundColor: theme.colors.elevation.level1,
+                          borderColor: theme.colors.outlineVariant,
+                          marginBottom: 8,
+                          flexDirection: "column",
+                          alignItems: "stretch",
+                          gap: 6,
+                        },
+                      ]}
+                      elevation={1}
+                    >
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <TextInput
+                          label="Item name"
+                          value={draft.title}
+                          onChangeText={(v) =>
+                            handleEditRecipeItemChange(idx, "title", v)
+                          }
+                          placeholder="e.g. Oatmeal"
+                          mode="outlined"
+                          theme={QUICK_LOG_INPUT_THEME}
+                          style={{ flex: 1 }}
+                        />
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 2,
+                          }}
+                        >
+                          <TextInput
+                            label="Calories"
+                            value={draft.calories}
+                            onChangeText={(v) =>
+                              handleEditRecipeItemChange(idx, "calories", v)
+                            }
+                            placeholder="kcal"
+                            keyboardType="numeric"
+                            mode="outlined"
+                            theme={QUICK_LOG_INPUT_THEME}
+                            style={{ minWidth: 72 }}
+                          />
+                          <IconButton
+                            icon="trash-can-outline"
+                            size={18}
+                            iconColor={theme.colors.error}
+                            onPress={() => handleEditRecipeRemoveItem(idx)}
+                            accessibilityLabel="Remove item"
+                          />
+                        </View>
+                      </View>
+                      <Pressable
+                        onPress={() => toggleEditRecipeMacros(idx)}
+                        style={({ pressed }) => [
+                          styles.macroSectionHeader,
+                          {
+                            backgroundColor: pressed
+                              ? theme.colors.elevation.level3
+                              : theme.colors.elevation.level1,
+                            borderColor: pressed
+                              ? theme.colors.primary
+                              : theme.colors.outlineVariant,
+                          },
+                        ]}
+                      >
+                        <View style={styles.macroSectionTitle}>
+                          <MaterialCommunityIcons
+                            name="nutrition"
+                            size={16}
+                            color={theme.colors.primary}
+                          />
+                          <Text
+                            variant="labelLarge"
+                            style={{ color: theme.colors.onSurface }}
+                          >
+                            Macros
+                          </Text>
+                          <Chip
+                            compact
+                            mode="flat"
+                            style={{
+                              backgroundColor: theme.colors.surfaceVariant,
+                            }}
+                            textStyle={{ color: theme.colors.onSurfaceVariant }}
+                          >
+                            Optional
+                          </Chip>
+                        </View>
+                        <MaterialCommunityIcons
+                          name={showMacros ? "chevron-up" : "chevron-down"}
+                          size={18}
+                          color={theme.colors.onSurfaceVariant}
+                        />
+                      </Pressable>
+                      {itemMismatch ? (
+                        <View style={styles.mismatchRow}>
+                          <MaterialCommunityIcons
+                            name="alert-circle-outline"
+                            size={14}
+                            color={theme.colors.error}
+                          />
+                          <Text
+                            variant="bodySmall"
+                            style={{ color: theme.colors.error }}
+                          >
+                            Macros estimate about {itemMismatch.macroCalories}{" "}
+                            kcal, which differs from logged calories.
+                          </Text>
+                        </View>
+                      ) : null}
+                      {showMacros ? (
+                        <View style={styles.macroGrid}>
+                          <TextInput
+                            label="Protein (g)"
+                            value={draft.protein}
+                            onChangeText={(v) =>
+                              handleEditRecipeItemChange(idx, "protein", v)
+                            }
+                            placeholder="0"
+                            keyboardType="numeric"
+                            mode="outlined"
+                            style={styles.macroInput}
+                            theme={QUICK_LOG_INPUT_THEME}
+                          />
+                          <TextInput
+                            label="Carbs (g)"
+                            value={draft.carbs}
+                            onChangeText={(v) =>
+                              handleEditRecipeItemChange(idx, "carbs", v)
+                            }
+                            placeholder="0"
+                            keyboardType="numeric"
+                            mode="outlined"
+                            style={styles.macroInput}
+                            theme={QUICK_LOG_INPUT_THEME}
+                          />
+                          <TextInput
+                            label="Fat (g)"
+                            value={draft.fat}
+                            onChangeText={(v) =>
+                              handleEditRecipeItemChange(idx, "fat", v)
+                            }
+                            placeholder="0"
+                            keyboardType="numeric"
+                            mode="outlined"
+                            style={styles.macroInput}
+                            theme={QUICK_LOG_INPUT_THEME}
+                          />
+                          <TextInput
+                            label="Fibre (g)"
+                            value={draft.fibre}
+                            onChangeText={(v) =>
+                              handleEditRecipeItemChange(idx, "fibre", v)
+                            }
+                            placeholder="0"
+                            keyboardType="numeric"
+                            mode="outlined"
+                            style={styles.macroInput}
+                            theme={QUICK_LOG_INPUT_THEME}
+                          />
+                        </View>
+                      ) : null}
+                    </Surface>
+                  );
+                })}
+              </ScrollView>
+              <Button
+                mode="outlined"
+                icon="plus"
+                compact
+                onPress={handleEditRecipeAddItem}
+                style={{ alignSelf: "flex-start" }}
+              >
+                Add Item
+              </Button>
+              <View style={styles.editActionsRow}>
+                <Button
+                  mode="text"
+                  onPress={() => {
+                    setEditRecipeId(null);
+                    setEditRecipeName("");
+                    setEditRecipeItems([]);
+                    setEditRecipeShowMacros(new Set());
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  icon="check"
+                  onPress={handleSaveRecipeEdit}
+                >
+                  Save
+                </Button>
+              </View>
+            </View>
+          </Pressable>
+        </Modal>
+
+        {/* ── Create Recipe Modal ────────────────────────────────── */}
+        <Modal
+          visible={createRecipeModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            setCreateRecipeModalVisible(false);
+            setSelectedEntryIds(new Set());
+            setCreateRecipeName("");
+            setSelectedRecipeItems([]);
+          }}
+        >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => {
+              setCreateRecipeModalVisible(false);
+              setSelectedEntryIds(new Set());
+              setCreateRecipeName("");
+              setSelectedRecipeItems([]);
+            }}
+          >
+            <Pressable
+              style={[
+                styles.modalCard,
+                { backgroundColor: theme.colors.surface },
+              ]}
+              onPress={() => {}}
+            >
+              <Text variant="titleMedium" style={{ fontWeight: "700" }}>
+                Save as Recipe
+              </Text>
               <Text
                 variant="bodySmall"
                 style={{ color: theme.colors.onSurfaceVariant }}
               >
-                {macroGoalModeText}
+                {selectedRecipeItems.length} item(s) selected
               </Text>
-            </View>
-
-            {proteinGoal !== null ? (
-              <View style={styles.macroRow}>
-                <View style={styles.macroLabel}>
-                  <View style={styles.macroRowHeader}>
-                    <MaterialCommunityIcons
-                      name="food-steak"
-                      size={16}
-                      color={macroPalette.protein.color}
-                    />
-                    <Text
-                      variant="labelSmall"
-                      style={{
-                        fontWeight: "700",
-                        color: macroPalette.protein.color,
-                      }}
-                    >
-                      Protein
-                    </Text>
-                  </View>
-                  <Text
-                    variant="bodySmall"
-                    style={{ color: theme.colors.onSurfaceVariant }}
-                  >
-                    {Math.round(todayTotalProtein)} / {Math.round(proteinGoal)}{" "}
-                    g
-                  </Text>
-                </View>
-                <ProgressBar
-                  progress={proteinProgress}
-                  color={macroPalette.protein.color}
-                  style={styles.macroBar}
-                />
-              </View>
-            ) : null}
-
-            {carbsGoal !== null ? (
-              <View style={styles.macroRow}>
-                <View style={styles.macroLabel}>
-                  <View style={styles.macroRowHeader}>
-                    <MaterialCommunityIcons
-                      name="bread-slice-outline"
-                      size={16}
-                      color={macroPalette.carbs.color}
-                    />
-                    <Text
-                      variant="labelSmall"
-                      style={{
-                        fontWeight: "700",
-                        color: macroPalette.carbs.color,
-                      }}
-                    >
-                      Carbs
-                    </Text>
-                  </View>
-                  <Text
-                    variant="bodySmall"
-                    style={{ color: theme.colors.onSurfaceVariant }}
-                  >
-                    {Math.round(todayTotalCarbs)} / {Math.round(carbsGoal)} g
-                  </Text>
-                </View>
-                <ProgressBar
-                  progress={carbsProgress}
-                  color={macroPalette.carbs.color}
-                  style={styles.macroBar}
-                />
-              </View>
-            ) : null}
-
-            {fatGoal !== null ? (
-              <View style={styles.macroRow}>
-                <View style={styles.macroLabel}>
-                  <View style={styles.macroRowHeader}>
-                    <MaterialCommunityIcons
-                      name="water-outline"
-                      size={16}
-                      color={macroPalette.fat.color}
-                    />
-                    <Text
-                      variant="labelSmall"
-                      style={{
-                        fontWeight: "700",
-                        color: macroPalette.fat.color,
-                      }}
-                    >
-                      Fat
-                    </Text>
-                  </View>
-                  <Text
-                    variant="bodySmall"
-                    style={{ color: theme.colors.onSurfaceVariant }}
-                  >
-                    {Math.round(todayTotalFat)} / {Math.round(fatGoal)} g
-                  </Text>
-                </View>
-                <ProgressBar
-                  progress={fatProgress}
-                  color={macroPalette.fat.color}
-                  style={styles.macroBar}
-                />
-              </View>
-            ) : null}
-
-            <View style={styles.macroRow}>
-              <View style={styles.macroLabel}>
-                <View style={styles.macroRowHeader}>
-                  <MaterialCommunityIcons
-                    name="leaf"
-                    size={16}
-                    color={macroPalette.fibre.color}
-                  />
-                  <Text
-                    variant="labelSmall"
-                    style={{
-                      fontWeight: "700",
-                      color: macroPalette.fibre.color,
-                    }}
-                  >
-                    Fibre
-                  </Text>
-                </View>
-                <Text
-                  variant="bodySmall"
-                  style={{ color: theme.colors.onSurfaceVariant }}
-                >
-                  {Math.round(todayTotalFibre)} / {Math.round(fibreGoal)} g
-                </Text>
-              </View>
-              <ProgressBar
-                progress={fibreProgress}
-                color={macroPalette.fibre.color}
-                style={styles.macroBar}
+              <TextInput
+                label="Recipe Name"
+                value={createRecipeName}
+                onChangeText={setCreateRecipeName}
+                placeholder="e.g. My Breakfast"
+                mode="outlined"
+                theme={QUICK_LOG_INPUT_THEME}
               />
-            </View>
-
-            <Button
-              mode="text"
-              onPress={() => setMacroModalVisible(false)}
-              style={{ marginTop: 16 }}
-            >
-              Close
-            </Button>
+              <ScrollView
+                style={{ maxHeight: 200 }}
+                showsVerticalScrollIndicator
+                nestedScrollEnabled
+              >
+                {selectedRecipeItems.map((item, idx) => (
+                  <Surface
+                    key={idx}
+                    style={[
+                      styles.entryRow,
+                      {
+                        backgroundColor: theme.colors.elevation.level1,
+                        borderColor: theme.colors.outlineVariant,
+                        marginBottom: 4,
+                      },
+                    ]}
+                    elevation={0}
+                  >
+                    <View style={styles.entryMain}>
+                      <View style={styles.entryTitleRow}>
+                        <Text
+                          variant="bodyMedium"
+                          numberOfLines={1}
+                          style={{ flex: 1, color: theme.colors.onSurface }}
+                        >
+                          {item.title}
+                        </Text>
+                        <Text
+                          variant="labelSmall"
+                          style={{
+                            color: theme.colors.primary,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {item.calories} kcal
+                        </Text>
+                      </View>
+                    </View>
+                  </Surface>
+                ))}
+              </ScrollView>
+              <View style={styles.editActionsRow}>
+                <Button
+                  mode="text"
+                  onPress={() => {
+                    setCreateRecipeModalVisible(false);
+                    setSelectedEntryIds(new Set());
+                    setCreateRecipeName("");
+                    setSelectedRecipeItems([]);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  icon="bookmark-outline"
+                  onPress={handleCreateRecipe}
+                >
+                  Save Recipe
+                </Button>
+              </View>
+            </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
-      {m3Alert.alertDialog}
-    </View>
+        </Modal>
+      </View>
+    </>
   );
 }
 
@@ -2417,7 +3337,7 @@ const styles = StyleSheet.create({
     gap: 10,
     flexWrap: "wrap",
   },
-  formArea: { gap: 12 },
+  formArea: { gap: 12, paddingBottom: 10 },
   macroGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   macroInput: { minWidth: "47%", flexGrow: 1 },
   quickAddSection: { gap: 8, marginBottom: 8 },

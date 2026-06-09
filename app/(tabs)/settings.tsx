@@ -642,11 +642,13 @@ export default function SettingsScreen() {
       const importedTotal =
         summary.meals.imported +
         summary.weightHistory.imported +
-        summary.bodyFatHistory.imported;
+        summary.bodyFatHistory.imported +
+        summary.recipes.imported;
       const failedTotal =
         summary.meals.failed +
         summary.weightHistory.failed +
-        summary.bodyFatHistory.failed;
+        summary.bodyFatHistory.failed +
+        summary.recipes.failed;
       const detail =
         failedTotal > 0
           ? `Imported ${importedTotal} item(s). Skipped ${failedTotal} invalid item(s).`

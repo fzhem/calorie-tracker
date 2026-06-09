@@ -34,4 +34,8 @@ export function makeBodyFatId(point: {
   return `${epochMs(point.recordedAt)}-${point.bodyFatPercentage}`;
 }
 
+export function makeRecipeId(name: string): string {
+  return `recipe-${slugify(name)}-${Date.now()}`;
+}
+
 import { SLUG_MAX_LENGTH } from "@/constants";

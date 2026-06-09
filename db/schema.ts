@@ -58,6 +58,18 @@ export const weightHistory = sqliteTable(
   ],
 );
 
+export const recipes = sqliteTable("recipes", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  itemsJson: text("items_json").notNull(),
+  totalCalories: integer("total_calories").notNull(),
+  totalProteinGrams: real("total_protein_g"),
+  totalFatGrams: real("total_fat_g"),
+  totalCarbsGrams: real("total_carbs_g"),
+  totalFibreGrams: real("total_fibre_g"),
+  createdAt: text("created_at").notNull(),
+});
+
 export const bodyFatHistory = sqliteTable(
   DB_TABLE_BODY_FAT_HISTORY,
   {

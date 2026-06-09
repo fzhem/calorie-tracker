@@ -13,6 +13,7 @@ export const EXPORT_FILENAME_PREFIX = "calorie-tracker-export_";
 export const DB_TABLE_MEALS = "meals";
 export const DB_TABLE_WEIGHT_HISTORY = "weight_history";
 export const DB_TABLE_BODY_FAT_HISTORY = "body_fat_history";
+export const RECIPE_TABLE = "recipes";
 
 // ── Database Index Names ─────────────────────────────────────
 export const IDX_MEALS_LOGGED_AT = "idx_meals_logged_at";

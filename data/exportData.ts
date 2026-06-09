@@ -13,14 +13,16 @@ import type {
   MetabolismSex,
   ActivityLevel,
 } from "@/data/storage";
-import type { Meal, Weight, BodyFat } from "@/db/index";
+import type { Meal, Weight, BodyFat, Recipe } from "@/db/index";
 import {
   getAllMeals,
   getAllWeights,
   getAllBodyFats,
+  getAllRecipes,
   importMealsBulk,
   importWeightsBulk,
   importBodyFatsBulk,
+  importRecipesBulk,
 } from "@/db/index";
 
 export type ExportPayload = {
@@ -28,12 +30,14 @@ export type ExportPayload = {
   meals: Meal[];
   weightHistory: Weight[];
   bodyFatHistory: BodyFat[];
+  recipes: Recipe[];
 };
 
 export type ImportSummary = {
   meals: { imported: number; failed: number };
   weightHistory: { imported: number; failed: number };
   bodyFatHistory: { imported: number; failed: number };
+  recipes: { imported: number; failed: number };
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -204,10 +208,11 @@ export async function exportUserData(): Promise<string> {
   const settings = getCachedData() ?? (await loadStoredData());
   if (!settings) throw new Error("No data to export.");
 
-  const [meals, weightHistory, bodyFatHistory] = await Promise.all([
+  const [meals, weightHistory, bodyFatHistory, recipes] = await Promise.all([
     getAllMeals(),
     getAllWeights(),
     getAllBodyFats(),
+    getAllRecipes(),
   ]);
 
   const payload: ExportPayload = {
@@ -215,6 +220,7 @@ export async function exportUserData(): Promise<string> {
     meals,
     weightHistory,
     bodyFatHistory,
+    recipes,
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -238,6 +244,7 @@ export async function importUserData(
     meals: { imported: 0, failed: 0 },
     weightHistory: { imported: 0, failed: 0 },
     bodyFatHistory: { imported: 0, failed: 0 },
+    recipes: { imported: 0, failed: 0 },
   };
 
   // ── Detect format ──────────────────────────────────────────────
@@ -323,6 +330,12 @@ export async function importUserData(
       summary.bodyFatHistory.imported = bodyFatsResult.imported;
       summary.bodyFatHistory.failed = bodyFats.invalid + bodyFatsResult.failed;
     }
+    if (Array.isArray(data.recipes)) {
+      onProgress?.(0.85, "Importing recipes…");
+      const recipesResult = await importRecipesBulk(data.recipes as Recipe[]);
+      summary.recipes.imported = recipesResult.imported;
+      summary.recipes.failed = recipesResult.failed;
+    }
     onProgress?.(1.0, "Done");
     return summary;
   }
@@ -354,6 +367,12 @@ export async function importUserData(
     const bodyFatsResult = await importBodyFatsBulk(bodyFats.valid);
     summary.bodyFatHistory.imported = bodyFatsResult.imported;
     summary.bodyFatHistory.failed = bodyFats.invalid + bodyFatsResult.failed;
+  }
+  if (Array.isArray(payload.recipes)) {
+    onProgress?.(0.85, "Importing recipes…");
+    const recipesResult = await importRecipesBulk(payload.recipes as Recipe[]);
+    summary.recipes.imported = recipesResult.imported;
+    summary.recipes.failed = recipesResult.failed;
   }
   onProgress?.(1.0, "Done");
 
