@@ -347,9 +347,8 @@ function ChartSvg({
     const pts: { x: number; y: number }[] = [];
     for (let i = 0; i < data.length; i++) {
       const x = xForIndex(i);
-      const baseY = yForValue(data[i].value);
-      const altOffset = i % 2 !== 0 ? -POINT_OFFSET : POINT_OFFSET;
-      pts.push({ x, y: baseY + altOffset });
+      const y = yForValue(data[i].value);
+      pts.push({ x, y });
     }
 
     // Build smooth cubic bezier path
@@ -389,9 +388,7 @@ function ChartSvg({
 
   for (let i = 0; i < data.length; i++) {
     const x = xForIndex(i);
-    const baseY = yForValue(data[i].value);
-    const altOffset = i % 2 !== 0 ? -POINT_OFFSET : POINT_OFFSET;
-    const y = baseY + altOffset;
+    const y = yForValue(data[i].value);
 
     const isLatest = i === data.length - 1;
     const isSelected = i === selectedIndex;
@@ -408,14 +405,13 @@ function ChartSvg({
       />,
     );
 
-    // Compact value label for all points
-    const labelAbove = altOffset > 0;
+    // Compact value label for all non-latest points
     if (!isLatest) {
       valueLabels.push(
         <SvgText
           key={`val-${i}`}
           x={x}
-          y={labelAbove ? y - 9 : y + 16}
+          y={y - 10}
           textAnchor="middle"
           fontSize={9}
           fontWeight="600"
@@ -465,10 +461,7 @@ function ChartSvg({
   // Latest pill badge
   const latestPoint = data[data.length - 1];
   const latestX = xForIndex(data.length - 1);
-  const latestBaseY = yForValue(latestPoint.value);
-  const latestOffset =
-    (data.length - 1) % 2 !== 0 ? -POINT_OFFSET : POINT_OFFSET;
-  const latestY = latestBaseY + latestOffset;
+  const latestY = yForValue(latestPoint.value);
   const pillLabel = `${latestPoint.value.toFixed(1)} ${unit}`;
 
   // Build gradient area fill path (curve -> bottom -> close)
