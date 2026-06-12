@@ -534,7 +534,7 @@ function ChartSvg({
             x1={xForIndex(validSelectedIndex)}
             y1={PADDING_TOP - 4}
             x2={xForIndex(validSelectedIndex)}
-            y2={CHART_HEIGHT - PADDING_BOTTOM + 4}
+            y2={CHART_HEIGHT - PADDING_BOTTOM}
             stroke={accentColor}
             strokeWidth={1.5}
             strokeDasharray="4,3"
