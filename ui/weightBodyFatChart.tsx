@@ -509,11 +509,11 @@ function ChartSvg({
 
       {/* Latest pill badge */}
       <Rect
-        x={latestX - 30}
-        y={Math.max(latestY - 24, 2)}
-        width={60}
-        height={18}
-        rx={4}
+        x={latestX - 22}
+        y={Math.max(latestY - 20, 2)}
+        width={42}
+        height={13}
+        rx={3}
         fill={tooltipBg}
       />
       <SvgText
