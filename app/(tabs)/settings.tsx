@@ -2108,7 +2108,9 @@ export default function SettingsScreen() {
                 {downloadedModels.length ? (
                   <View style={styles.downloadedList}>
                     {downloadedModels.map((model) => {
-                      const isActive = data.modelPath === model.uri;
+                      const isEstimate =
+                        (data.estimateModelPath ?? data.modelPath) ===
+                        model.uri;
                       const inMemory = isInMemory(model.uri);
                       const savedConfig = data.perModelConfig?.[model.uri];
                       const hasCustomConfig =
@@ -2135,7 +2137,7 @@ export default function SettingsScreen() {
                           style={[
                             styles.downloadedItem,
                             {
-                              borderColor: isActive
+                              borderColor: isEstimate
                                 ? theme.colors.primary
                                 : isBlocked
                                   ? theme.colors.error
@@ -2240,12 +2242,12 @@ export default function SettingsScreen() {
                           )}
                           <View style={styles.downloadedItemActions}>
                             <Button
-                              mode={isActive ? "contained" : "outlined"}
+                              mode={isEstimate ? "contained" : "outlined"}
                               onPress={() => setActiveModel(model.uri)}
                               disabled={isBlocked}
                               icon={isBlocked ? "lock" : undefined}
                             >
-                              {isActive
+                              {isEstimate
                                 ? "In use"
                                 : isBlocked
                                   ? "Blocked"

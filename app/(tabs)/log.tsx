@@ -44,7 +44,6 @@ import {
 import {
   clearModelCache,
   getModelInstance,
-  setModelCache,
   subscribeModelCache,
   getModelKeySnapshot,
 } from "@/lib/modelCache";
@@ -86,9 +85,10 @@ import {
   type Recipe,
   type RecipeItem,
 } from "@/db/index";
-import { makeMealId, makeRecipeId } from "@/db/helpers";
+import { makeMealId } from "@/db/helpers";
 import { createLLM, type LiteRTLMInstance } from "react-native-litert-lm";
 import { invalidateMealCaches } from "@/lib/queryCache";
+import { ensureModelLoaded } from "@/lib/modelLoader";
 
 export type NutritionResult = {
   calories: number;
@@ -774,24 +774,25 @@ export default function LogScreen() {
     beginLlmStage("estimating");
     setLlmError("");
     setLlmResult(null);
-    if (!modelPath) {
+    const resolveModelPath =
+      data.estimateModelPath ?? data.modelPath ?? modelPath;
+    if (!resolveModelPath) {
       setLlmError("No model file selected in settings.");
       setLlmLoading(false);
       setLlmStage("idle");
       setLlmStageStartedAt(null);
       return;
     }
-    // Remove 'file:///' prefix if present
-    let cleanedModelPath = modelPath.startsWith("file:///")
-      ? modelPath.replace("file:///", "/")
-      : modelPath;
+    const resolvedCleanedPath = resolveModelPath.startsWith("file:///")
+      ? resolveModelPath.replace("file:///", "/")
+      : resolveModelPath;
 
     // Check if model file exists before loading
     try {
       const { File } = await import("expo-file-system");
-      const file = new File(modelPath);
-      if (!file.exists) {
-        const fileName = file.uri.split("/").pop();
+      const fileForCheck = new File(resolveModelPath);
+      if (!fileForCheck.exists) {
+        const fileName = fileForCheck.uri.split("/").pop();
         setLlmError(
           `Model file not found: ${fileName}. Please select or download a model in settings.`,
         );
@@ -810,32 +811,24 @@ export default function LogScreen() {
     }
 
     const modelConfig =
-      data.perModelConfig?.[cleanedModelPath] ?? DEFAULT_MODEL_CONFIG;
-    const activeModelKey = `${cleanedModelPath}::${systemPrompt}::${JSON.stringify(modelConfig)}`;
-    let model: LiteRTLMInstance | null = getModelInstance();
-    if (!model || loadedModelKey !== activeModelKey) {
-      try {
-        beginLlmStage("loading-model");
-        model = createLLM({ enableMemoryTracking: true });
-        await model.loadModel(cleanedModelPath, {
-          systemPrompt: systemPrompt,
-          backend: "cpu",
-          maxTokens: modelConfig.maxTokens,
-          temperature: modelConfig.temperature,
-          topK: modelConfig.topK,
-          topP: modelConfig.topP,
-          enableSpeculativeDecoding:
-            modelConfig.enableSpeculativeDecoding ?? false,
-        });
-        setModelCache(model, activeModelKey);
-      } catch (err) {
-        setLlmError("Failed to load model: " + err);
-        setLlmLoading(false);
-        setLlmStage("idle");
-        setLlmStageStartedAt(null);
-        return;
-      }
+      data.perModelConfig?.[resolvedCleanedPath] ?? DEFAULT_MODEL_CONFIG;
+    try {
+      beginLlmStage("loading-model");
+      const model = await ensureModelLoaded({
+        modelPath: resolvedCleanedPath,
+        systemPrompt,
+        modelConfig,
+      });
+      // model is set — continue below
+    } catch (err) {
+      setLlmError("Failed to load model: " + err);
+      setLlmLoading(false);
+      setLlmStage("idle");
+      setLlmStageStartedAt(null);
+      return;
     }
+    // Re-acquire after loading (already cached by ensureModelLoaded)
+    const model = getModelInstance()!;
     try {
       const response = await model.sendMessage(llmPrompt);
       beginLlmStage("estimating");
