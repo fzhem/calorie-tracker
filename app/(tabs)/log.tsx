@@ -51,8 +51,9 @@ import { checkModelMemory } from "@/lib/memoryUtils";
 import {
   detectArchitecture,
   isLiteRTSupported,
-  getLiteRTUnsupportedReason,
   getArchitectureLabel,
+  isBackendSupported,
+  getBackendUnsupportedReason,
   type DeviceArchitecture,
 } from "@/lib/architectureUtils";
 import {
@@ -86,9 +87,9 @@ import {
   type RecipeItem,
 } from "@/db/index";
 import { makeMealId } from "@/db/helpers";
-import { createLLM, type LiteRTLMInstance } from "react-native-litert-lm";
 import { invalidateMealCaches } from "@/lib/queryCache";
-import { ensureModelLoaded } from "@/lib/modelLoader";
+import { ensureModelLoaded, sendMessage } from "@/lib/modelLoader";
+import type { InferenceBackend } from "@/constants";
 
 export type NutritionResult = {
   calories: number;
@@ -705,6 +706,10 @@ export default function LogScreen() {
             setSystemPrompt(nextSystemPrompt);
             if (changed) {
               clearModelCache();
+              // Clear stale errors from a previous estimation attempt.
+              // The model may have been unloaded by a backend switch in Settings,
+              // so an old "Failed to load model" error is no longer relevant.
+              setLlmError("");
             }
           },
         )
@@ -758,10 +763,14 @@ export default function LogScreen() {
   };
 
   const handleLlmPrompt = async () => {
-    if (!deviceArchitecture || !isLiteRTSupported(deviceArchitecture)) {
+    const backend = data.inferenceBackend ?? "litert";
+    if (
+      !deviceArchitecture ||
+      !isBackendSupported(backend, deviceArchitecture)
+    ) {
       setLlmError(
         deviceArchitecture
-          ? getLiteRTUnsupportedReason(deviceArchitecture)
+          ? getBackendUnsupportedReason(backend, deviceArchitecture)
           : "Checking device architecture compatibility. Please try again.",
       );
       setLlmLoading(false);
@@ -814,12 +823,12 @@ export default function LogScreen() {
       data.perModelConfig?.[resolvedCleanedPath] ?? DEFAULT_MODEL_CONFIG;
     try {
       beginLlmStage("loading-model");
-      const model = await ensureModelLoaded({
+      await ensureModelLoaded({
         modelPath: resolvedCleanedPath,
         systemPrompt,
         modelConfig,
+        inferenceBackend: backend,
       });
-      // model is set — continue below
     } catch (err) {
       setLlmError("Failed to load model: " + err);
       setLlmLoading(false);
@@ -828,9 +837,16 @@ export default function LogScreen() {
       return;
     }
     // Re-acquire after loading (already cached by ensureModelLoaded)
-    const model = getModelInstance()!;
+    const model = getModelInstance();
+    if (!model) {
+      setLlmError("Model instance not available after loading.");
+      setLlmLoading(false);
+      setLlmStage("idle");
+      setLlmStageStartedAt(null);
+      return;
+    }
     try {
-      const response = await model.sendMessage(llmPrompt);
+      const response = await sendMessage(model, llmPrompt);
       beginLlmStage("estimating");
       setLlmResult(response);
     } catch (err) {
@@ -1770,12 +1786,15 @@ export default function LogScreen() {
   }, []);
 
   const handleOpenLlmEstimator = useCallback(() => {
-    if (isArchitectureBlocked && deviceArchitecture) {
-      m3Alert.alert(
-        "AI Features Not Available",
-        `AI meal estimation requires an ARM 64-bit device, but your device is ${getArchitectureLabel(deviceArchitecture)}.\n\n${getLiteRTUnsupportedReason(deviceArchitecture)}`,
-      );
-      return;
+    if (deviceArchitecture) {
+      const backend = data.inferenceBackend ?? "litert";
+      if (!isBackendSupported(backend, deviceArchitecture)) {
+        m3Alert.alert(
+          "AI Features Not Available",
+          `AI meal estimation is not supported on this device architecture (${getArchitectureLabel(deviceArchitecture)}) with the ${backend} backend.\n\n${getBackendUnsupportedReason(backend, deviceArchitecture)}`,
+        );
+        return;
+      }
     }
     if (isModelBlocked) {
       m3Alert.alert(
@@ -1786,9 +1805,9 @@ export default function LogScreen() {
     }
     setLlmModalVisible(true);
   }, [
-    isArchitectureBlocked,
-    isModelBlocked,
+    data.inferenceBackend,
     deviceArchitecture,
+    isModelBlocked,
     selectedModelKey,
     memoryCheck?.usagePercent,
   ]);

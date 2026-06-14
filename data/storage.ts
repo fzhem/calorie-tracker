@@ -15,9 +15,11 @@ import {
   DEFAULT_MODEL_TOP_K,
   DEFAULT_MODEL_TOP_P,
   DEFAULT_MODEL_BACKEND,
+  DEFAULT_INFERENCE_BACKEND,
   PHASE_MAINTAIN,
   ADJUSTMENT_TYPE_KCAL,
 } from "@/constants";
+import type { InferenceBackend } from "@/constants";
 
 export type FavouriteQuickAdd = {
   title: string;
@@ -61,6 +63,8 @@ export type StoredData = {
   modelPath: string | null;
   /** Model used for text-only estimate-meal feature. Falls back to modelPath. */
   estimateModelPath: string | null;
+  /** Which inference engine to use: "litert" (default) or "llama-rn" */
+  inferenceBackend: InferenceBackend;
   systemPrompt: string;
   quickLogMacrosExpanded: boolean;
   baseTarget: number;
@@ -115,6 +119,7 @@ export const DEFAULT_DATA: StoredData = {
   favouriteQuickAdds: [],
   modelPath: null,
   estimateModelPath: null,
+  inferenceBackend: DEFAULT_INFERENCE_BACKEND,
   systemPrompt: `You are a nutrition assistant.
 
   Return JSON only.
@@ -179,6 +184,7 @@ function normalizeStoredData(parsed: Partial<StoredData>): StoredData {
     ...DEFAULT_DATA,
     ...parsed,
     favouriteQuickAdds: parsed.favouriteQuickAdds ?? [],
+    inferenceBackend: parsed.inferenceBackend ?? DEFAULT_INFERENCE_BACKEND,
     perModelConfig: normalizePerModelConfig(parsed.perModelConfig),
   };
 }

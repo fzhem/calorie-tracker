@@ -97,6 +97,12 @@ export const DEFAULT_SEX = SEX_MALE;
 export const QUICK_ADJUST_PERCENT_PRESETS = [0.25, 0.5, 0.75, 1];
 export const QUICK_ADJUST_KCAL_PRESETS = [250, 500, 750, 1000];
 
+// ── Inference Backend Selection ───────────────────────────────
+export const BACKEND_LITERT = "litert";
+export const BACKEND_LLAMA_CPP = "llama-cpp";
+export const DEFAULT_INFERENCE_BACKEND = BACKEND_LITERT;
+export type InferenceBackend = typeof BACKEND_LITERT | typeof BACKEND_LLAMA_CPP;
+
 // ── Model Config Defaults ────────────────────────────────────
 export const DEFAULT_MODEL_TEMPERATURE = 0.2;
 export const DEFAULT_MODEL_MAX_TOKENS = 2048;

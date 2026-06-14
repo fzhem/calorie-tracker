@@ -78,6 +78,9 @@ import { useThemeMode, type ThemeMode } from "@/ui/themeMode";
 import { useM3Alert } from "@/ui/m3Alert";
 import { getAppSegmentedButtonsTheme } from "@/ui/segmentedButtons";
 
+import { BACKEND_LITERT, BACKEND_LLAMA_CPP } from "@/constants";
+import type { InferenceBackend } from "@/constants";
+
 import { getLatestWeight, getLatestBodyFat } from "@/db/index";
 import {
   invalidateBodyFatCaches,
@@ -134,6 +137,9 @@ export const GEMMA_4_E4B_IT =
 
 /** Magic number for .litertlm model files: "LITERTLM" */
 const LITERTLM_MAGIC = [0x4c, 0x49, 0x54, 0x45, 0x52, 0x54, 0x4c, 0x4d];
+
+/** Magic number for GGUF model files: "GGUF" */
+const GGUF_MAGIC = [0x47, 0x47, 0x55, 0x46];
 
 const BUILT_IN_MODELS: ModelCatalogItem[] = [
   {
@@ -786,6 +792,7 @@ export default function SettingsScreen() {
   const [activeModelTab, setActiveModelTab] = useState<"download" | "offline">(
     "offline",
   );
+  const [showLlamaCppModal, setShowLlamaCppModal] = useState(false);
 
   // Clear download error when switching from custom URL to built-in models
   useEffect(() => {
@@ -972,7 +979,11 @@ export default function SettingsScreen() {
 
     const details: DownloadedModel[] = MODEL_DIRECTORY.list()
       .filter((entry): entry is File => entry instanceof File)
-      .filter((file) => file.name.toLowerCase().endsWith(".litertlm"))
+      .filter(
+        (file) =>
+          file.name.toLowerCase().endsWith(".litertlm") ||
+          file.name.toLowerCase().endsWith(".gguf"),
+      )
       .map((file) => ({
         name: file.name,
         uri: file.uri,
@@ -1194,8 +1205,12 @@ export default function SettingsScreen() {
       return;
     }
 
-    // Validate magic number for custom URLs to detect blob URLs and invalid links
-    if (selectedModelKey === "custom") {
+    // Validate magic number for LiteRT custom URLs to detect invalid links.
+    // Skip for llama.cpp since GGUF files have a different magic.
+    if (
+      selectedModelKey === "custom" &&
+      (data.inferenceBackend ?? BACKEND_LITERT) === BACKEND_LITERT
+    ) {
       const magicValidation = await validateModelMagicNumber(source.url);
       if (!magicValidation.valid) {
         setDownloadError(magicValidation.message!);
@@ -1445,6 +1460,16 @@ export default function SettingsScreen() {
     return "No model selected.";
   }, [data.modelPath, downloadedModels]);
 
+  /** Filter downloaded models to only show files compatible with the active backend. */
+  const backendFilteredModels = useMemo(() => {
+    const backend = data.inferenceBackend ?? BACKEND_LITERT;
+    return downloadedModels.filter((m) => {
+      const isGguf = m.name.toLowerCase().endsWith(".gguf");
+      const isLitertlm = m.name.toLowerCase().endsWith(".litertlm");
+      return backend === BACKEND_LLAMA_CPP ? isGguf : isLitertlm;
+    });
+  }, [data.inferenceBackend, downloadedModels]);
+
   const isArchitectureBlocked = useMemo(() => {
     return (
       deviceArchitecture !== null && !isLiteRTSupported(deviceArchitecture)
@@ -1657,7 +1682,7 @@ export default function SettingsScreen() {
 
         <Card style={styles.card} mode="elevated">
           <Card.Title
-            title="LiteRT Models"
+            title="Models & Backend"
             titleVariant="titleLarge"
             right={() =>
               loadedModelKey ? (
@@ -1676,6 +1701,152 @@ export default function SettingsScreen() {
             >
               Active model: {selectedModelDescription}
             </Text>
+
+            {/* Backend selector */}
+            <Text variant="bodyMedium" style={{ marginTop: 4 }}>
+              Inference backend
+            </Text>
+            <SegmentedButtons
+              style={[
+                styles.segmentedControl,
+                { backgroundColor: theme.colors.elevation.level2 },
+              ]}
+              theme={segmentedButtonsTheme}
+              value={data.inferenceBackend ?? BACKEND_LITERT}
+              onValueChange={(value) => {
+                // Switching backend is just a preference — don't unload the
+                // current model or clear its path. The model stays in memory
+                // until the user explicitly selects a different one or triggers
+                // a new estimation (which will load with the new backend).
+                setData((prev) => ({
+                  ...prev,
+                  inferenceBackend: value as InferenceBackend,
+                }));
+              }}
+              buttons={[
+                {
+                  value: BACKEND_LITERT,
+                  label: "LiteRT",
+                  icon: "cpu-64-bit",
+                },
+                {
+                  value: BACKEND_LLAMA_CPP,
+                  label: "llama.cpp",
+                  icon: "console",
+                },
+              ]}
+            />
+
+            {showLlamaCppModal && (
+              <Modal
+                visible={true}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowLlamaCppModal(false)}
+              >
+                <Pressable
+                  style={styles.modalBackdrop}
+                  onPress={() => setShowLlamaCppModal(false)}
+                >
+                  <Pressable
+                    style={[
+                      styles.modalCard,
+                      { backgroundColor: theme.colors.surface },
+                    ]}
+                    onPress={() => {}}
+                  >
+                    <MaterialCommunityIcons
+                      name="package-variant-closed"
+                      size={40}
+                      color={theme.colors.primary}
+                      style={{ alignSelf: "center" }}
+                    />
+                    <Text
+                      variant="titleMedium"
+                      style={{ fontWeight: "700", textAlign: "center" }}
+                    >
+                      Enable llama.cpp
+                    </Text>
+                    <Text
+                      variant="bodySmall"
+                      style={{
+                        color: theme.colors.onSurfaceVariant,
+                        textAlign: "center",
+                      }}
+                    >
+                      llama.cpp is an optional backend. The native module must
+                      be linked at build time — it cannot be downloaded at
+                      runtime.
+                    </Text>
+                    <View
+                      style={{
+                        backgroundColor: theme.colors.surfaceVariant,
+                        borderRadius: 12,
+                        padding: 12,
+                        gap: 8,
+                      }}
+                    >
+                      <Text
+                        variant="labelMedium"
+                        style={{
+                          color: theme.colors.onSurfaceVariant,
+                          fontWeight: "700",
+                        }}
+                      >
+                        Install & Rebuild
+                      </Text>
+                      <Text
+                        variant="bodySmall"
+                        style={{
+                          fontFamily:
+                            Platform.OS === "android" ? "monospace" : "Menlo",
+                          color: theme.colors.onSurfaceVariant,
+                          lineHeight: 18,
+                        }}
+                      >
+                        npm install llama.rn{"\n"}npx expo run:android
+                      </Text>
+                      <Button
+                        mode="outlined"
+                        icon="content-copy"
+                        compact
+                        onPress={() => {
+                          try {
+                            // @ts-ignore – Clipboard may not be available in all RN versions
+                            const Clipboard =
+                              require("@react-native-clipboard/clipboard").default;
+                            if (Clipboard) {
+                              Clipboard.setString(
+                                "npm install llama.rn\nnpx expo run:android",
+                              );
+                              if (Platform.OS === "android") {
+                                ToastAndroid.show(
+                                  "Commands copied to clipboard",
+                                  ToastAndroid.SHORT,
+                                );
+                              }
+                            }
+                          } catch {
+                            // Clipboard not available — ignore
+                          }
+                        }}
+                      >
+                        Copy commands
+                      </Button>
+                    </View>
+                    <View style={modalRowEnd}>
+                      <Button
+                        mode="text"
+                        onPress={() => setShowLlamaCppModal(false)}
+                      >
+                        Close
+                      </Button>
+                    </View>
+                  </Pressable>
+                </Pressable>
+              </Modal>
+            )}
+
             {isArchitectureBlocked && deviceArchitecture ? (
               <View
                 style={[
@@ -1716,8 +1887,8 @@ export default function SettingsScreen() {
                 {
                   value: "offline",
                   label:
-                    downloadedModels.length > 0
-                      ? `Offline (${downloadedModels.length})`
+                    backendFilteredModels.length > 0
+                      ? `Offline (${backendFilteredModels.length})`
                       : "Offline",
                   icon: "package-down",
                 },
@@ -1835,148 +2006,126 @@ export default function SettingsScreen() {
                   </Button>
                 </View>
 
-                <View style={styles.modelSelector}>
-                  {BUILT_IN_MODELS.map((model) => {
-                    const memoryCheck = checkModelMemory(model.key);
-                    const isBlocked =
-                      isArchitectureBlocked || memoryCheck.status === "blocked";
-                    const isWarning = memoryCheck.status === "warning";
-                    const memoryGB =
-                      memoryCheck.modelMemoryBytes / (1024 * 1024 * 1024);
-                    const memoryLabel = `${memoryGB} GB`;
-                    return (
-                      <View key={model.key}>
-                        <View
-                          style={[isBlocked && styles.modelBlockedContainer]}
-                        >
-                          <Button
-                            mode={
-                              selectedModelKey === model.key
-                                ? "contained"
-                                : "outlined"
-                            }
-                            onPress={() => {
-                              if (!isBlocked) setSelectedModelKey(model.key);
-                            }}
-                            disabled={isBlocked}
-                            icon={
-                              isBlocked
-                                ? "lock"
-                                : isWarning
-                                  ? "alert"
-                                  : undefined
-                            }
-                            style={
-                              isBlocked
-                                ? [
-                                    styles.modelBlockedButton,
-                                    {
-                                      backgroundColor:
-                                        theme.colors.surfaceVariant,
-                                    },
-                                  ]
-                                : undefined
-                            }
-                            textColor={
-                              isBlocked
-                                ? theme.colors.onSurfaceVariant
-                                : undefined
-                            }
+                {/* LiteRT built-in model buttons — only shown when LiteRT backend is active */}
+                {(data.inferenceBackend ?? BACKEND_LITERT) ===
+                  BACKEND_LITERT && (
+                  <View style={styles.modelSelector}>
+                    {BUILT_IN_MODELS.map((model) => {
+                      const memoryCheck = checkModelMemory(model.key);
+                      const isBlocked =
+                        isArchitectureBlocked ||
+                        memoryCheck.status === "blocked";
+                      const isWarning = memoryCheck.status === "warning";
+                      const memoryGB =
+                        memoryCheck.modelMemoryBytes / (1024 * 1024 * 1024);
+                      const memoryLabel = `${memoryGB} GB`;
+                      return (
+                        <View key={model.key}>
+                          <View
+                            style={[isBlocked && styles.modelBlockedContainer]}
                           >
-                            {model.label} ({model.sizeLabel})
-                          </Button>
-                          {model.recommended && !isBlocked && (
-                            <View
-                              style={[
-                                styles.recommendedTag,
-                                {
-                                  backgroundColor:
-                                    theme.colors.primaryContainer,
-                                },
-                              ]}
+                            <Button
+                              mode={
+                                selectedModelKey === model.key
+                                  ? "contained"
+                                  : "outlined"
+                              }
+                              onPress={() => {
+                                if (!isBlocked) setSelectedModelKey(model.key);
+                              }}
+                              disabled={isBlocked}
+                              icon={
+                                isBlocked
+                                  ? "lock"
+                                  : isWarning
+                                    ? "alert"
+                                    : undefined
+                              }
+                              style={
+                                isBlocked
+                                  ? [
+                                      styles.modelBlockedButton,
+                                      {
+                                        backgroundColor:
+                                          theme.colors.surfaceVariant,
+                                      },
+                                    ]
+                                  : undefined
+                              }
+                              textColor={
+                                isBlocked
+                                  ? theme.colors.onSurfaceVariant
+                                  : undefined
+                              }
                             >
-                              <Text
-                                variant="labelSmall"
-                                style={{
-                                  color: theme.colors.onPrimaryContainer,
-                                  fontWeight: "700",
-                                }}
+                              {model.label} ({model.sizeLabel})
+                            </Button>
+                            {model.recommended && !isBlocked && (
+                              <View
+                                style={[
+                                  styles.recommendedTag,
+                                  {
+                                    backgroundColor:
+                                      theme.colors.primaryContainer,
+                                  },
+                                ]}
                               >
-                                Recommended for most devices
-                              </Text>
-                            </View>
-                          )}
-                          {(isBlocked || isWarning) && (
-                            <View
-                              style={[
-                                styles.memoryWarningBadge,
-                                {
-                                  backgroundColor: isBlocked
-                                    ? theme.colors.errorContainer
-                                    : theme.colors.tertiaryContainer,
-                                  paddingHorizontal: 6,
-                                  paddingVertical: 2,
-                                  borderRadius: 6,
-                                },
-                              ]}
-                            >
-                              <MaterialCommunityIcons
-                                name={
-                                  isBlocked ? "alert-circle-outline" : "alert"
-                                }
-                                size={12}
-                                color={
-                                  isBlocked
-                                    ? theme.colors.error
-                                    : theme.colors.tertiary
-                                }
-                              />
-                              <Text
-                                variant="labelSmall"
-                                style={{
-                                  fontSize: 10,
-                                  fontWeight: "700",
-                                  color: isBlocked
-                                    ? theme.colors.error
-                                    : theme.colors.tertiary,
-                                  textShadowRadius: 1,
-                                }}
+                                <Text
+                                  variant="labelSmall"
+                                  style={{
+                                    color: theme.colors.onPrimaryContainer,
+                                    fontWeight: "700",
+                                  }}
+                                >
+                                  Recommended for most devices
+                                </Text>
+                              </View>
+                            )}
+                            {(isBlocked || isWarning) && (
+                              <View
+                                style={[
+                                  styles.memoryWarningBadge,
+                                  {
+                                    backgroundColor: isBlocked
+                                      ? theme.colors.errorContainer
+                                      : theme.colors.tertiaryContainer,
+                                    paddingHorizontal: 6,
+                                    paddingVertical: 2,
+                                    borderRadius: 6,
+                                  },
+                                ]}
                               >
-                                {isArchitectureBlocked
-                                  ? "Blocked"
-                                  : isBlocked
-                                    ? "Low RAM"
-                                    : "Warning"}
-                              </Text>
-                            </View>
-                          )}
-                          {isBlocked && !isArchitectureBlocked && (
-                            <Text
-                              variant="labelSmall"
-                              style={[
-                                styles.memoryWarningSubtext,
-                                {
-                                  color: theme.colors.error,
-                                  fontWeight: "700",
-                                  textShadowColor: "rgba(255, 82, 82, 0.4)",
-                                  textShadowOffset: { width: 0, height: 0 },
-                                  textShadowRadius: 4,
-                                },
-                              ]}
-                            >
-                              Requires {memoryLabel} ({memoryCheck.usagePercent}
-                              % of RAM)
-                            </Text>
-                          )}
-                          {isArchitectureBlocked && (
-                            <View
-                              style={[
-                                styles.recommendedTag,
-                                {
-                                  backgroundColor: theme.colors.errorContainer,
-                                },
-                              ]}
-                            >
+                                <MaterialCommunityIcons
+                                  name={
+                                    isBlocked ? "alert-circle-outline" : "alert"
+                                  }
+                                  size={12}
+                                  color={
+                                    isBlocked
+                                      ? theme.colors.error
+                                      : theme.colors.tertiary
+                                  }
+                                />
+                                <Text
+                                  variant="labelSmall"
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: "700",
+                                    color: isBlocked
+                                      ? theme.colors.error
+                                      : theme.colors.tertiary,
+                                    textShadowRadius: 1,
+                                  }}
+                                >
+                                  {isArchitectureBlocked
+                                    ? "Blocked"
+                                    : isBlocked
+                                      ? "Low RAM"
+                                      : "Warning"}
+                                </Text>
+                              </View>
+                            )}
+                            {isBlocked && !isArchitectureBlocked && (
                               <Text
                                 variant="labelSmall"
                                 style={[
@@ -1984,44 +2133,88 @@ export default function SettingsScreen() {
                                   {
                                     color: theme.colors.error,
                                     fontWeight: "700",
+                                    textShadowColor: "rgba(255, 82, 82, 0.4)",
+                                    textShadowOffset: { width: 0, height: 0 },
+                                    textShadowRadius: 4,
                                   },
                                 ]}
                               >
-                                Architecture not supported
+                                Requires {memoryLabel} (
+                                {memoryCheck.usagePercent}% of RAM)
                               </Text>
-                            </View>
-                          )}
-                          {isWarning && !isBlocked && (
-                            <Text
-                              variant="labelSmall"
-                              style={[
-                                styles.memoryWarningSubtext,
-                                {
-                                  color: theme.colors.tertiary,
-                                  fontWeight: "700",
-                                },
-                              ]}
-                            >
-                              Uses {memoryCheck.usagePercent}% of RAM
-                            </Text>
-                          )}
+                            )}
+                            {isArchitectureBlocked && (
+                              <View
+                                style={[
+                                  styles.recommendedTag,
+                                  {
+                                    backgroundColor:
+                                      theme.colors.errorContainer,
+                                  },
+                                ]}
+                              >
+                                <Text
+                                  variant="labelSmall"
+                                  style={[
+                                    styles.memoryWarningSubtext,
+                                    {
+                                      color: theme.colors.error,
+                                      fontWeight: "700",
+                                    },
+                                  ]}
+                                >
+                                  Architecture not supported
+                                </Text>
+                              </View>
+                            )}
+                            {isWarning && !isBlocked && (
+                              <Text
+                                variant="labelSmall"
+                                style={[
+                                  styles.memoryWarningSubtext,
+                                  {
+                                    color: theme.colors.tertiary,
+                                    fontWeight: "700",
+                                  },
+                                ]}
+                              >
+                                Uses {memoryCheck.usagePercent}% of RAM
+                              </Text>
+                            )}
+                          </View>
                         </View>
-                      </View>
-                    );
-                  })}
+                      );
+                    })}
+                    <Button
+                      mode={
+                        selectedModelKey === "custom" ? "contained" : "outlined"
+                      }
+                      onPress={() => {
+                        if (!isArchitectureBlocked)
+                          setSelectedModelKey("custom");
+                      }}
+                      disabled={isArchitectureBlocked}
+                      icon={isArchitectureBlocked ? "lock" : undefined}
+                    >
+                      Custom URL
+                    </Button>
+                  </View>
+                )}
+
+                {/* Custom URL button for llama.cpp — always visible */}
+                {(data.inferenceBackend ?? BACKEND_LITERT) ===
+                  BACKEND_LLAMA_CPP && (
                   <Button
                     mode={
                       selectedModelKey === "custom" ? "contained" : "outlined"
                     }
-                    onPress={() => {
-                      if (!isArchitectureBlocked) setSelectedModelKey("custom");
-                    }}
-                    disabled={isArchitectureBlocked}
-                    icon={isArchitectureBlocked ? "lock" : undefined}
+                    onPress={() => setSelectedModelKey("custom")}
+                    icon="download"
+                    style={{ marginTop: 8 }}
                   >
                     Custom URL
                   </Button>
-                </View>
+                )}
 
                 {selectedModelKey === "custom" ? (
                   <TextInput
@@ -2029,7 +2222,12 @@ export default function SettingsScreen() {
                     label="Model URL"
                     value={customModelUrl}
                     onChangeText={setCustomModelUrl}
-                    placeholder="https://.../model.litertlm"
+                    placeholder={
+                      (data.inferenceBackend ?? BACKEND_LITERT) ===
+                      BACKEND_LLAMA_CPP
+                        ? "https://.../model.gguf"
+                        : "https://.../model.litertlm"
+                    }
                     autoCapitalize="none"
                     autoCorrect={false}
                   />
@@ -2105,9 +2303,9 @@ export default function SettingsScreen() {
                   },
                 ]}
               >
-                {downloadedModels.length ? (
+                {backendFilteredModels.length ? (
                   <View style={styles.downloadedList}>
-                    {downloadedModels.map((model) => {
+                    {backendFilteredModels.map((model) => {
                       const isEstimate =
                         (data.estimateModelPath ?? data.modelPath) ===
                         model.uri;

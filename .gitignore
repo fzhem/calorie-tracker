@@ -43,6 +43,12 @@ yarn-error.*
 /ios
 /android
 
+# Expo module build artifacts (Gradle-generated, not source)
+modules/**/android/build/
+modules/**/android/.cxx/
+modules/**/android/.kotlin/
+modules/**/.expo/
+
 *.db
 *.json
 *.mjs
@@ -51,3 +57,5 @@ yarn-error.*
 !app.json
 !eas.json
 !drizzle/meta/*.json
+!modules/**/package.json
+!modules/**/expo-module.config.json

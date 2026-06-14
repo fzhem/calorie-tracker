@@ -15,7 +15,7 @@
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
     "@kesha-antonov/react-native-background-downloader": "^4.5.4",
-    "@op-engineering/op-sqlite": "^16.2.1",
+    "@op-engineering/op-sqlite": "^16.2.2",
     "@react-native-community/slider": "^5.2.0",
     "drizzle-orm": "^0.45.2",
     "expo": "~56.0.11",
@@ -29,7 +29,9 @@
     "expo-router": "^56.2.10",
     "expo-sharing": "^56.0.17",
     "expo-splash-screen": "^56.0.10",
+    "llama.rn": "^0.12.4",
     "react": "19.2.3",
+    "react-dom": "19.2.3",
     "react-native": "0.85.3",
     "react-native-device-info": "^15.0.2",
     "react-native-gifted-charts": "^1.4.77",
@@ -48,12 +50,17 @@
     "babel-plugin-inline-import": "^3.0.0",
     "babel-plugin-module-resolver": "^5.0.3",
     "babel-preset-expo": "^56.0.15",
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "^12.10.1",
     "drizzle-kit": "^0.31.10",
     "esbuild-register": "^3.6.0",
     "expo-build-properties": "^56.0.18",
     "tsx": "^4.22.4",
     "typescript": "~6.0.3"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "autolinking": {
+      "nativeModulesDir": "./modules"
+    }
+  }
 }
