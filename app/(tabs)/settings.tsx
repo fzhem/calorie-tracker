@@ -1695,17 +1695,68 @@ export default function SettingsScreen() {
             }
           />
           <Card.Content style={[styles.formArea, { marginTop: -18 }]}>
-            <Text
-              variant="bodyMedium"
-              style={{ color: theme.colors.onSurfaceVariant }}
+            {/* Active model badge */}
+            <Pressable
+              onPress={() => loadedModelKey && setShowMemoryModal(true)}
+              style={({ pressed }) => [
+                styles.activeModelBadge,
+                {
+                  backgroundColor: pressed
+                    ? theme.colors.elevation.level3
+                    : theme.colors.elevation.level2,
+                  borderColor: loadedModelKey
+                    ? theme.colors.primary
+                    : theme.colors.outlineVariant,
+                },
+              ]}
             >
-              Active model: {selectedModelDescription}
-            </Text>
+              <MaterialCommunityIcons
+                name={loadedModelKey ? "memory" : "package-variant"}
+                size={20}
+                color={
+                  loadedModelKey
+                    ? theme.colors.primary
+                    : theme.colors.onSurfaceVariant
+                }
+              />
+              <View style={{ flex: 1 }}>
+                <Text
+                  variant="labelSmall"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  {loadedModelKey ? "Loaded in memory" : "Active model"}
+                </Text>
+                <Text variant="bodyMedium" style={{ fontWeight: "600" }}>
+                  {selectedModelDescription}
+                </Text>
+              </View>
+              {loadedModelKey && memoryUsageBytes !== null && (
+                <Chip
+                  mode="flat"
+                  compact
+                  style={{ backgroundColor: theme.colors.primaryContainer }}
+                  textStyle={{
+                    color: theme.colors.onPrimaryContainer,
+                    fontSize: 10,
+                    fontWeight: "700",
+                  }}
+                >
+                  {(memoryUsageBytes / 1024 / 1024).toFixed(0)} MB
+                </Chip>
+              )}
+            </Pressable>
 
             {/* Backend selector */}
-            <Text variant="bodyMedium" style={{ marginTop: 4 }}>
-              Inference backend
-            </Text>
+            <View style={styles.sectionLabel}>
+              <MaterialCommunityIcons
+                name="swap-horizontal"
+                size={16}
+                color={theme.colors.onSurfaceVariant}
+              />
+              <Text variant="labelLarge" style={{ fontWeight: "700" }}>
+                Inference backend
+              </Text>
+            </View>
             <SegmentedButtons
               style={[
                 styles.segmentedControl,
@@ -1727,15 +1778,26 @@ export default function SettingsScreen() {
                 {
                   value: BACKEND_LITERT,
                   label: "LiteRT",
-                  icon: "cpu-64-bit",
+                  icon: "google",
                 },
                 {
                   value: BACKEND_LLAMA_CPP,
                   label: "llama.cpp",
-                  icon: "console",
+                  icon: "paw-outline",
                 },
               ]}
             />
+            <Text
+              variant="labelSmall"
+              style={{
+                color: theme.colors.onSurfaceVariant,
+                marginTop: -2,
+              }}
+            >
+              {(data.inferenceBackend ?? BACKEND_LITERT) === BACKEND_LITERT
+                ? "Google's optimized runtime for .litertlm models"
+                : "Open-source GGUF inference engine (llama.cpp)"}
+            </Text>
 
             {showLlamaCppModal && (
               <Modal
@@ -2783,6 +2845,21 @@ const styles = StyleSheet.create({
   healthStatDivider: {
     width: 1,
     height: 40,
+  },
+  activeModelBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 2,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  sectionLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
   },
   modelSelector: { gap: 8 },
   recommendedTag: {
