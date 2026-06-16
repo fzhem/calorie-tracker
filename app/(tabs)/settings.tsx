@@ -24,6 +24,7 @@ import {
 } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import LlamaIcon from "@/ui/LlamaIcon";
 import {
   Button,
   Card,
@@ -1456,9 +1457,37 @@ export default function SettingsScreen() {
     const active = downloadedModels.find(
       (model) => model.uri === data.modelPath,
     );
-    if (active) return `${active.name} (local)`;
+    if (active) return active.name;
     return "No model selected.";
   }, [data.modelPath, downloadedModels]);
+
+  /** Whether the currently loaded model uses the LiteRT backend. */
+  const activeModelUsesLiteRT = useMemo(() => {
+    if (!loadedModelKey || !data.modelPath) return false;
+    const active = downloadedModels.find(
+      (model) => model.uri === data.modelPath,
+    );
+    if (!active) return false;
+    return active.name.toLowerCase().endsWith(".litertlm");
+  }, [loadedModelKey, data.modelPath, downloadedModels]);
+
+  /** Whether the currently loaded model uses the llama.cpp backend. */
+  const activeModelUsesLlamaCpp = useMemo(() => {
+    if (!loadedModelKey || !data.modelPath) return false;
+    const active = downloadedModels.find(
+      (model) => model.uri === data.modelPath,
+    );
+    if (!active) return false;
+    return active.name.toLowerCase().endsWith(".gguf");
+  }, [loadedModelKey, data.modelPath, downloadedModels]);
+
+  /** Whether the selected model is a GGUF/llama.cpp model (for icon selection). */
+  const isModelLlamaCpp = useMemo(() => {
+    if (data.modelPath) {
+      return data.modelPath.toLowerCase().endsWith(".gguf");
+    }
+    return (data.inferenceBackend ?? BACKEND_LITERT) === BACKEND_LLAMA_CPP;
+  }, [data.modelPath, data.inferenceBackend]);
 
   /** Filter downloaded models to only show files compatible with the active backend. */
   const backendFilteredModels = useMemo(() => {
@@ -1681,20 +1710,8 @@ export default function SettingsScreen() {
         </Card>
 
         <Card style={styles.card} mode="elevated">
-          <Card.Title
-            title="Models & Backend"
-            titleVariant="titleLarge"
-            right={() =>
-              loadedModelKey ? (
-                <IconButton
-                  icon="chart-donut"
-                  accessibilityLabel="Show memory usage"
-                  onPress={() => setShowMemoryModal(true)}
-                />
-              ) : null
-            }
-          />
-          <Card.Content style={[styles.formArea, { marginTop: -18 }]}>
+          <Card.Title title="Models & Backend" titleVariant="titleLarge" />
+          <Card.Content style={[styles.formArea, { marginTop: -5 }]}>
             {/* Active model badge */}
             <Pressable
               onPress={() => loadedModelKey && setShowMemoryModal(true)}
@@ -1710,15 +1727,28 @@ export default function SettingsScreen() {
                 },
               ]}
             >
-              <MaterialCommunityIcons
-                name={loadedModelKey ? "memory" : "package-variant"}
-                size={20}
-                color={
-                  loadedModelKey
-                    ? theme.colors.primary
-                    : theme.colors.onSurfaceVariant
-                }
-              />
+              {isModelLlamaCpp ? (
+                <View style={{ width: 20, height: 20 }}>
+                  <LlamaIcon
+                    size={20}
+                    color={
+                      loadedModelKey
+                        ? theme.colors.primary
+                        : theme.colors.onSurfaceVariant
+                    }
+                  />
+                </View>
+              ) : (
+                <MaterialCommunityIcons
+                  name="google"
+                  size={20}
+                  color={
+                    loadedModelKey
+                      ? theme.colors.primary
+                      : theme.colors.onSurfaceVariant
+                  }
+                />
+              )}
               <View style={{ flex: 1 }}>
                 <Text
                   variant="labelSmall"
@@ -1777,13 +1807,15 @@ export default function SettingsScreen() {
               buttons={[
                 {
                   value: BACKEND_LITERT,
-                  label: "LiteRT",
+                  label: `LiteRT${activeModelUsesLiteRT ? " ★" : ""}`,
                   icon: "google",
                 },
                 {
                   value: BACKEND_LLAMA_CPP,
-                  label: "llama.cpp",
-                  icon: "paw-outline",
+                  label: `llama.cpp${activeModelUsesLlamaCpp ? " ★" : ""}`,
+                  icon: ({ size, color }: { size: number; color: string }) => (
+                    <LlamaIcon size={size} color={color} />
+                  ),
                 },
               ]}
             />
@@ -1934,510 +1966,224 @@ export default function SettingsScreen() {
               </View>
             ) : null}
 
-            {/* Tab navigation for Offline / Download Models */}
-            <SegmentedButtons
+            {/* Offline / Download subview */}
+            <View
               style={[
-                styles.segmentedControl,
-                { backgroundColor: theme.colors.elevation.level2 },
+                styles.tabContentContainer,
+                { borderColor: theme.colors.outlineVariant },
               ]}
-              theme={segmentedButtonsTheme}
-              value={activeModelTab}
-              onValueChange={(value) =>
-                setActiveModelTab(value as "download" | "offline")
-              }
-              buttons={[
-                {
-                  value: "offline",
-                  label:
-                    backendFilteredModels.length > 0
-                      ? `Offline (${backendFilteredModels.length})`
-                      : "Offline",
-                  icon: "package-down",
-                },
-                {
-                  value: "download",
-                  label: "Download",
-                  icon: "download",
-                },
-              ]}
-            />
-
-            {isDownloading ? (
-              <View
+            >
+              <SegmentedButtons
                 style={[
-                  styles.downloadStatusBar,
+                  styles.segmentedControl,
+                  { backgroundColor: theme.colors.elevation.level2 },
+                ]}
+                theme={segmentedButtonsTheme}
+                value={activeModelTab}
+                onValueChange={(value) =>
+                  setActiveModelTab(value as "download" | "offline")
+                }
+                buttons={[
                   {
-                    backgroundColor: theme.colors.elevation.level2,
-                    borderColor: theme.colors.outlineVariant,
+                    value: "offline",
+                    label:
+                      backendFilteredModels.length > 0
+                        ? `Offline (${backendFilteredModels.length})`
+                        : "Offline",
+                    icon: "package-down",
+                  },
+                  {
+                    value: "download",
+                    label: "Download",
+                    icon: "download",
                   },
                 ]}
-              >
-                <View style={styles.downloadStatusHeader}>
-                  <View style={flex1Style}>
-                    <Text variant="labelLarge" style={{ fontWeight: "700" }}>
-                      Downloading {activeDownloadLabel ?? "model"}
-                    </Text>
-                    <Text
-                      variant="labelSmall"
-                      style={{ color: theme.colors.onSurfaceVariant }}
-                    >
-                      {totalBytes
-                        ? `${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)} (${Math.round(downloadProgress * 100)}%)`
-                        : formatBytes(downloadedBytes)}
-                      {downloadSpeed !== null
-                        ? ` • ${formatBytes(Math.round(downloadSpeed))}/s`
-                        : ""}
-                    </Text>
-                  </View>
-                  <Button
-                    mode="text"
-                    icon="close"
-                    compact
-                    loading={isCancellingDownload}
-                    disabled={isCancellingDownload}
-                    onPress={handleCancelDownload}
-                    textColor={theme.colors.error}
-                  >
-                    {isCancellingDownload ? "Cancelling..." : "Cancel"}
-                  </Button>
-                </View>
-                <ProgressBar
-                  progress={totalBytes ? downloadProgress : undefined}
-                  indeterminate={!totalBytes}
-                  style={styles.progressBar}
-                />
-              </View>
-            ) : null}
+              />
 
-            {/* Download Tab Content */}
-            {activeModelTab === "download" && (
-              <>
+              {isDownloading ? (
                 <View
                   style={[
-                    styles.notificationPermissionRow,
+                    styles.downloadStatusBar,
                     {
+                      backgroundColor: theme.colors.elevation.level2,
                       borderColor: theme.colors.outlineVariant,
-                      backgroundColor: theme.colors.elevation.level1,
                     },
                   ]}
                 >
-                  <View style={flex1Style}>
-                    <Text variant="bodyMedium">Download notifications</Text>
-                    <Text
-                      variant="labelSmall"
-                      style={{
-                        color: theme.colors.onSurfaceVariant,
-                        fontSize: 8,
-                        lineHeight: 12,
-                      }}
+                  <View style={styles.downloadStatusHeader}>
+                    <View style={flex1Style}>
+                      <Text variant="labelLarge" style={{ fontWeight: "700" }}>
+                        Downloading {activeDownloadLabel ?? "model"}
+                      </Text>
+                      <Text
+                        variant="labelSmall"
+                        style={{ color: theme.colors.onSurfaceVariant }}
+                      >
+                        {totalBytes
+                          ? `${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)} (${Math.round(downloadProgress * 100)}%)`
+                          : formatBytes(downloadedBytes)}
+                        {downloadSpeed !== null
+                          ? ` • ${formatBytes(Math.round(downloadSpeed))}/s`
+                          : ""}
+                      </Text>
+                    </View>
+                    <Button
+                      mode="text"
+                      icon="close"
+                      compact
+                      loading={isCancellingDownload}
+                      disabled={isCancellingDownload}
+                      onPress={handleCancelDownload}
+                      textColor={theme.colors.error}
                     >
-                      Needed for background download progress and completion.
-                    </Text>
+                      {isCancellingDownload ? "Cancelling..." : "Cancel"}
+                    </Button>
                   </View>
-                  <Button
-                    mode={
-                      notificationPermissionStatus === "granted"
-                        ? "contained-tonal"
-                        : "outlined"
-                    }
-                    compact
-                    icon={
-                      notificationPermissionStatus === "granted"
-                        ? "check"
-                        : "bell-ring-outline"
-                    }
-                    onPress={() => {
-                      if (notificationPermissionStatus !== "granted") {
-                        void requestNotificationPermission();
-                      }
-                    }}
-                    loading={isRequestingNotificationPermission}
-                    disabled={
-                      isRequestingNotificationPermission ||
-                      notificationPermissionStatus === "not-required" ||
-                      notificationPermissionStatus === "granted"
-                    }
-                  >
-                    {notificationPermissionStatus === "granted"
-                      ? "Granted"
-                      : notificationPermissionStatus === "not-required"
-                        ? "Not needed"
-                        : isRequestingNotificationPermission
-                          ? "Requesting..."
-                          : "Grant"}
-                  </Button>
+                  <ProgressBar
+                    progress={totalBytes ? downloadProgress : undefined}
+                    indeterminate={!totalBytes}
+                    style={styles.progressBar}
+                  />
                 </View>
+              ) : null}
 
-                {/* LiteRT built-in model buttons — only shown when LiteRT backend is active */}
-                {(data.inferenceBackend ?? BACKEND_LITERT) ===
-                  BACKEND_LITERT && (
-                  <View style={styles.modelSelector}>
-                    {BUILT_IN_MODELS.map((model) => {
-                      const memoryCheck = checkModelMemory(model.key);
-                      const isBlocked =
-                        isArchitectureBlocked ||
-                        memoryCheck.status === "blocked";
-                      const isWarning = memoryCheck.status === "warning";
-                      const memoryGB =
-                        memoryCheck.modelMemoryBytes / (1024 * 1024 * 1024);
-                      const memoryLabel = `${memoryGB} GB`;
-                      return (
-                        <View key={model.key}>
-                          <View
-                            style={[isBlocked && styles.modelBlockedContainer]}
-                          >
-                            <Button
-                              mode={
-                                selectedModelKey === model.key
-                                  ? "contained"
-                                  : "outlined"
-                              }
-                              onPress={() => {
-                                if (!isBlocked) setSelectedModelKey(model.key);
-                              }}
-                              disabled={isBlocked}
-                              icon={
-                                isBlocked
-                                  ? "lock"
-                                  : isWarning
-                                    ? "alert"
-                                    : undefined
-                              }
-                              style={
-                                isBlocked
-                                  ? [
-                                      styles.modelBlockedButton,
-                                      {
-                                        backgroundColor:
-                                          theme.colors.surfaceVariant,
-                                      },
-                                    ]
-                                  : undefined
-                              }
-                              textColor={
-                                isBlocked
-                                  ? theme.colors.onSurfaceVariant
-                                  : undefined
-                              }
+              {/* Download Tab Content */}
+              {activeModelTab === "download" && (
+                <>
+                  <View
+                    style={[
+                      styles.notificationPermissionRow,
+                      {
+                        borderColor: theme.colors.outlineVariant,
+                        backgroundColor: theme.colors.elevation.level1,
+                      },
+                    ]}
+                  >
+                    <View style={flex1Style}>
+                      <Text variant="bodyMedium">Download notifications</Text>
+                      <Text
+                        variant="labelSmall"
+                        style={{
+                          color: theme.colors.onSurfaceVariant,
+                          fontSize: 8,
+                          lineHeight: 12,
+                        }}
+                      >
+                        Needed for background download progress and completion.
+                      </Text>
+                    </View>
+                    <Button
+                      mode={
+                        notificationPermissionStatus === "granted"
+                          ? "contained-tonal"
+                          : "outlined"
+                      }
+                      compact
+                      icon={
+                        notificationPermissionStatus === "granted"
+                          ? "check"
+                          : "bell-ring-outline"
+                      }
+                      onPress={() => {
+                        if (notificationPermissionStatus !== "granted") {
+                          void requestNotificationPermission();
+                        }
+                      }}
+                      loading={isRequestingNotificationPermission}
+                      disabled={
+                        isRequestingNotificationPermission ||
+                        notificationPermissionStatus === "not-required" ||
+                        notificationPermissionStatus === "granted"
+                      }
+                    >
+                      {notificationPermissionStatus === "granted"
+                        ? "Granted"
+                        : notificationPermissionStatus === "not-required"
+                          ? "Not needed"
+                          : isRequestingNotificationPermission
+                            ? "Requesting..."
+                            : "Grant"}
+                    </Button>
+                  </View>
+
+                  {/* LiteRT built-in model buttons — only shown when LiteRT backend is active */}
+                  {(data.inferenceBackend ?? BACKEND_LITERT) ===
+                    BACKEND_LITERT && (
+                    <View style={styles.modelSelector}>
+                      {BUILT_IN_MODELS.map((model) => {
+                        const memoryCheck = checkModelMemory(model.key);
+                        const isBlocked =
+                          isArchitectureBlocked ||
+                          memoryCheck.status === "blocked";
+                        const isWarning = memoryCheck.status === "warning";
+                        const memoryGB =
+                          memoryCheck.modelMemoryBytes / (1024 * 1024 * 1024);
+                        const memoryLabel = `${memoryGB} GB`;
+                        return (
+                          <View key={model.key}>
+                            <View
+                              style={[
+                                isBlocked && styles.modelBlockedContainer,
+                              ]}
                             >
-                              {model.label} ({model.sizeLabel})
-                            </Button>
-                            {model.recommended && !isBlocked && (
-                              <View
-                                style={[
-                                  styles.recommendedTag,
-                                  {
-                                    backgroundColor:
-                                      theme.colors.primaryContainer,
-                                  },
-                                ]}
+                              <Button
+                                mode={
+                                  selectedModelKey === model.key
+                                    ? "contained"
+                                    : "outlined"
+                                }
+                                onPress={() => {
+                                  if (!isBlocked)
+                                    setSelectedModelKey(model.key);
+                                }}
+                                disabled={isBlocked}
+                                icon={
+                                  isBlocked
+                                    ? "lock"
+                                    : isWarning
+                                      ? "alert"
+                                      : undefined
+                                }
+                                style={
+                                  isBlocked
+                                    ? [
+                                        styles.modelBlockedButton,
+                                        {
+                                          backgroundColor:
+                                            theme.colors.surfaceVariant,
+                                        },
+                                      ]
+                                    : undefined
+                                }
+                                textColor={
+                                  isBlocked
+                                    ? theme.colors.onSurfaceVariant
+                                    : undefined
+                                }
                               >
-                                <Text
-                                  variant="labelSmall"
-                                  style={{
-                                    color: theme.colors.onPrimaryContainer,
-                                    fontWeight: "700",
-                                  }}
-                                >
-                                  Recommended for most devices
-                                </Text>
-                              </View>
-                            )}
-                            {(isBlocked || isWarning) && (
-                              <View
-                                style={[
-                                  styles.memoryWarningBadge,
-                                  {
-                                    backgroundColor: isBlocked
-                                      ? theme.colors.errorContainer
-                                      : theme.colors.tertiaryContainer,
-                                    paddingHorizontal: 6,
-                                    paddingVertical: 2,
-                                    borderRadius: 6,
-                                  },
-                                ]}
-                              >
-                                <MaterialCommunityIcons
-                                  name={
-                                    isBlocked ? "alert-circle-outline" : "alert"
-                                  }
-                                  size={12}
-                                  color={
-                                    isBlocked
-                                      ? theme.colors.error
-                                      : theme.colors.tertiary
-                                  }
-                                />
-                                <Text
-                                  variant="labelSmall"
-                                  style={{
-                                    fontSize: 10,
-                                    fontWeight: "700",
-                                    color: isBlocked
-                                      ? theme.colors.error
-                                      : theme.colors.tertiary,
-                                    textShadowRadius: 1,
-                                  }}
-                                >
-                                  {isArchitectureBlocked
-                                    ? "Blocked"
-                                    : isBlocked
-                                      ? "Low RAM"
-                                      : "Warning"}
-                                </Text>
-                              </View>
-                            )}
-                            {isBlocked && !isArchitectureBlocked && (
-                              <Text
-                                variant="labelSmall"
-                                style={[
-                                  styles.memoryWarningSubtext,
-                                  {
-                                    color: theme.colors.error,
-                                    fontWeight: "700",
-                                    textShadowColor: "rgba(255, 82, 82, 0.4)",
-                                    textShadowOffset: { width: 0, height: 0 },
-                                    textShadowRadius: 4,
-                                  },
-                                ]}
-                              >
-                                Requires {memoryLabel} (
-                                {memoryCheck.usagePercent}% of RAM)
-                              </Text>
-                            )}
-                            {isArchitectureBlocked && (
-                              <View
-                                style={[
-                                  styles.recommendedTag,
-                                  {
-                                    backgroundColor:
-                                      theme.colors.errorContainer,
-                                  },
-                                ]}
-                              >
-                                <Text
-                                  variant="labelSmall"
+                                {model.label} ({model.sizeLabel})
+                              </Button>
+                              {model.recommended && !isBlocked && (
+                                <View
                                   style={[
-                                    styles.memoryWarningSubtext,
+                                    styles.recommendedTag,
                                     {
-                                      color: theme.colors.error,
-                                      fontWeight: "700",
+                                      backgroundColor:
+                                        theme.colors.primaryContainer,
                                     },
                                   ]}
                                 >
-                                  Architecture not supported
-                                </Text>
-                              </View>
-                            )}
-                            {isWarning && !isBlocked && (
-                              <Text
-                                variant="labelSmall"
-                                style={[
-                                  styles.memoryWarningSubtext,
-                                  {
-                                    color: theme.colors.tertiary,
-                                    fontWeight: "700",
-                                  },
-                                ]}
-                              >
-                                Uses {memoryCheck.usagePercent}% of RAM
-                              </Text>
-                            )}
-                          </View>
-                        </View>
-                      );
-                    })}
-                    <Button
-                      mode={
-                        selectedModelKey === "custom" ? "contained" : "outlined"
-                      }
-                      onPress={() => {
-                        if (!isArchitectureBlocked)
-                          setSelectedModelKey("custom");
-                      }}
-                      disabled={isArchitectureBlocked}
-                      icon={isArchitectureBlocked ? "lock" : undefined}
-                    >
-                      Custom URL
-                    </Button>
-                  </View>
-                )}
-
-                {/* Custom URL button for llama.cpp — always visible */}
-                {(data.inferenceBackend ?? BACKEND_LITERT) ===
-                  BACKEND_LLAMA_CPP && (
-                  <Button
-                    mode={
-                      selectedModelKey === "custom" ? "contained" : "outlined"
-                    }
-                    onPress={() => setSelectedModelKey("custom")}
-                    icon="download"
-                    style={{ marginTop: 8 }}
-                  >
-                    Custom URL
-                  </Button>
-                )}
-
-                {selectedModelKey === "custom" ? (
-                  <TextInput
-                    mode="outlined"
-                    label="Model URL"
-                    value={customModelUrl}
-                    onChangeText={setCustomModelUrl}
-                    placeholder={
-                      (data.inferenceBackend ?? BACKEND_LITERT) ===
-                      BACKEND_LLAMA_CPP
-                        ? "https://.../model.gguf"
-                        : "https://.../model.litertlm"
-                    }
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                ) : null}
-
-                <Button
-                  mode="contained"
-                  icon={isSelectedModelDownloaded ? "check" : "download"}
-                  loading={isDownloading}
-                  onPress={handleDownloadModel}
-                  disabled={
-                    isDownloading ||
-                    isArchitectureBlocked ||
-                    (selectedModelKey === "custom" && !customModelUrl.trim()) ||
-                    isSelectedModelDownloaded ||
-                    (selectedModelKey !== "custom" &&
-                      checkModelMemory(selectedModelKey).status === "blocked")
-                  }
-                >
-                  {isSelectedModelDownloaded
-                    ? "Already downloaded"
-                    : isDownloading
-                      ? "Downloading..."
-                      : "Download selected model"}
-                </Button>
-                {selectedModelKey !== "custom" &&
-                  (() => {
-                    const check = checkModelMemory(selectedModelKey);
-                    if (check.status === "warning") {
-                      return (
-                        <View
-                          style={[
-                            styles.memoryAlertBox,
-                            { backgroundColor: theme.colors.tertiaryContainer },
-                          ]}
-                        >
-                          <MaterialCommunityIcons
-                            name="alert"
-                            size={20}
-                            color={theme.colors.tertiary}
-                          />
-                          <Text
-                            variant="labelSmall"
-                            style={{ color: theme.colors.tertiary, flex: 1 }}
-                          >
-                            This model uses {check.usagePercent}% of available
-                            RAM. Monitor device performance.
-                          </Text>
-                        </View>
-                      );
-                    }
-                    return null;
-                  })()}
-
-                {downloadError ? (
-                  <Text
-                    variant="bodyMedium"
-                    style={{ color: theme.colors.error }}
-                  >
-                    {downloadError}
-                  </Text>
-                ) : null}
-              </>
-            )}
-
-            {/* Offline Models Tab Content */}
-            {activeModelTab === "offline" && (
-              <View
-                style={[
-                  styles.downloadedModelsContainer,
-                  {
-                    backgroundColor: theme.colors.elevation.level1,
-                  },
-                ]}
-              >
-                {backendFilteredModels.length ? (
-                  <View style={styles.downloadedList}>
-                    {backendFilteredModels.map((model) => {
-                      const isEstimate =
-                        (data.estimateModelPath ?? data.modelPath) ===
-                        model.uri;
-                      const inMemory = isInMemory(model.uri);
-                      const savedConfig = data.perModelConfig?.[model.uri];
-                      const hasCustomConfig =
-                        !!savedConfig &&
-                        !isModelConfigEqual(savedConfig, DEFAULT_MODEL_CONFIG);
-
-                      // Determine model key from filename
-                      const modelKey = model.name.includes("gemma-4-E2B")
-                        ? "GEMMA_4_E2B_IT"
-                        : model.name.includes("gemma-4-E4B")
-                          ? "GEMMA_4_E4B_IT"
-                          : null;
-                      const memoryCheck = modelKey
-                        ? checkModelMemory(modelKey)
-                        : null;
-                      const isBlocked =
-                        isArchitectureBlocked ||
-                        memoryCheck?.status === "blocked";
-                      const isWarning = memoryCheck?.status === "warning";
-
-                      return (
-                        <View
-                          key={model.uri}
-                          style={[
-                            styles.downloadedItem,
-                            {
-                              borderColor: isEstimate
-                                ? theme.colors.primary
-                                : isBlocked
-                                  ? theme.colors.error
-                                  : theme.colors.outlineVariant,
-                              backgroundColor: theme.colors.elevation.level2,
-                            },
-                          ]}
-                        >
-                          <View style={styles.downloadedItemTopRow}>
-                            <View style={styles.downloadedItemNameRow}>
-                              <View
-                                style={{
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  flex: 1,
-                                  minWidth: 0,
-                                }}
-                              >
-                                <Text
-                                  variant="bodyLarge"
-                                  numberOfLines={1}
-                                  style={styles.downloadedItemName}
-                                >
-                                  {model.name}
-                                </Text>
-                                {inMemory ? (
-                                  <Icon
-                                    source="memory"
-                                    color={theme.colors.primary}
-                                    size={20}
-                                  />
-                                ) : null}
-                                {hasCustomConfig ? (
-                                  <Icon
-                                    source="tune"
-                                    color={theme.colors.primary}
-                                    size={16}
-                                  />
-                                ) : null}
-                              </View>
+                                  <Text
+                                    variant="labelSmall"
+                                    style={{
+                                      color: theme.colors.onPrimaryContainer,
+                                      fontWeight: "700",
+                                    }}
+                                  >
+                                    Recommended for most devices
+                                  </Text>
+                                </View>
+                              )}
                               {(isBlocked || isWarning) && (
                                 <View
                                   style={[
@@ -2446,9 +2192,9 @@ export default function SettingsScreen() {
                                       backgroundColor: isBlocked
                                         ? theme.colors.errorContainer
                                         : theme.colors.tertiaryContainer,
-                                      position: "relative",
-                                      top: 0,
-                                      right: 0,
+                                      paddingHorizontal: 6,
+                                      paddingVertical: 2,
+                                      borderRadius: 6,
                                     },
                                   ]}
                                 >
@@ -2465,101 +2211,407 @@ export default function SettingsScreen() {
                                         : theme.colors.tertiary
                                     }
                                   />
+                                  <Text
+                                    variant="labelSmall"
+                                    style={{
+                                      fontSize: 10,
+                                      fontWeight: "700",
+                                      color: isBlocked
+                                        ? theme.colors.error
+                                        : theme.colors.tertiary,
+                                      textShadowRadius: 1,
+                                    }}
+                                  >
+                                    {isArchitectureBlocked
+                                      ? "Blocked"
+                                      : isBlocked
+                                        ? "Low RAM"
+                                        : "Warning"}
+                                  </Text>
                                 </View>
                               )}
-                              <IconButton
-                                icon="cog-outline"
-                                size={22}
-                                onPress={() =>
-                                  setActiveModelConfigUri(model.uri)
-                                }
-                                disabled={isBlocked}
-                                style={{ marginVertical: -8, marginLeft: 4 }}
-                              />
+                              {isBlocked && !isArchitectureBlocked && (
+                                <Text
+                                  variant="labelSmall"
+                                  style={[
+                                    styles.memoryWarningSubtext,
+                                    {
+                                      color: theme.colors.error,
+                                      fontWeight: "700",
+                                      textShadowColor: "rgba(255, 82, 82, 0.4)",
+                                      textShadowOffset: { width: 0, height: 0 },
+                                      textShadowRadius: 4,
+                                    },
+                                  ]}
+                                >
+                                  Requires {memoryLabel} (
+                                  {memoryCheck.usagePercent}% of RAM)
+                                </Text>
+                              )}
+                              {isArchitectureBlocked && (
+                                <View
+                                  style={[
+                                    styles.recommendedTag,
+                                    {
+                                      backgroundColor:
+                                        theme.colors.errorContainer,
+                                    },
+                                  ]}
+                                >
+                                  <Text
+                                    variant="labelSmall"
+                                    style={[
+                                      styles.memoryWarningSubtext,
+                                      {
+                                        color: theme.colors.error,
+                                        fontWeight: "700",
+                                      },
+                                    ]}
+                                  >
+                                    Architecture not supported
+                                  </Text>
+                                </View>
+                              )}
+                              {isWarning && !isBlocked && (
+                                <Text
+                                  variant="labelSmall"
+                                  style={[
+                                    styles.memoryWarningSubtext,
+                                    {
+                                      color: theme.colors.tertiary,
+                                      fontWeight: "700",
+                                    },
+                                  ]}
+                                >
+                                  Uses {memoryCheck.usagePercent}% of RAM
+                                </Text>
+                              )}
                             </View>
                           </View>
-                          <Text
-                            variant="bodySmall"
-                            style={{ color: theme.colors.onSurfaceVariant }}
+                        );
+                      })}
+                      <Button
+                        mode={
+                          selectedModelKey === "custom"
+                            ? "contained"
+                            : "outlined"
+                        }
+                        onPress={() => {
+                          if (!isArchitectureBlocked)
+                            setSelectedModelKey("custom");
+                        }}
+                        disabled={isArchitectureBlocked}
+                        icon={isArchitectureBlocked ? "lock" : undefined}
+                      >
+                        Custom URL
+                      </Button>
+                    </View>
+                  )}
+
+                  {/* Custom URL button for llama.cpp — always visible */}
+                  {(data.inferenceBackend ?? BACKEND_LITERT) ===
+                    BACKEND_LLAMA_CPP && (
+                    <Button
+                      mode={
+                        selectedModelKey === "custom" ? "contained" : "outlined"
+                      }
+                      onPress={() => setSelectedModelKey("custom")}
+                      icon="download"
+                      style={{ marginTop: 8 }}
+                    >
+                      Custom URL
+                    </Button>
+                  )}
+
+                  {selectedModelKey === "custom" ? (
+                    <TextInput
+                      mode="outlined"
+                      label="Model URL"
+                      value={customModelUrl}
+                      onChangeText={setCustomModelUrl}
+                      placeholder={
+                        (data.inferenceBackend ?? BACKEND_LITERT) ===
+                        BACKEND_LLAMA_CPP
+                          ? "https://.../model.gguf"
+                          : "https://.../model.litertlm"
+                      }
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  ) : null}
+
+                  <Button
+                    mode="contained"
+                    icon={isSelectedModelDownloaded ? "check" : "download"}
+                    loading={isDownloading}
+                    onPress={handleDownloadModel}
+                    disabled={
+                      isDownloading ||
+                      isArchitectureBlocked ||
+                      (selectedModelKey === "custom" &&
+                        !customModelUrl.trim()) ||
+                      isSelectedModelDownloaded ||
+                      (selectedModelKey !== "custom" &&
+                        checkModelMemory(selectedModelKey).status === "blocked")
+                    }
+                  >
+                    {isSelectedModelDownloaded
+                      ? "Already downloaded"
+                      : isDownloading
+                        ? "Downloading..."
+                        : "Download selected model"}
+                  </Button>
+                  {selectedModelKey !== "custom" &&
+                    (() => {
+                      const check = checkModelMemory(selectedModelKey);
+                      if (check.status === "warning") {
+                        return (
+                          <View
+                            style={[
+                              styles.memoryAlertBox,
+                              {
+                                backgroundColor: theme.colors.tertiaryContainer,
+                              },
+                            ]}
                           >
-                            {formatBytes(model.size)}
-                          </Text>
-                          {memoryCheck && (isBlocked || isWarning) && (
+                            <MaterialCommunityIcons
+                              name="alert"
+                              size={20}
+                              color={theme.colors.tertiary}
+                            />
                             <Text
                               variant="labelSmall"
-                              style={{
-                                color: isBlocked
-                                  ? theme.colors.error
-                                  : theme.colors.tertiary,
-                              }}
+                              style={{ color: theme.colors.tertiary, flex: 1 }}
                             >
-                              {isArchitectureBlocked
-                                ? "Architecture not supported"
-                                : isBlocked
-                                  ? `Uses ${memoryCheck.usagePercent}% of RAM (blocked)`
-                                  : `Uses ${memoryCheck.usagePercent}% of RAM`}
+                              This model uses {check.usagePercent}% of available
+                              RAM. Monitor device performance.
                             </Text>
-                          )}
-                          <View style={styles.downloadedItemActions}>
-                            <Button
-                              mode={isEstimate ? "contained" : "outlined"}
-                              onPress={() => setActiveModel(model.uri)}
-                              disabled={isBlocked}
-                              icon={isBlocked ? "lock" : undefined}
-                            >
-                              {isEstimate
-                                ? "In use"
-                                : isBlocked
-                                  ? "Blocked"
-                                  : "Use"}
-                            </Button>
-                            {inMemory ? (
-                              <Button
-                                mode="outlined"
-                                onPress={() => clearModelCache()}
-                              >
-                                Unload
-                              </Button>
-                            ) : null}
-                            <Button
-                              mode="text"
-                              compact
-                              textColor={theme.colors.error}
-                              onPress={() => handleDeleteModel(model)}
-                            >
-                              Delete
-                            </Button>
                           </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                ) : (
-                  <View style={styles.offlineEmptyState}>
-                    <MaterialCommunityIcons
-                      name="package-variant"
-                      size={48}
-                      color={theme.colors.onSurfaceVariant}
-                    />
+                        );
+                      }
+                      return null;
+                    })()}
+
+                  {downloadError ? (
                     <Text
                       variant="bodyMedium"
-                      style={{
-                        color: theme.colors.onSurfaceVariant,
-                        marginTop: 8,
-                      }}
+                      style={{ color: theme.colors.error }}
                     >
-                      No models downloaded yet
+                      {downloadError}
                     </Text>
-                    <Text
-                      variant="labelSmall"
-                      style={{ color: theme.colors.onSurfaceVariant }}
-                    >
-                      Switch to Download tab to get started
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
+                  ) : null}
+                </>
+              )}
+
+              {/* Offline Models Tab Content */}
+              {activeModelTab === "offline" && (
+                <View
+                  style={[
+                    styles.downloadedModelsContainer,
+                    {
+                      backgroundColor: theme.colors.elevation.level1,
+                    },
+                  ]}
+                >
+                  {backendFilteredModels.length ? (
+                    <View style={styles.downloadedList}>
+                      {backendFilteredModels.map((model) => {
+                        const isEstimate =
+                          (data.estimateModelPath ?? data.modelPath) ===
+                          model.uri;
+                        const inMemory = isInMemory(model.uri);
+                        const savedConfig = data.perModelConfig?.[model.uri];
+                        const hasCustomConfig =
+                          !!savedConfig &&
+                          !isModelConfigEqual(
+                            savedConfig,
+                            DEFAULT_MODEL_CONFIG,
+                          );
+
+                        // Determine model key from filename
+                        const modelKey = model.name.includes("gemma-4-E2B")
+                          ? "GEMMA_4_E2B_IT"
+                          : model.name.includes("gemma-4-E4B")
+                            ? "GEMMA_4_E4B_IT"
+                            : null;
+                        const memoryCheck = modelKey
+                          ? checkModelMemory(modelKey)
+                          : null;
+                        const isBlocked =
+                          isArchitectureBlocked ||
+                          memoryCheck?.status === "blocked";
+                        const isWarning = memoryCheck?.status === "warning";
+
+                        return (
+                          <View
+                            key={model.uri}
+                            style={[
+                              styles.downloadedItem,
+                              {
+                                borderColor: isEstimate
+                                  ? theme.colors.primary
+                                  : isBlocked
+                                    ? theme.colors.error
+                                    : theme.colors.outlineVariant,
+                                backgroundColor: theme.colors.elevation.level2,
+                              },
+                            ]}
+                          >
+                            <View style={styles.downloadedItemTopRow}>
+                              <View style={styles.downloadedItemNameRow}>
+                                <View
+                                  style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    flex: 1,
+                                    minWidth: 0,
+                                  }}
+                                >
+                                  <Text
+                                    variant="bodyLarge"
+                                    numberOfLines={1}
+                                    style={styles.downloadedItemName}
+                                  >
+                                    {model.name}
+                                  </Text>
+                                  {inMemory ? (
+                                    <Icon
+                                      source="memory"
+                                      color={theme.colors.primary}
+                                      size={20}
+                                    />
+                                  ) : null}
+                                  {hasCustomConfig ? (
+                                    <Icon
+                                      source="tune"
+                                      color={theme.colors.primary}
+                                      size={16}
+                                    />
+                                  ) : null}
+                                </View>
+                                {(isBlocked || isWarning) && (
+                                  <View
+                                    style={[
+                                      styles.memoryWarningBadge,
+                                      {
+                                        backgroundColor: isBlocked
+                                          ? theme.colors.errorContainer
+                                          : theme.colors.tertiaryContainer,
+                                        position: "relative",
+                                        top: 0,
+                                        right: 0,
+                                      },
+                                    ]}
+                                  >
+                                    <MaterialCommunityIcons
+                                      name={
+                                        isBlocked
+                                          ? "alert-circle-outline"
+                                          : "alert"
+                                      }
+                                      size={12}
+                                      color={
+                                        isBlocked
+                                          ? theme.colors.error
+                                          : theme.colors.tertiary
+                                      }
+                                    />
+                                  </View>
+                                )}
+                                <IconButton
+                                  icon="cog-outline"
+                                  size={22}
+                                  onPress={() =>
+                                    setActiveModelConfigUri(model.uri)
+                                  }
+                                  disabled={isBlocked}
+                                  style={{ marginVertical: -8, marginLeft: 4 }}
+                                />
+                              </View>
+                            </View>
+                            <Text
+                              variant="bodySmall"
+                              style={{ color: theme.colors.onSurfaceVariant }}
+                            >
+                              {formatBytes(model.size)}
+                            </Text>
+                            {memoryCheck && (isBlocked || isWarning) && (
+                              <Text
+                                variant="labelSmall"
+                                style={{
+                                  color: isBlocked
+                                    ? theme.colors.error
+                                    : theme.colors.tertiary,
+                                }}
+                              >
+                                {isArchitectureBlocked
+                                  ? "Architecture not supported"
+                                  : isBlocked
+                                    ? `Uses ${memoryCheck.usagePercent}% of RAM (blocked)`
+                                    : `Uses ${memoryCheck.usagePercent}% of RAM`}
+                              </Text>
+                            )}
+                            <View style={styles.downloadedItemActions}>
+                              <Button
+                                mode={isEstimate ? "contained" : "outlined"}
+                                onPress={() => setActiveModel(model.uri)}
+                                disabled={isBlocked}
+                                icon={isBlocked ? "lock" : undefined}
+                              >
+                                {isEstimate
+                                  ? "In use"
+                                  : isBlocked
+                                    ? "Blocked"
+                                    : "Use"}
+                              </Button>
+                              {inMemory ? (
+                                <Button
+                                  mode="outlined"
+                                  onPress={() => clearModelCache()}
+                                >
+                                  Unload
+                                </Button>
+                              ) : null}
+                              <Button
+                                mode="text"
+                                compact
+                                textColor={theme.colors.error}
+                                onPress={() => handleDeleteModel(model)}
+                              >
+                                Delete
+                              </Button>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <View style={styles.offlineEmptyState}>
+                      <MaterialCommunityIcons
+                        name="package-variant"
+                        size={48}
+                        color={theme.colors.onSurfaceVariant}
+                      />
+                      <Text
+                        variant="bodyMedium"
+                        style={{
+                          color: theme.colors.onSurfaceVariant,
+                          marginTop: 8,
+                        }}
+                      >
+                        No models downloaded yet
+                      </Text>
+                      <Text
+                        variant="labelSmall"
+                        style={{ color: theme.colors.onSurfaceVariant }}
+                      >
+                        Switch to Download tab to get started
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
 
             {/* Memory Usage Modal */}
             <Modal
@@ -2812,6 +2864,12 @@ const styles = StyleSheet.create({
   segmentedControl: {
     borderRadius: 14,
     overflow: "hidden",
+  },
+  tabContentContainer: {
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 12,
+    gap: 10,
   },
   buttonRow: { flexDirection: "row", gap: 10, marginTop: -8 },
   button: { flex: 1 },
