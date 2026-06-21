@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ComponentProps,
 } from "react";
 import { useFocusEffect } from "expo-router/react-navigation";
 import {
@@ -92,6 +93,9 @@ import {
   FIBRE_CALORIE_APPROACH_FDA,
   FIBRE_CALORIE_APPROACH_NET,
   FIBRE_CALORIE_APPROACH_EU,
+  DEFAULT_FIBRE_CALORIE_APPROACH,
+  DEFAULT_CALORIE_TOLERANCE_PERCENT,
+  DEFAULT_GRAPH_TOLERANCE_CALORIES,
 } from "@/constants";
 
 import { getLatestWeight, getLatestBodyFat } from "@/db/index";
@@ -530,6 +534,126 @@ const advancedStyles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
+  },
+});
+
+type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
+
+/** Header row for a tunable setting. Shows the icon + label on the left, and
+ *  on the right either a subtle "Default" pill (when the current value equals
+ *  the built-in default) or a "Reset" affordance (when it has been changed).
+ *  This gives an at-a-glance cue for which values are still at their defaults
+ *  and a one-tap way back. */
+const SettingLabel = memo(function SettingLabel({
+  icon,
+  label,
+  isDefault,
+  onReset,
+  theme,
+}: {
+  icon: IconName;
+  label: string;
+  isDefault: boolean;
+  onReset: () => void;
+  theme: MD3Theme;
+}) {
+  return (
+    <View style={settingLabelStyles.row}>
+      <View style={settingLabelStyles.left}>
+        <MaterialCommunityIcons
+          name={icon}
+          size={16}
+          color={theme.colors.onSurfaceVariant}
+        />
+        <Text variant="labelLarge" style={{ fontWeight: "700" }}>
+          {label}
+        </Text>
+      </View>
+      {isDefault ? (
+        <View
+          style={[
+            settingLabelStyles.badge,
+            { backgroundColor: theme.colors.secondaryContainer },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name="check-circle-outline"
+            size={13}
+            color={theme.colors.onSecondaryContainer}
+          />
+          <Text
+            variant="labelSmall"
+            style={[
+              settingLabelStyles.badgeText,
+              { color: theme.colors.onSecondaryContainer },
+            ]}
+          >
+            Default
+          </Text>
+        </View>
+      ) : (
+        <Pressable
+          onPress={onReset}
+          hitSlop={8}
+          style={({ pressed }) => [
+            settingLabelStyles.reset,
+            {
+              backgroundColor: pressed
+                ? theme.colors.surfaceVariant
+                : "transparent",
+            },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name="restore"
+            size={16}
+            color={theme.colors.onSurfaceVariant}
+          />
+          <Text
+            variant="labelSmall"
+            style={{ color: theme.colors.onSurfaceVariant }}
+          >
+            Reset
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+});
+
+const settingLabelStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 4,
+    gap: 8,
+  },
+  left: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 1,
+  },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  badgeText: {
+    fontWeight: "600",
+    lineHeight: 14,
+  },
+  reset: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 999,
   },
 });
 
@@ -3266,16 +3390,20 @@ export default function SettingsScreen() {
         <Card style={styles.card} mode="elevated">
           <Card.Title title="Calculations" titleVariant="titleLarge" />
           <Card.Content style={styles.formArea}>
-            <View style={styles.sectionLabel}>
-              <MaterialCommunityIcons
-                name="leaf"
-                size={16}
-                color={theme.colors.onSurfaceVariant}
-              />
-              <Text variant="labelLarge" style={{ fontWeight: "700" }}>
-                Fibre calorie approach
-              </Text>
-            </View>
+            <SettingLabel
+              icon="leaf"
+              label="Fibre calorie approach"
+              isDefault={
+                data.fibreCalorieApproach === DEFAULT_FIBRE_CALORIE_APPROACH
+              }
+              onReset={() =>
+                setData((prev) => ({
+                  ...prev,
+                  fibreCalorieApproach: DEFAULT_FIBRE_CALORIE_APPROACH,
+                }))
+              }
+              theme={theme}
+            />
             <Text
               variant="labelSmall"
               style={{ color: theme.colors.onSurfaceVariant, marginTop: -2 }}
@@ -3321,16 +3449,21 @@ export default function SettingsScreen() {
               ]}
             />
 
-            <View style={styles.sectionLabel}>
-              <MaterialCommunityIcons
-                name="percent-outline"
-                size={16}
-                color={theme.colors.onSurfaceVariant}
-              />
-              <Text variant="labelLarge" style={{ fontWeight: "700" }}>
-                Macro mismatch tolerance
-              </Text>
-            </View>
+            <SettingLabel
+              icon="percent-outline"
+              label="Macro mismatch tolerance"
+              isDefault={
+                data.calorieTolerancePercent ===
+                DEFAULT_CALORIE_TOLERANCE_PERCENT
+              }
+              onReset={() =>
+                setData((prev) => ({
+                  ...prev,
+                  calorieTolerancePercent: DEFAULT_CALORIE_TOLERANCE_PERCENT,
+                }))
+              }
+              theme={theme}
+            />
             <Text
               variant="labelSmall"
               style={{ color: theme.colors.onSurfaceVariant, marginTop: -2 }}
@@ -3359,16 +3492,20 @@ export default function SettingsScreen() {
         <Card style={styles.card} mode="elevated">
           <Card.Title title="Graph" titleVariant="titleLarge" />
           <Card.Content style={styles.formArea}>
-            <View style={styles.sectionLabel}>
-              <MaterialCommunityIcons
-                name="chart-line"
-                size={16}
-                color={theme.colors.onSurfaceVariant}
-              />
-              <Text variant="labelLarge" style={{ fontWeight: "700" }}>
-                On-target tolerance
-              </Text>
-            </View>
+            <SettingLabel
+              icon="chart-line"
+              label="On-target tolerance"
+              isDefault={
+                data.graphToleranceCalories === DEFAULT_GRAPH_TOLERANCE_CALORIES
+              }
+              onReset={() =>
+                setData((prev) => ({
+                  ...prev,
+                  graphToleranceCalories: DEFAULT_GRAPH_TOLERANCE_CALORIES,
+                }))
+              }
+              theme={theme}
+            />
             <Text
               variant="labelSmall"
               style={{ color: theme.colors.onSurfaceVariant, marginTop: -2 }}
