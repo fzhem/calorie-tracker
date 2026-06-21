@@ -42,8 +42,12 @@ const DEFAULT_CONFIG: ModelConfig = DEFAULT_MODEL_CONFIG;
 /**
  * Build a deterministic cache key that includes the backend type.
  * Normalizes the config to ensure consistent stringification.
+ *
+ * Exported so callers (e.g. the Log screen's "model in memory" indicator)
+ * can construct the exact same key `ensureModelLoaded` produces, instead of
+ * duplicating the format and drifting out of sync.
  */
-function buildKey(params: EnsureModelParams): string {
+export function buildModelKey(params: EnsureModelParams): string {
   const config = params.modelConfig ?? DEFAULT_CONFIG;
   // Create a normalized copy with all fields to ensure consistent JSON stringification
   const normalized: ModelConfig = {
@@ -95,7 +99,7 @@ export async function sendMessage(
 export async function ensureModelLoaded(
   params: EnsureModelParams,
 ): Promise<UnifiedModelInstance> {
-  const key = buildKey(params);
+  const key = buildModelKey(params);
   const existing = getModelInstance();
   const existingKey = getLoadedModelKey();
 

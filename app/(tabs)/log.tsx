@@ -88,8 +88,11 @@ import {
 } from "@/db/index";
 import { makeMealId } from "@/db/helpers";
 import { invalidateMealCaches } from "@/lib/queryCache";
-import { ensureModelLoaded, sendMessage } from "@/lib/modelLoader";
-import type { InferenceBackend } from "@/constants";
+import {
+  ensureModelLoaded,
+  sendMessage,
+  buildModelKey,
+} from "@/lib/modelLoader";
 
 export type NutritionResult = {
   calories: number;
@@ -1527,9 +1530,23 @@ export default function LogScreen() {
       : modelPath;
     const modelConfig =
       data.perModelConfig?.[cleanedModelPath] ?? DEFAULT_MODEL_CONFIG;
-    const activeModelKey = `${cleanedModelPath}::${systemPrompt}::${JSON.stringify(modelConfig)}`;
+    // Reuse the exact key builder from modelLoader so this comparison stays in
+    // sync with how ensureModelLoaded builds the loaded key (which includes the
+    // inference backend and fully-normalized config).
+    const activeModelKey = buildModelKey({
+      modelPath: cleanedModelPath,
+      systemPrompt,
+      modelConfig,
+      inferenceBackend: data.inferenceBackend ?? "litert",
+    });
     return loadedModelKey === activeModelKey;
-  }, [loadedModelKey, modelPath, systemPrompt, data.perModelConfig]);
+  }, [
+    loadedModelKey,
+    modelPath,
+    systemPrompt,
+    data.perModelConfig,
+    data.inferenceBackend,
+  ]);
 
   const showModelStatusHint = useCallback(() => {
     const message = isModelInMemory
