@@ -88,6 +88,11 @@ import { getAppSegmentedButtonsTheme } from "@/ui/segmentedButtons";
 
 import { BACKEND_LITERT, BACKEND_LLAMA_CPP } from "@/constants";
 import type { InferenceBackend } from "@/constants";
+import {
+  FIBRE_CALORIE_APPROACH_FDA,
+  FIBRE_CALORIE_APPROACH_NET,
+  FIBRE_CALORIE_APPROACH_EU,
+} from "@/constants";
 
 import { getLatestWeight, getLatestBodyFat } from "@/db/index";
 import {
@@ -3218,30 +3223,28 @@ export default function SettingsScreen() {
         </Card>
 
         <Card style={styles.card} mode="elevated">
-          <Card.Title title="Advanced" titleVariant="titleLarge" />
+          <Card.Title title="Data backup" titleVariant="titleLarge" />
           <Card.Content style={styles.formArea}>
             <Button
               mode="contained"
-              icon="export"
+              icon="tray-arrow-up"
               onPress={handleExportData}
               loading={isExporting}
               disabled={isExporting}
-              style={{ marginBottom: 8 }}
             >
               {isExporting ? "Exporting..." : "Export data"}
             </Button>
             <Button
               mode="outlined"
-              icon="import"
+              icon="tray-arrow-down"
               onPress={handleImportData}
               loading={importProgress !== null}
               disabled={importProgress !== null}
-              style={{ marginBottom: importProgress !== null ? 6 : 10 }}
             >
               {importProgress !== null ? "Importing..." : "Import data"}
             </Button>
             {importProgress !== null ? (
-              <View style={{ marginBottom: 10 }}>
+              <View>
                 <Text
                   variant="bodySmall"
                   style={{
@@ -3257,18 +3260,83 @@ export default function SettingsScreen() {
                 />
               </View>
             ) : null}
-            <Text
-              variant="bodyMedium"
-              style={{ color: theme.colors.onSurfaceVariant, marginBottom: 0 }}
-            >
-              Macro mismatch tolerance
-            </Text>
+          </Card.Content>
+        </Card>
+
+        <Card style={styles.card} mode="elevated">
+          <Card.Title title="Calculations" titleVariant="titleLarge" />
+          <Card.Content style={styles.formArea}>
+            <View style={styles.sectionLabel}>
+              <MaterialCommunityIcons
+                name="leaf"
+                size={16}
+                color={theme.colors.onSurfaceVariant}
+              />
+              <Text variant="labelLarge" style={{ fontWeight: "700" }}>
+                Fibre calorie approach
+              </Text>
+            </View>
             <Text
               variant="labelSmall"
-              style={{ color: theme.colors.onSurfaceVariant, marginBottom: 0 }}
+              style={{ color: theme.colors.onSurfaceVariant, marginTop: -2 }}
             >
-              Percentage of logged calories allowed to differ from calculated
-              macros (default: 12%)
+              US &amp; Net: your carb figure includes fibre (USDA / US labels).
+              EU: carbs exclude fibre (EU / Aus labels). Default: EU.
+            </Text>
+            <SegmentedButtons
+              style={[
+                styles.segmentedControl,
+                { backgroundColor: theme.colors.elevation.level2 },
+              ]}
+              theme={segmentedButtonsTheme}
+              value={data.fibreCalorieApproach}
+              onValueChange={(value) => {
+                if (
+                  value === FIBRE_CALORIE_APPROACH_FDA ||
+                  value === FIBRE_CALORIE_APPROACH_NET ||
+                  value === FIBRE_CALORIE_APPROACH_EU
+                ) {
+                  setData((prev) => ({
+                    ...prev,
+                    fibreCalorieApproach: value,
+                  }));
+                }
+              }}
+              buttons={[
+                {
+                  value: FIBRE_CALORIE_APPROACH_FDA,
+                  label: "US",
+                  icon: "flag-outline",
+                },
+                {
+                  value: FIBRE_CALORIE_APPROACH_NET,
+                  label: "Net",
+                  icon: "minus-circle-outline",
+                },
+                {
+                  value: FIBRE_CALORIE_APPROACH_EU,
+                  label: "EU",
+                  icon: "check-circle-outline",
+                },
+              ]}
+            />
+
+            <View style={styles.sectionLabel}>
+              <MaterialCommunityIcons
+                name="percent-outline"
+                size={16}
+                color={theme.colors.onSurfaceVariant}
+              />
+              <Text variant="labelLarge" style={{ fontWeight: "700" }}>
+                Macro mismatch tolerance
+              </Text>
+            </View>
+            <Text
+              variant="labelSmall"
+              style={{ color: theme.colors.onSurfaceVariant, marginTop: -2 }}
+            >
+              Allowed difference between logged calories and the macro-derived
+              estimate. Default: 12%.
             </Text>
             <TextInput
               mode="outlined"
@@ -3285,27 +3353,32 @@ export default function SettingsScreen() {
                 }
               }}
             />
+          </Card.Content>
+        </Card>
 
+        <Card style={styles.card} mode="elevated">
+          <Card.Title title="Graph" titleVariant="titleLarge" />
+          <Card.Content style={styles.formArea}>
+            <View style={styles.sectionLabel}>
+              <MaterialCommunityIcons
+                name="chart-line"
+                size={16}
+                color={theme.colors.onSurfaceVariant}
+              />
+              <Text variant="labelLarge" style={{ fontWeight: "700" }}>
+                On-target tolerance
+              </Text>
+            </View>
             <Text
               variant="labelSmall"
-              style={{
-                color: theme.colors.onSurfaceVariant,
-                marginTop: 0,
-                marginBottom: 0,
-              }}
+              style={{ color: theme.colors.onSurfaceVariant, marginTop: -2 }}
             >
-              Graph status tolerance
-            </Text>
-            <Text
-              variant="labelSmall"
-              style={{ color: theme.colors.onSurfaceVariant, marginBottom: 0 }}
-            >
-              How close you need to be to your goal to show On target (default:
-              100 kcal)
+              How close to your daily goal counts as “On target”. Default: 100
+              kcal.
             </Text>
             <TextInput
               mode="outlined"
-              label="Graph tolerance (kcal)"
+              label="Tolerance (kcal)"
               keyboardType="number-pad"
               value={String(data.graphToleranceCalories)}
               onChangeText={(value) => {

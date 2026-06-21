@@ -16,10 +16,11 @@ import {
   DEFAULT_MODEL_TOP_P,
   DEFAULT_MODEL_BACKEND,
   DEFAULT_INFERENCE_BACKEND,
+  DEFAULT_FIBRE_CALORIE_APPROACH,
   PHASE_MAINTAIN,
   ADJUSTMENT_TYPE_KCAL,
 } from "@/constants";
-import type { InferenceBackend } from "@/constants";
+import type { InferenceBackend, FibreCalorieApproach } from "@/constants";
 
 export type FavouriteQuickAdd = {
   title: string;
@@ -89,6 +90,8 @@ export type StoredData = {
   fatGoalGrams: number | null;
   carbsGoalGrams: number | null;
   fibreGoalGrams: number | null;
+  /** How fibre contributes to the macro-derived calorie estimate. */
+  fibreCalorieApproach: FibreCalorieApproach;
   calorieTolerancePercent: number;
   graphToleranceCalories: number;
   perModelConfig: Record<string, ModelConfig>;
@@ -190,6 +193,7 @@ export const DEFAULT_DATA: StoredData = {
   fatGoalGrams: null,
   carbsGoalGrams: null,
   fibreGoalGrams: null,
+  fibreCalorieApproach: DEFAULT_FIBRE_CALORIE_APPROACH,
   calorieTolerancePercent: DEFAULT_CALORIE_TOLERANCE_PERCENT,
   graphToleranceCalories: DEFAULT_GRAPH_TOLERANCE_CALORIES,
   perModelConfig: {},
@@ -215,6 +219,8 @@ function normalizeStoredData(parsed: Partial<StoredData>): StoredData {
     ...parsed,
     favouriteQuickAdds: parsed.favouriteQuickAdds ?? [],
     inferenceBackend: parsed.inferenceBackend ?? DEFAULT_INFERENCE_BACKEND,
+    fibreCalorieApproach:
+      parsed.fibreCalorieApproach ?? DEFAULT_FIBRE_CALORIE_APPROACH,
     perModelConfig: normalizePerModelConfig(parsed.perModelConfig),
   };
 }

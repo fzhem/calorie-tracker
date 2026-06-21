@@ -76,6 +76,32 @@ export const CALORIES_PER_GRAM_PROTEIN = 4;
 export const CALORIES_PER_GRAM_CARBS = 4;
 export const CALORIES_PER_GRAM_FAT = 9;
 
+// ── Fibre Calorie Approaches ─────────────────────────────────
+// Controls how dietary fibre contributes to the "macros estimate about
+// X kcal" calculation. Different labelling systems use different factors:
+//   FDA — US basic 4-4-9: fibre counts as an ordinary carb (4 kcal/g)
+//   NET — fibre-subtracted / "net carbs": fibre contributes 0 kcal/g
+//   EU  — EU / FSANZ metabolisable energy: fibre counts at 2 kcal/g
+//
+// EU is the most accurate reflection of metabolisable energy and is the
+// app default.
+export const FIBRE_CALORIE_APPROACH_FDA = "fda";
+export const FIBRE_CALORIE_APPROACH_NET = "net";
+export const FIBRE_CALORIE_APPROACH_EU = "eu";
+export type FibreCalorieApproach =
+  | typeof FIBRE_CALORIE_APPROACH_FDA
+  | typeof FIBRE_CALORIE_APPROACH_NET
+  | typeof FIBRE_CALORIE_APPROACH_EU;
+export const FIBRE_CALORIE_APPROACHES: FibreCalorieApproach[] = [
+  FIBRE_CALORIE_APPROACH_FDA,
+  FIBRE_CALORIE_APPROACH_NET,
+  FIBRE_CALORIE_APPROACH_EU,
+];
+export const DEFAULT_FIBRE_CALORIE_APPROACH = FIBRE_CALORIE_APPROACH_EU;
+
+/** kcal per gram of fibre under the default (EU) approach. */
+export const CALORIES_PER_GRAM_FIBRE = 2;
+
 // ── Default Macro Nutritient Ratios (by phase) ───────────────
 export const DEFAULT_MACRO_RATIOS = {
   [PHASE_MAINTAIN]: { protein: 0.3, carbs: 0.4, fat: 0.3 },

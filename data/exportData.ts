@@ -13,6 +13,7 @@ import type {
   MetabolismSex,
   ActivityLevel,
 } from "@/data/storage";
+import type { FibreCalorieApproach } from "@/constants";
 import type { Meal, Weight, BodyFat, Recipe } from "@/db/index";
 import {
   getAllMeals,
@@ -295,6 +296,9 @@ export async function importUserData(
       fatGoalGrams: (data.fatGoalGrams as number | null) ?? null,
       carbsGoalGrams: (data.carbsGoalGrams as number | null) ?? null,
       fibreGoalGrams: (data.fibreGoalGrams as number | null) ?? null,
+      fibreCalorieApproach:
+        (data.fibreCalorieApproach as FibreCalorieApproach | undefined) ??
+        DEFAULT_DATA.fibreCalorieApproach,
       calorieTolerancePercent:
         (data.calorieTolerancePercent as number) ??
         DEFAULT_DATA.calorieTolerancePercent,

@@ -41,6 +41,7 @@ import {
   getAdjustedCalorieTarget,
   getAutoMacroTargets,
 } from "@/domain/metabolism";
+import { getMacroCalorieMismatch } from "@/domain/fibreCalories";
 import {
   clearModelCache,
   getModelInstance,
@@ -178,6 +179,16 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+/** Short summary of a recipe's items: the top 3 by calories (descending),
+ *  with a "+N more" suffix when there are additional items. */
+function summarizeRecipeItems(items: RecipeItem[]): string {
+  const sorted = [...items].sort((a, b) => b.calories - a.calories);
+  const top = sorted.slice(0, 3).map((i) => i.title);
+  const extra = sorted.length - top.length;
+  const summary = top.join(", ");
+  return extra > 0 ? `${summary}  +${extra} more` : summary;
+}
+
 function quickAddKey(item: QuickAddItem) {
   return `${item.title.toLowerCase()}-${item.calories}-${item.proteinGrams ?? ""}-${item.fatGrams ?? ""}-${item.carbsGrams ?? ""}-${item.fibreGrams ?? ""}`;
 }
@@ -195,41 +206,6 @@ function formatMacroLine(item: {
     typeof item.fibreGrams === "number" ? `Fib ${item.fibreGrams}g` : null,
   ].filter((value): value is string => !!value);
   return parts.join("  ");
-}
-
-function getMacroCalories(item: {
-  proteinGrams?: number | null;
-  fatGrams?: number | null;
-  carbsGrams?: number | null;
-}) {
-  const hasAnyMacro =
-    typeof item.proteinGrams === "number" ||
-    typeof item.fatGrams === "number" ||
-    typeof item.carbsGrams === "number";
-  if (!hasAnyMacro) return null;
-  const protein = item.proteinGrams ?? 0;
-  const carbs = item.carbsGrams ?? 0;
-  const fat = item.fatGrams ?? 0;
-  return protein * 4 + carbs * 4 + fat * 9;
-}
-
-function getMacroCalorieMismatch(
-  calories: number,
-  item: {
-    proteinGrams?: number | null;
-    fatGrams?: number | null;
-    carbsGrams?: number | null;
-  },
-  options?: { tolerancePercent?: number },
-) {
-  const macroCalories = getMacroCalories(item);
-  if (macroCalories === null) return null;
-  const roundedMacroCalories = Math.round(macroCalories);
-  const delta = Math.round(calories - roundedMacroCalories);
-  const tolerancePercent = options?.tolerancePercent ?? 12;
-  const tolerance = Math.round(calories * (tolerancePercent / 100));
-  if (Math.abs(delta) <= tolerance) return null;
-  return { macroCalories: roundedMacroCalories, delta };
 }
 
 const FIBRE_GRAMS_PER_1000_KCAL = 14;
@@ -297,8 +273,10 @@ const QuickLogCard = memo(function QuickLogCard({
         proteinGrams: mealProtein.trim() ? parseNumberInput(mealProtein) : null,
         fatGrams: mealFat.trim() ? parseNumberInput(mealFat) : null,
         carbsGrams: mealCarbs.trim() ? parseNumberInput(mealCarbs) : null,
+        fibreGrams: mealFibre.trim() ? parseNumberInput(mealFibre) : null,
       },
       {
+        approach: data.fibreCalorieApproach,
         tolerancePercent: data.calorieTolerancePercent,
       },
     );
@@ -307,6 +285,8 @@ const QuickLogCard = memo(function QuickLogCard({
     mealCarbs,
     mealFat,
     mealProtein,
+    mealFibre,
+    data.fibreCalorieApproach,
     data.calorieTolerancePercent,
   ]);
 
@@ -1107,12 +1087,16 @@ export default function LogScreen() {
         carbsGrams: editDraft.carbs.trim()
           ? parseNumberInput(editDraft.carbs)
           : null,
+        fibreGrams: editDraft.fibre.trim()
+          ? parseNumberInput(editDraft.fibre)
+          : null,
       },
       {
+        approach: data.fibreCalorieApproach,
         tolerancePercent: data.calorieTolerancePercent,
       },
     );
-  }, [editDraft, data.calorieTolerancePercent]);
+  }, [editDraft, data.fibreCalorieApproach, data.calorieTolerancePercent]);
 
   const macroGoalModeIcon =
     data.proteinGoalGrams !== null ||
@@ -1349,6 +1333,7 @@ export default function LogScreen() {
     return visibleEntries.map((entry) => {
       const isSelected = selectedEntryIds.has(entry.id);
       const mismatch = getMacroCalorieMismatch(entry.calories, entry, {
+        approach: data.fibreCalorieApproach,
         tolerancePercent: data.calorieTolerancePercent,
       });
       const entryAsQuickAdd: QuickAddItem = {
@@ -2173,10 +2158,10 @@ export default function LogScreen() {
                         <View style={styles.entryTitleRow}>
                           <Text
                             variant="titleSmall"
-                            numberOfLines={1}
+                            numberOfLines={2}
                             style={[
                               styles.entryTitle,
-                              { color: theme.colors.onSurface },
+                              { flex: 1, color: theme.colors.onSurface },
                             ]}
                           >
                             {recipe.name}
@@ -2821,35 +2806,40 @@ export default function LogScreen() {
                         ]}
                         elevation={1}
                       >
+                        <Text
+                          variant="labelMedium"
+                          style={{
+                            position: "absolute",
+                            top: 8,
+                            right: 10,
+                            color: theme.colors.primary,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {recipe.totalCalories} kcal
+                        </Text>
                         <View style={[styles.entryMain, { gap: 2 }]}>
-                          <View style={styles.entryTitleRow}>
-                            <Text
-                              variant="titleSmall"
-                              numberOfLines={1}
-                              style={{ flex: 1, color: theme.colors.onSurface }}
-                            >
-                              {recipe.name}
-                            </Text>
-                            <Text
-                              variant="labelMedium"
-                              style={{
-                                color: theme.colors.primary,
-                                fontWeight: "700",
-                              }}
-                            >
-                              {recipe.totalCalories} kcal
-                            </Text>
-                          </View>
+                          <Text
+                            variant="titleSmall"
+                            numberOfLines={1}
+                            style={{
+                              color: theme.colors.onSurface,
+                              paddingRight: 50,
+                            }}
+                          >
+                            {recipe.name}
+                          </Text>
                           <Text
                             variant="bodySmall"
                             numberOfLines={2}
                             style={{ color: theme.colors.onSurfaceVariant }}
                           >
-                            {items.map((i) => i.title).join(", ")}
+                            {summarizeRecipeItems(items)}
                           </Text>
                           {recipe.totalProteinGrams ? (
                             <Text
                               variant="bodySmall"
+                              numberOfLines={1}
                               style={{ color: theme.colors.onSurfaceVariant }}
                             >
                               P {round1(recipe.totalProteinGrams)}g C{" "}
@@ -2956,8 +2946,14 @@ export default function LogScreen() {
                             carbsGrams: draft.carbs.trim()
                               ? parseNumberInput(draft.carbs)
                               : null,
+                            fibreGrams: draft.fibre.trim()
+                              ? parseNumberInput(draft.fibre)
+                              : null,
                           },
-                          { tolerancePercent: data.calorieTolerancePercent },
+                          {
+                            approach: data.fibreCalorieApproach,
+                            tolerancePercent: data.calorieTolerancePercent,
+                          },
                         )
                       : null;
                   return (
