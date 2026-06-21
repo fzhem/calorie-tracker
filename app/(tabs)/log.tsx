@@ -12,6 +12,7 @@ import {
 import { getLocalDateKey, parseAppDate, toLocalISOString } from "@/lib/dateKey";
 import {
   AppState,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -89,6 +90,11 @@ import {
 } from "@/db/index";
 import { makeMealId } from "@/db/helpers";
 import { invalidateMealCaches } from "@/lib/queryCache";
+import {
+  scaleRecipeItem,
+  sumScaledRecipe,
+  portionFactor,
+} from "@/lib/recipeScale";
 import {
   ensureModelLoaded,
   sendMessage,
@@ -873,6 +879,8 @@ export default function LogScreen() {
   const [createRecipeModalVisible, setCreateRecipeModalVisible] =
     useState(false);
   const [createRecipeName, setCreateRecipeName] = useState("");
+  const [createRecipeUrl, setCreateRecipeUrl] = useState("");
+  const [createRecipeServings, setCreateRecipeServings] = useState("1");
   const [selectedRecipeItems, setSelectedRecipeItems] = useState<
     QuickAddItem[]
   >([]);
@@ -1596,6 +1604,8 @@ export default function LogScreen() {
       }));
     setSelectedRecipeItems(items);
     setCreateRecipeName("");
+    setCreateRecipeUrl("");
+    setCreateRecipeServings("1");
     setCreateRecipeModalVisible(true);
   }, [entries, selectedEntryIds]);
 
@@ -1608,25 +1618,37 @@ export default function LogScreen() {
       m3Alert.alert("No items", "Add at least one item to the recipe.");
       return;
     }
+    const servings = parseNumberInput(createRecipeServings);
     try {
       await insertRecipe({
         name: createRecipeName.trim(),
         items: selectedRecipeItems,
+        url: createRecipeUrl,
+        servings: servings && servings > 0 ? servings : 1,
       });
       const updated = await getAllRecipes();
       setRecipes(updated);
       setCreateRecipeModalVisible(false);
       setSelectedEntryIds(new Set());
       setCreateRecipeName("");
+      setCreateRecipeUrl("");
+      setCreateRecipeServings("1");
       setSelectedRecipeItems([]);
       Vibration.vibrate(10);
     } catch {
       m3Alert.alert("Error", "Could not save recipe.");
     }
-  }, [createRecipeName, selectedRecipeItems]);
+  }, [
+    createRecipeName,
+    createRecipeUrl,
+    createRecipeServings,
+    selectedRecipeItems,
+  ]);
 
   const [editRecipeId, setEditRecipeId] = useState<string | null>(null);
   const [editRecipeName, setEditRecipeName] = useState("");
+  const [editRecipeUrl, setEditRecipeUrl] = useState("");
+  const [editRecipeServings, setEditRecipeServings] = useState("1");
   const [editRecipeItems, setEditRecipeItems] = useState<EditRecipeItemDraft[]>(
     [],
   );
@@ -1637,6 +1659,12 @@ export default function LogScreen() {
   const handleEditRecipe = useCallback((recipe: Recipe) => {
     setEditRecipeId(recipe.id);
     setEditRecipeName(recipe.name);
+    setEditRecipeUrl(recipe.url ?? "");
+    setEditRecipeServings(
+      typeof recipe.servings === "number" && recipe.servings > 0
+        ? `${recipe.servings}`
+        : "1",
+    );
     const items: RecipeItem[] = JSON.parse(recipe.itemsJson);
     setEditRecipeItems(
       items.map((i) => ({
@@ -1747,11 +1775,19 @@ export default function LogScreen() {
       return;
     }
     try {
-      await updateRecipe(editRecipeId, { name: editRecipeName.trim(), items });
+      const servings = parseNumberInput(editRecipeServings);
+      await updateRecipe(editRecipeId, {
+        name: editRecipeName.trim(),
+        items,
+        url: editRecipeUrl,
+        servings: servings && servings > 0 ? servings : 1,
+      });
       const updated = await getAllRecipes();
       setRecipes(updated);
       setEditRecipeId(null);
       setEditRecipeName("");
+      setEditRecipeUrl("");
+      setEditRecipeServings("1");
       setEditRecipeItems([]);
       setEditRecipeShowMacros(new Set());
       Vibration.vibrate(10);
@@ -1759,7 +1795,13 @@ export default function LogScreen() {
       setEditRecipeId(null);
       setTimeout(() => m3Alert.alert("Error", "Could not update recipe."), 100);
     }
-  }, [editRecipeId, editRecipeName, editRecipeItems]);
+  }, [
+    editRecipeId,
+    editRecipeName,
+    editRecipeUrl,
+    editRecipeServings,
+    editRecipeItems,
+  ]);
 
   const handleDeleteRecipe = useCallback(
     async (id: string) => {
@@ -1775,11 +1817,32 @@ export default function LogScreen() {
     [recipes],
   );
 
+  const [applyRecipe, setApplyRecipe] = useState<Recipe | null>(null);
+  const [applyPortions, setApplyPortions] = useState("1");
+
+  const handleOpenApplyRecipe = useCallback((recipe: Recipe) => {
+    setApplyRecipe(recipe);
+    setApplyPortions("1");
+  }, []);
+
   const handleAddRecipeToLog = useCallback(
-    (recipe: Recipe) => {
+    (recipe: Recipe, portions: number) => {
       const items: RecipeItem[] = JSON.parse(recipe.itemsJson);
+      const servings =
+        typeof recipe.servings === "number" && recipe.servings > 0
+          ? recipe.servings
+          : 1;
+      const factor = portions / servings;
       for (const item of items) {
-        addMeal(item);
+        const scaled = scaleRecipeItem(item, factor);
+        addMeal({
+          title: scaled.title,
+          calories: scaled.calories,
+          proteinGrams: scaled.proteinGrams,
+          fatGrams: scaled.fatGrams,
+          carbsGrams: scaled.carbsGrams,
+          fibreGrams: scaled.fibreGrams,
+        });
       }
       Vibration.vibrate(10);
     },
@@ -2197,7 +2260,7 @@ export default function LogScreen() {
                           icon="plus-circle-outline"
                           size={20}
                           iconColor={theme.colors.primary}
-                          onPress={() => handleAddRecipeToLog(recipe)}
+                          onPress={() => handleOpenApplyRecipe(recipe)}
                           accessibilityLabel="Add recipe to log"
                         />
                       </View>
@@ -2847,6 +2910,30 @@ export default function LogScreen() {
                               {round1(recipe.totalFatGrams ?? 0)}g
                             </Text>
                           ) : null}
+                          {(() => {
+                            const servings =
+                              typeof recipe.servings === "number" &&
+                              recipe.servings > 0
+                                ? recipe.servings
+                                : 1;
+                            if (servings <= 1) return null;
+                            const perServing = Math.round(
+                              recipe.totalCalories / servings,
+                            );
+                            return (
+                              <Text
+                                variant="bodySmall"
+                                numberOfLines={1}
+                                style={{
+                                  color: theme.colors.onSurfaceVariant,
+                                  fontStyle: "italic",
+                                }}
+                              >
+                                Makes {round1(servings)} servings · {perServing}{" "}
+                                kcal each
+                              </Text>
+                            );
+                          })()}
                         </View>
                         <View style={styles.entryActions}>
                           <IconButton
@@ -2854,11 +2941,24 @@ export default function LogScreen() {
                             size={20}
                             iconColor={theme.colors.primary}
                             onPress={() => {
-                              handleAddRecipeToLog(recipe);
+                              handleOpenApplyRecipe(recipe);
                               setRecipeModalVisible(false);
                             }}
                             accessibilityLabel="Add recipe to log"
                           />
+                          {recipe.url ? (
+                            <IconButton
+                              icon="open-in-new"
+                              size={18}
+                              iconColor={theme.colors.primary}
+                              onPress={() =>
+                                recipe.url
+                                  ? Linking.openURL(recipe.url).catch(() => {})
+                                  : null
+                              }
+                              accessibilityLabel="Open recipe link"
+                            />
+                          ) : null}
                           <IconButton
                             icon="pencil-outline"
                             size={18}
@@ -2924,6 +3024,36 @@ export default function LogScreen() {
                 mode="outlined"
                 theme={QUICK_LOG_INPUT_THEME}
               />
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "stretch",
+                  gap: 8,
+                }}
+              >
+                <TextInput
+                  label="Recipe link (optional)"
+                  value={editRecipeUrl}
+                  onChangeText={setEditRecipeUrl}
+                  placeholder="https://…"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  mode="outlined"
+                  theme={QUICK_LOG_INPUT_THEME}
+                  style={{ flex: 1 }}
+                />
+                <TextInput
+                  label="Servings"
+                  value={editRecipeServings}
+                  onChangeText={setEditRecipeServings}
+                  placeholder="1"
+                  keyboardType="numeric"
+                  mode="outlined"
+                  theme={QUICK_LOG_INPUT_THEME}
+                  style={{ width: 96 }}
+                />
+              </View>
               <ScrollView
                 style={{ maxHeight: 300 }}
                 showsVerticalScrollIndicator
@@ -3211,6 +3341,36 @@ export default function LogScreen() {
                 mode="outlined"
                 theme={QUICK_LOG_INPUT_THEME}
               />
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "stretch",
+                  gap: 8,
+                }}
+              >
+                <TextInput
+                  label="Recipe link (optional)"
+                  value={createRecipeUrl}
+                  onChangeText={setCreateRecipeUrl}
+                  placeholder="https://…"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  mode="outlined"
+                  theme={QUICK_LOG_INPUT_THEME}
+                  style={{ flex: 1 }}
+                />
+                <TextInput
+                  label="Servings"
+                  value={createRecipeServings}
+                  onChangeText={setCreateRecipeServings}
+                  placeholder="1"
+                  keyboardType="numeric"
+                  mode="outlined"
+                  theme={QUICK_LOG_INPUT_THEME}
+                  style={{ width: 96 }}
+                />
+              </View>
               <ScrollView
                 style={{ maxHeight: 200 }}
                 showsVerticalScrollIndicator
@@ -3273,6 +3433,188 @@ export default function LogScreen() {
                 </Button>
               </View>
             </Pressable>
+          </Pressable>
+        </Modal>
+
+        {/* ── Log Recipe (apply) Modal ──────────────────────────── */}
+        <Modal
+          visible={applyRecipe !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            setApplyRecipe(null);
+            setApplyPortions("1");
+          }}
+        >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => {
+              setApplyRecipe(null);
+              setApplyPortions("1");
+            }}
+          >
+            <View
+              onStartShouldSetResponder={() => true}
+              style={[
+                styles.modalCard,
+                { backgroundColor: theme.colors.surface },
+              ]}
+            >
+              <Text variant="titleMedium" style={{ fontWeight: "700" }}>
+                Log Recipe
+              </Text>
+              {applyRecipe
+                ? (() => {
+                    const servings =
+                      typeof applyRecipe.servings === "number" &&
+                      applyRecipe.servings > 0
+                        ? applyRecipe.servings
+                        : 1;
+                    const portionsRaw = parseNumberInput(applyPortions);
+                    const portions =
+                      portionsRaw && portionsRaw > 0 ? portionsRaw : 1;
+                    const totals = sumScaledRecipe(
+                      JSON.parse(applyRecipe.itemsJson) as RecipeItem[],
+                      portionFactor(servings, portions),
+                    );
+                    const perServingKcal = Math.round(
+                      applyRecipe.totalCalories / servings,
+                    );
+                    return (
+                      <>
+                        <Text
+                          variant="titleSmall"
+                          style={{ color: theme.colors.onSurface }}
+                        >
+                          {applyRecipe.name}
+                        </Text>
+                        <Text
+                          variant="bodySmall"
+                          style={{ color: theme.colors.onSurfaceVariant }}
+                        >
+                          Makes {round1(servings)} serving
+                          {servings === 1 ? "" : "s"} · {perServingKcal} kcal
+                          each
+                        </Text>
+
+                        <Text variant="labelLarge" style={{ marginTop: 8 }}>
+                          How many portions are you logging?
+                        </Text>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
+                          <IconButton
+                            icon="minus"
+                            size={20}
+                            onPress={() =>
+                              setApplyPortions(
+                                `${
+                                  Math.round(Math.max(1, portions - 1) * 100) /
+                                  100
+                                }`,
+                              )
+                            }
+                            accessibilityLabel="Fewer portions"
+                          />
+                          <TextInput
+                            value={applyPortions}
+                            onChangeText={setApplyPortions}
+                            onBlur={() => {
+                              const parsed = parseNumberInput(applyPortions);
+                              if (parsed === null || parsed <= 0) {
+                                setApplyPortions("1");
+                              }
+                            }}
+                            keyboardType="numeric"
+                            mode="outlined"
+                            theme={QUICK_LOG_INPUT_THEME}
+                            style={{ flex: 1, textAlign: "center" }}
+                          />
+                          <IconButton
+                            icon="plus"
+                            size={20}
+                            onPress={() =>
+                              setApplyPortions(
+                                `${Math.round((portions + 1) * 100) / 100}`,
+                              )
+                            }
+                            accessibilityLabel="More portions"
+                          />
+                        </View>
+
+                        <View
+                          style={[
+                            styles.macroSummaryBar,
+                            {
+                              borderColor: theme.colors.outlineVariant,
+                              backgroundColor: theme.colors.elevation.level1,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              fontWeight: "700",
+                              color: theme.colors.primary,
+                            }}
+                          >
+                            {totals.calories} kcal
+                          </Text>
+                          <Text
+                            variant="bodySmall"
+                            style={{ color: theme.colors.onSurfaceVariant }}
+                          >
+                            P {round1(totals.proteinGrams)}g C{" "}
+                            {round1(totals.carbsGrams)}g F{" "}
+                            {round1(totals.fatGrams)}g
+                          </Text>
+                        </View>
+                        {servings !== 1 && portions !== servings ? (
+                          <Text
+                            variant="bodySmall"
+                            style={{
+                              color: theme.colors.onSurfaceVariant,
+                              fontStyle: "italic",
+                            }}
+                          >
+                            Logging {round1(portions)} of {round1(servings)}{" "}
+                            servings.
+                          </Text>
+                        ) : null}
+
+                        <View style={styles.editActionsRow}>
+                          <Button
+                            mode="text"
+                            onPress={() => {
+                              setApplyRecipe(null);
+                              setApplyPortions("1");
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            mode="contained"
+                            icon="check"
+                            disabled={portionsRaw === null || portionsRaw <= 0}
+                            onPress={() => {
+                              if (applyRecipe) {
+                                handleAddRecipeToLog(applyRecipe, portions);
+                              }
+                              setApplyRecipe(null);
+                              setApplyPortions("1");
+                            }}
+                          >
+                            Add to Log
+                          </Button>
+                        </View>
+                      </>
+                    );
+                  })()
+                : null}
+            </View>
           </Pressable>
         </Modal>
       </View>

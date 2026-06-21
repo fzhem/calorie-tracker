@@ -67,6 +67,11 @@ export const recipes = sqliteTable("recipes", {
   totalFatGrams: real("total_fat_g"),
   totalCarbsGrams: real("total_carbs_g"),
   totalFibreGrams: real("total_fibre_g"),
+  // Optional link to the original recipe (web page, video, etc.).
+  url: text("url"),
+  // How many portions the full recipe makes. Item/macros totals describe
+  // the ENTIRE recipe; per-portion values are derived as total / servings.
+  servings: real("servings").notNull().default(1),
   createdAt: text("created_at").notNull(),
 });
 

@@ -279,6 +279,8 @@ export type RecipeItem = {
 export async function insertRecipe(recipe: {
   name: string;
   items: RecipeItem[];
+  url?: string | null;
+  servings?: number;
 }): Promise<void> {
   const totalCalories = recipe.items.reduce((s, i) => s + i.calories, 0);
   const totalProtein = recipe.items.reduce(
@@ -288,12 +290,15 @@ export async function insertRecipe(recipe: {
   const totalFat = recipe.items.reduce((s, i) => s + (i.fatGrams ?? 0), 0);
   const totalCarbs = recipe.items.reduce((s, i) => s + (i.carbsGrams ?? 0), 0);
   const totalFibre = recipe.items.reduce((s, i) => s + (i.fibreGrams ?? 0), 0);
+  const servings = recipe.servings && recipe.servings > 0 ? recipe.servings : 1;
 
   await db.insert(schema.recipes).values({
     id: makeRecipeId(recipe.name),
     name: recipe.name,
     itemsJson: JSON.stringify(recipe.items),
     totalCalories: Math.round(totalCalories),
+    url: recipe.url?.trim() ? recipe.url.trim() : null,
+    servings,
     totalProteinGrams: totalProtein > 0 ? round1(totalProtein) : null,
     totalFatGrams: totalFat > 0 ? round1(totalFat) : null,
     totalCarbsGrams: totalCarbs > 0 ? round1(totalCarbs) : null,
@@ -335,10 +340,21 @@ export async function importRecipesBulk(
 
 export async function updateRecipe(
   id: string,
-  data: { name?: string; items?: RecipeItem[] },
+  data: {
+    name?: string;
+    items?: RecipeItem[];
+    url?: string | null;
+    servings?: number;
+  },
 ): Promise<void> {
   const updateData: Record<string, unknown> = {};
   if (data.name !== undefined) updateData.name = data.name;
+  if (data.url !== undefined) {
+    updateData.url = data.url && data.url.trim() ? data.url.trim() : null;
+  }
+  if (data.servings !== undefined) {
+    updateData.servings = data.servings > 0 ? data.servings : 1;
+  }
   if (data.items !== undefined) {
     updateData.itemsJson = JSON.stringify(data.items);
     const totalCalories = data.items.reduce((s, i) => s + i.calories, 0);
