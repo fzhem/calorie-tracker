@@ -40,6 +40,7 @@
       "./plugins/withAndroidManifestExtras",
       "./plugins/withAndroidBuildGradle",
       "./plugins/withLiteRTProguard",
+      "./plugins/withLlamaRNProguard",
       "./plugins/withHealthConnectPermissionDelegate",
       "@kesha-antonov/react-native-background-downloader"
     ],
