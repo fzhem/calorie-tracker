@@ -125,7 +125,7 @@ type NotificationPermissionStatus =
 export type BuiltInModelKey =
   | "GEMMA_4_E2B_IT"
   | "GEMMA_4_E4B_IT"
-  | "GRANITE_4_0_H_MICRO";
+  | "GRANITE_4_1_3B";
 
 type ModelCatalogItem = {
   key: BuiltInModelKey;
@@ -159,12 +159,12 @@ export const GEMMA_4_E4B_IT =
   "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm";
 
 /**
- * Download URL for the IBM Granite 4.0 H Micro model (Q4_0 GGUF, 1.73 GB).
+ * Download URL for the IBM Granite 4.1 3B model (Q4_0 GGUF, 1.85 GB).
  * Built-in GGUF model for the llama.cpp backend.
  * Public - no HuggingFace account required.
  */
-export const GRANITE_4_0_H_MICRO =
-  "https://huggingface.co/ibm-granite/granite-4.0-h-micro-GGUF/resolve/main/granite-4.0-h-micro-Q4_0.gguf";
+export const GRANITE_4_1_3B =
+  "https://huggingface.co/ibm-granite/granite-4.1-3b-GGUF/resolve/main/granite-4.1-3b-Q4_0.gguf";
 
 /** Magic number for .litertlm model files: "LITERTLM" */
 const LITERTLM_MAGIC = [0x4c, 0x49, 0x54, 0x45, 0x52, 0x54, 0x4c, 0x4d];
@@ -194,11 +194,11 @@ const BUILT_IN_MODELS: ModelCatalogItem[] = [
 /** Built-in GGUF models for the llama.cpp backend. */
 const BUILT_IN_GGUF_MODELS: ModelCatalogItem[] = [
   {
-    key: "GRANITE_4_0_H_MICRO",
-    label: "Granite-4.0-H-Micro",
-    sizeLabel: "1.73 GB",
-    url: GRANITE_4_0_H_MICRO,
-    fileName: "granite-4.0-h-micro-Q4_0.gguf",
+    key: "GRANITE_4_1_3B",
+    label: "Granite-4.1-3B",
+    sizeLabel: "1.85 GB",
+    url: GRANITE_4_1_3B,
+    fileName: "granite-4.1-3b-Q4_0.gguf",
   },
 ];
 
@@ -3054,8 +3054,8 @@ export default function SettingsScreen() {
                           ? "GEMMA_4_E2B_IT"
                           : model.name.includes("gemma-4-E4B")
                             ? "GEMMA_4_E4B_IT"
-                            : model.name.includes("granite-4.0-h-micro")
-                              ? "GRANITE_4_0_H_MICRO"
+                            : model.name.includes("granite-4.1-3b")
+                              ? "GRANITE_4_1_3B"
                               : null;
                         const memoryCheck = modelKey
                           ? checkModelMemory(modelKey)
