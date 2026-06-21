@@ -95,13 +95,42 @@ export type StoredData = {
   healthConnectAutoSync: boolean;
 };
 
+// ---------------------------------------------------------------------------
+// llama.cpp advanced options
+//
+// Types, defaults and validation live in lib/llamaCppConfig.ts (a pure module
+// with no react-native deps) so they can be unit-tested under Node. They are
+// re-exported here for convenience alongside the rest of the storage types.
+//
+// Each field maps 1:1 to a llama-server CLI flag / llama.rn context param:
+// https://github.com/mybigday/llama.rn
+// ---------------------------------------------------------------------------
+
+export type {
+  LlamaCppFlashAttn,
+  LlamaCppReasoning,
+  LlamaCppCacheType,
+  LlamaCppAdvancedConfig,
+} from "@/lib/llamaCppConfig";
+export {
+  DEFAULT_LLAMA_CPP_CONFIG,
+  normalizeLlamaCppConfig,
+} from "@/lib/llamaCppConfig";
+import type { LlamaCppAdvancedConfig } from "@/lib/llamaCppConfig";
+import {
+  DEFAULT_LLAMA_CPP_CONFIG,
+  normalizeLlamaCppConfig,
+} from "@/lib/llamaCppConfig";
+
 export type ModelConfig = {
   temperature: number;
   maxTokens: number;
   topK: number;
   topP: number;
-  backend: "cpu" | "gpu" | "npu";
+  backend: "cpu";
   enableSpeculativeDecoding: boolean;
+  /** Advanced llama.cpp options. Ignored by the LiteRT backend. */
+  llamaCpp?: Partial<LlamaCppAdvancedConfig>;
 };
 
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
@@ -111,6 +140,7 @@ export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   topP: DEFAULT_MODEL_TOP_P,
   backend: DEFAULT_MODEL_BACKEND,
   enableSpeculativeDecoding: false,
+  llamaCpp: { ...DEFAULT_LLAMA_CPP_CONFIG },
 };
 
 export const STORAGE_KEY = CONST_STORAGE_KEY;
@@ -202,6 +232,7 @@ function normalizePerModelConfig(
       topP: config.topP,
       backend: config.backend ?? "cpu",
       enableSpeculativeDecoding: config.enableSpeculativeDecoding ?? false,
+      llamaCpp: normalizeLlamaCppConfig(config.llamaCpp),
     };
   }
   return normalized;

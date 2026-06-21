@@ -10,7 +10,9 @@
 
 import { Platform } from "react-native";
 import * as LlamaRN from "llama.rn";
-import type { ModelConfig } from "@/data/storage";
+import type { ModelConfig, LlamaCppAdvancedConfig } from "@/data/storage";
+import { DEFAULT_LLAMA_CPP_CONFIG } from "@/data/storage";
+import { buildLlamaCppInitParams } from "@/lib/llamaCppConfig";
 import { getMemoryStats } from "@/modules/rn-memory-module/src/index";
 
 // ---------------------------------------------------------------------------
@@ -50,11 +52,15 @@ export function isLlamaRNAvailable(): boolean {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// initLlama() param construction lives in lib/llamaCppConfig.ts (pure, tested).
+// ---------------------------------------------------------------------------
+
 /**
  * Load a GGUF model file using llama.rn.
  *
  * @param modelPath  Filesystem path to the .gguf model file (cleaned, no file:// prefix).
- * @param config     Model configuration (temperature, maxTokens, topK, topP).
+ * @param config     Model configuration (temperature, maxTokens, topK, topP + llamaCpp advanced).
  * @param systemPrompt  System prompt to prepend to all requests.
  */
 export async function loadLlamaRNModel(
@@ -62,27 +68,21 @@ export async function loadLlamaRNModel(
   config: ModelConfig,
   systemPrompt: string,
 ): Promise<LlamaRNInstance> {
-  let context: any;
+  const llamaCpp: LlamaCppAdvancedConfig = {
+    ...DEFAULT_LLAMA_CPP_CONFIG,
+    ...(config.llamaCpp ?? {}),
+  };
 
+  const initParams = buildLlamaCppInitParams(modelPath, config);
+
+  let context: any;
   if (typeof (LlamaRN as any).initLlama === "function") {
-    context = await (LlamaRN as any).initLlama({
-      model: modelPath,
-      n_ctx: config.maxTokens,
-      n_threads: 4,
-      use_mlock: true,
-      embedding: false,
-    });
+    context = await (LlamaRN as any).initLlama(initParams);
   } else if (
     (LlamaRN as any).LlamaContext &&
     typeof (LlamaRN as any).LlamaContext.init === "function"
   ) {
-    context = await (LlamaRN as any).LlamaContext.init({
-      model: modelPath,
-      n_ctx: config.maxTokens,
-      n_threads: 4,
-      use_mlock: true,
-      embedding: false,
-    });
+    context = await (LlamaRN as any).LlamaContext.init(initParams);
   } else {
     throw new Error(
       "llama.rn API not recognized. Please check the llama.rn documentation.",
@@ -106,26 +106,71 @@ export async function loadLlamaRNModel(
         throw new Error("Model context not initialized.");
       }
 
-      const fullPrompt = systemPrompt
-        ? `${systemPrompt}\n\n${params.prompt}`
-        : params.prompt;
-
-      const response = await context.completion({
-        prompt: fullPrompt,
+      // Sampler params only — context-level flags (reasoning) are already
+      // set at initLlama() time.
+      const completionParams: Record<string, unknown> = {
         n_predict: params.n_predict ?? config.maxTokens,
         temperature: params.temperature ?? config.temperature,
         top_k: params.top_k ?? config.topK,
         top_p: params.top_p ?? config.topP,
         stop: params.stop ?? ["</s>"],
-      });
+      };
 
-      if (typeof response === "string") {
-        return { text: response };
+      // Prefer chat-formatted completion so instruction-tuned GGUF models
+      // (Gemma, Llama, Qwen, ...) actually follow the JSON instruction. Raw
+      // text completion skips the model's chat template — there's no
+      // "assistant turn" marker, so chat models often emit EOS immediately
+      // and return empty text. Using `messages` runs the model's jinja
+      // template (e.g. Gemma's <start_of_turn>model\n marker).
+      //
+      // We fall back to raw prompt completion for base models that have no
+      // chat template.
+      const supportsChat =
+        typeof context.isJinjaSupported === "function" &&
+        context.isJinjaSupported();
+
+      let response: any;
+      try {
+        if (supportsChat) {
+          const messages: Array<{ role: string; content: string }> = [];
+          if (systemPrompt) {
+            messages.push({ role: "system", content: systemPrompt });
+          }
+          messages.push({ role: "user", content: params.prompt });
+          response = await context.completion({
+            ...completionParams,
+            messages,
+          });
+        } else {
+          // No jinja template — do raw text completion.
+          const fullPrompt = systemPrompt
+            ? `${systemPrompt}\n\n${params.prompt}`
+            : params.prompt;
+          response = await context.completion({
+            ...completionParams,
+            prompt: fullPrompt,
+          });
+        }
+      } catch {
+        // Chat template rendering failed (e.g. malformed jinja) → fall back
+        // to raw text completion.
+        const fullPrompt = systemPrompt
+          ? `${systemPrompt}\n\n${params.prompt}`
+          : params.prompt;
+        response = await context.completion({
+          ...completionParams,
+          prompt: fullPrompt,
+        });
       }
-      if (response && typeof response.text === "string") {
-        return { text: response.text };
-      }
-      return { text: JSON.stringify(response) };
+
+      // Prefer `content` (filters out reasoning/tool-call wrapping) then `text`.
+      const outText =
+        (response &&
+          typeof response.content === "string" &&
+          response.content) ||
+        (response && typeof response.text === "string" && response.text) ||
+        "";
+      return { text: outText };
     },
 
     async close() {
