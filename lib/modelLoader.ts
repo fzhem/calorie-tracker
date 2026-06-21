@@ -41,10 +41,23 @@ const DEFAULT_CONFIG: ModelConfig = DEFAULT_MODEL_CONFIG;
 
 /**
  * Build a deterministic cache key that includes the backend type.
+ * Normalizes the config to ensure consistent stringification.
  */
 function buildKey(params: EnsureModelParams): string {
   const config = params.modelConfig ?? DEFAULT_CONFIG;
-  return `${params.inferenceBackend}::${params.modelPath}::${params.systemPrompt}::${JSON.stringify(config)}`;
+  // Create a normalized copy with all fields to ensure consistent JSON stringification
+  const normalized: ModelConfig = {
+    temperature: config.temperature ?? DEFAULT_CONFIG.temperature,
+    maxTokens: config.maxTokens ?? DEFAULT_CONFIG.maxTokens,
+    topK: config.topK ?? DEFAULT_CONFIG.topK,
+    topP: config.topP ?? DEFAULT_CONFIG.topP,
+    backend: config.backend ?? DEFAULT_CONFIG.backend,
+    enableSpeculativeDecoding:
+      config.enableSpeculativeDecoding ??
+      DEFAULT_CONFIG.enableSpeculativeDecoding,
+    llamaCpp: config.llamaCpp ?? DEFAULT_CONFIG.llamaCpp,
+  };
+  return `${params.inferenceBackend}::${params.modelPath}::${params.systemPrompt}::${JSON.stringify(normalized)}`;
 }
 
 /**
@@ -58,12 +71,14 @@ export async function sendMessage(
   prompt: string,
 ): Promise<string> {
   if (unified.kind === "litert") {
-    return unified.instance.sendMessage(prompt);
+    const text = await unified.instance.sendMessage(prompt);
+    return text;
   } else if (unified.kind === "llama-cpp") {
     const result = await unified.instance.completion({
       prompt,
     });
-    return result?.text ?? "";
+    const text = result?.text ?? "";
+    return text;
   }
   throw new Error(`Unknown model kind: ${(unified as any).kind}`);
 }
