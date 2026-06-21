@@ -73,8 +73,15 @@ import {
   loadStoredData as readStoredData,
   saveStoredData,
 } from "@/data/storage";
-import type { Weight, BodyFat } from "@/db/index";
-import type { ModelConfig, StoredData } from "@/data/storage";
+import type {
+  ModelConfig,
+  StoredData,
+  LlamaCppAdvancedConfig,
+  LlamaCppFlashAttn,
+  LlamaCppReasoning,
+  LlamaCppCacheType,
+} from "@/data/storage";
+import { DEFAULT_LLAMA_CPP_CONFIG } from "@/data/storage";
 import { useThemeMode, type ThemeMode } from "@/ui/themeMode";
 import { useM3Alert } from "@/ui/m3Alert";
 import { getAppSegmentedButtonsTheme } from "@/ui/segmentedButtons";
@@ -167,15 +174,27 @@ type ModelConfigModalProps = {
   modelUri: string | null;
   modelName: string;
   config: ModelConfig | null;
+  inferenceBackend: InferenceBackend;
   theme: MD3Theme;
   onSave: (config: ModelConfig) => void;
   onClose: () => void;
 };
 
-type Accelerator = "cpu" | "gpu" | "npu";
-
 const flex1Style = { flex: 1 };
 const FOCUS_REFRESH_INTERVAL_MS = 12_000;
+
+/** Deep comparison of two LlamaCppAdvancedConfig objects (undefined-safe). */
+function isLlamaCppConfigEqual(
+  a?: Partial<LlamaCppAdvancedConfig>,
+  b?: Partial<LlamaCppAdvancedConfig>,
+): boolean {
+  const mergedA: LlamaCppAdvancedConfig = { ...DEFAULT_LLAMA_CPP_CONFIG, ...a };
+  const mergedB: LlamaCppAdvancedConfig = { ...DEFAULT_LLAMA_CPP_CONFIG, ...b };
+  const keys = Object.keys(DEFAULT_LLAMA_CPP_CONFIG) as Array<
+    keyof LlamaCppAdvancedConfig
+  >;
+  return keys.every((k) => mergedA[k] === mergedB[k]);
+}
 
 function isModelConfigEqual(a: ModelConfig, b: ModelConfig) {
   return (
@@ -184,7 +203,8 @@ function isModelConfigEqual(a: ModelConfig, b: ModelConfig) {
     a.topK === b.topK &&
     a.topP === b.topP &&
     a.backend === b.backend &&
-    a.enableSpeculativeDecoding === b.enableSpeculativeDecoding
+    a.enableSpeculativeDecoding === b.enableSpeculativeDecoding &&
+    isLlamaCppConfigEqual(a.llamaCpp, b.llamaCpp)
   );
 }
 
@@ -320,32 +340,223 @@ const sliderRowStyles = StyleSheet.create({
   },
 });
 
+/**
+ * Integer text input row with a label. Used for llama.cpp numeric params
+ * (context size, threads, batch sizes, draft tokens, ...).
+ */
+const IntInputRow = memo(function IntInputRow({
+  label,
+  value,
+  min = 0,
+  max,
+  onValueChange,
+  hint,
+}: {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  onValueChange: (v: number) => void;
+  hint?: string;
+}) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => {
+    setText(String(value));
+  }, [value]);
+
+  const commit = (raw: string) => {
+    let num = Number(raw);
+    if (!Number.isFinite(num)) num = min;
+    if (num < min) num = min;
+    if (max !== undefined && num > max) num = max;
+    num = Math.round(num);
+    setText(String(num));
+    onValueChange(num);
+  };
+
+  // number-pad has no minus key, so switch to numeric when negatives are valid
+  // (e.g. threads = -1 means "auto").
+  const keyboardType: "number-pad" | "numeric" =
+    min < 0 ? "numeric" : "number-pad";
+
+  return (
+    <View style={advancedStyles.intRow}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text variant="bodyMedium">{label}</Text>
+        {hint ? (
+          <Text variant="labelSmall" style={{ opacity: 0.6 }}>
+            {hint}
+          </Text>
+        ) : null}
+      </View>
+      <TextInput
+        mode="outlined"
+        keyboardType={keyboardType}
+        value={text}
+        onChangeText={(raw) => {
+          setText(raw);
+          // Fire onValueChange live for complete valid integers so parent state
+          // stays in sync even if the user taps Save before dismissing the
+          // keyboard (on Android, blur can fire after the button's onPress).
+          const num = Number(raw);
+          if (raw.length > 0 && raw !== "-" && Number.isFinite(num)) {
+            let n = Math.round(num);
+            if (n < min) n = min;
+            if (max !== undefined && n > max) n = max;
+            onValueChange(n);
+          }
+        }}
+        onBlur={() => commit(text)}
+        style={advancedStyles.intInput}
+        contentStyle={advancedStyles.intInputContent}
+        dense
+        theme={MODAL_CONFIG_MODAL_THEME}
+      />
+    </View>
+  );
+});
+
+/**
+ * Selectable chip group for enum-style llama.cpp params (cache type, etc.).
+ */
+function ChipSelect<T extends string>({
+  label,
+  value,
+  options,
+  onValueChange,
+}: {
+  label: string;
+  value: T;
+  options: ReadonlyArray<{ value: T; label: string }>;
+  onValueChange: (v: T) => void;
+}) {
+  return (
+    <View style={advancedStyles.chipGroup}>
+      <Text variant="bodyMedium">{label}</Text>
+      <View style={advancedStyles.chipRow}>
+        {options.map((opt) => {
+          const selected = opt.value === value;
+          return (
+            <Chip
+              key={opt.value}
+              selected={selected}
+              onPress={() => onValueChange(opt.value)}
+              mode={selected ? "flat" : "outlined"}
+              compact
+            >
+              {opt.label}
+            </Chip>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const advancedStyles = StyleSheet.create({
+  sectionDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 8,
+    opacity: 0.2,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+  },
+  advancedBody: {
+    gap: 14,
+  },
+  intRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  intInput: {
+    width: 90,
+    height: 40,
+    marginVertical: 0,
+  },
+  intInputContent: {
+    height: 40,
+    paddingVertical: 0,
+  },
+  chipGroup: {
+    gap: 6,
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+});
+
+const FLASH_ATTN_OPTIONS: ReadonlyArray<{
+  value: LlamaCppFlashAttn;
+  label: string;
+}> = [
+  { value: "auto", label: "Auto" },
+  { value: "on", label: "On" },
+  { value: "off", label: "Off" },
+];
+
+const REASONING_OPTIONS: ReadonlyArray<{
+  value: LlamaCppReasoning;
+  label: string;
+}> = [
+  { value: "auto", label: "Auto" },
+  { value: "on", label: "On" },
+  { value: "off", label: "Off" },
+];
+
+const CACHE_TYPE_OPTIONS: ReadonlyArray<{
+  value: LlamaCppCacheType;
+  label: string;
+}> = [
+  { value: "f16", label: "f16" },
+  { value: "f32", label: "f32" },
+  { value: "bf16", label: "bf16" },
+  { value: "q8_0", label: "q8_0" },
+  { value: "q5_0", label: "q5_0" },
+  { value: "q5_1", label: "q5_1" },
+  { value: "q4_0", label: "q4_0" },
+  { value: "q4_1", label: "q4_1" },
+  { value: "iq4_nl", label: "iq4_nl" },
+];
+
 const ModelConfigModal = memo(function ModelConfigModal({
   modelUri,
   modelName,
   config,
+  inferenceBackend,
   theme,
   onSave,
   onClose,
 }: ModelConfigModalProps) {
+  const isLlamaCpp = inferenceBackend === BACKEND_LLAMA_CPP;
+
   const [draft, setDraft] = useState<ModelConfig>(
     () => config ?? DEFAULT_MODEL_CONFIG,
   );
-  const [accelerator, setAccelerator] = useState<Accelerator>(
-    () => (config?.backend as Accelerator) ?? "cpu",
-  );
   const [enableSpeculativeDecoding, setEnableSpeculativeDecoding] =
     useState<boolean>(() => config?.enableSpeculativeDecoding ?? false);
+  const [llamaCppDraft, setLlamaCppDraft] = useState<LlamaCppAdvancedConfig>(
+    () => ({ ...DEFAULT_LLAMA_CPP_CONFIG, ...(config?.llamaCpp ?? {}) }),
+  );
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
 
   useEffect(() => {
     if (config && !isModelConfigEqual(config, draft)) setDraft(config);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config]);
+  }, [modelUri]);
 
   useEffect(() => {
-    setAccelerator((config?.backend as Accelerator) ?? "cpu");
     setEnableSpeculativeDecoding(config?.enableSpeculativeDecoding ?? false);
-  }, [config]);
+    setLlamaCppDraft({
+      ...DEFAULT_LLAMA_CPP_CONFIG,
+      ...(config?.llamaCpp ?? {}),
+    });
+  }, [modelUri]);
 
   return (
     <Modal
@@ -354,105 +565,264 @@ const ModelConfigModal = memo(function ModelConfigModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable
-          style={[styles.modalCard, { backgroundColor: theme.colors.surface }]}
-          onPress={() => {}}
+      {/*
+        Backdrop + card are SIBLINGS, not nested. The backdrop Pressable fills
+        the screen behind the card; tapping it (outside the card) closes the
+        modal. Keeping the card a plain View — with no Pressable ancestor above
+        the ScrollView — is what lets the ScrollView capture pan gestures even
+        when the drag starts on empty/gap space inside it.
+      */}
+      <View style={styles.modalBackdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View
+          style={[
+            styles.modalCard,
+            {
+              backgroundColor: theme.colors.surface,
+              maxWidth: 380,
+              maxHeight: "85%",
+            },
+          ]}
         >
           <Text variant="titleMedium" style={{ fontWeight: "700" }}>
             {modelName} Settings
           </Text>
 
-          {/* Max Tokens */}
-          <View style={modalRow}>
-            <TextInput
-              mode="outlined"
-              label="Max tokens"
-              keyboardType="number-pad"
-              value={String(draft.maxTokens)}
-              onChangeText={(value) => {
-                const num = Number(value);
-                if (Number.isFinite(num) && num > 0) {
-                  setDraft((prev) => ({ ...prev, maxTokens: Math.round(num) }));
-                }
-              }}
-              style={{ flex: 1 }}
-              theme={MODAL_CONFIG_MODAL_THEME}
-            />
-          </View>
-
-          {/* TopK Slider */}
-          <SliderRow
-            label="TopK (5-100)"
-            value={draft.topK}
-            min={5}
-            max={100}
-            step={1}
-            formatValue={(v) => String(Math.round(v))}
-            onValueChange={(v) =>
-              setDraft((prev) => ({ ...prev, topK: Math.round(v) }))
-            }
-            theme={theme}
-          />
-
-          {/* TopP Slider */}
-          <SliderRow
-            label="TopP (0.00-1.00)"
-            value={draft.topP}
-            min={0}
-            max={1}
-            step={0.01}
-            formatValue={(v) => v.toFixed(2)}
-            onValueChange={(v) =>
-              setDraft((prev) => ({ ...prev, topP: Math.round(v * 100) / 100 }))
-            }
-            theme={theme}
-          />
-
-          {/* Temperature Slider */}
-          <SliderRow
-            label="Temperature (0.00-2.00)"
-            value={draft.temperature}
-            min={0}
-            max={2}
-            step={0.01}
-            formatValue={(v) => v.toFixed(2)}
-            onValueChange={(v) =>
-              setDraft((prev) => ({
-                ...prev,
-                temperature: Math.round(v * 100) / 100,
-              }))
-            }
-            theme={theme}
-          />
-
-          {/* Accelerator Selection */}
-          <View>
-            <Text variant="bodyMedium" style={{ marginBottom: 8 }}>
-              Accelerator
-            </Text>
-            <Button mode="contained" compact>
-              CPU
-            </Button>
-          </View>
-
-          <View style={styles.speculativeToggleRow}>
-            <View style={{ flex: 1 }}>
-              <Text variant="bodyMedium">Enable speculative decoding</Text>
+          <ScrollView
+            style={{ flexShrink: 1 }}
+            contentContainerStyle={{ gap: 10 }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator
+          >
+            {/* Max Tokens */}
+            <View style={modalRow}>
+              <TextInput
+                mode="outlined"
+                label="Max tokens"
+                keyboardType="number-pad"
+                value={String(draft.maxTokens)}
+                onChangeText={(value) => {
+                  const num = Number(value);
+                  if (Number.isFinite(num) && num > 0) {
+                    setDraft((prev) => ({
+                      ...prev,
+                      maxTokens: Math.round(num),
+                    }));
+                  }
+                }}
+                style={{ flex: 1 }}
+                theme={MODAL_CONFIG_MODAL_THEME}
+              />
             </View>
-            <Switch
-              value={enableSpeculativeDecoding}
-              onValueChange={setEnableSpeculativeDecoding}
+
+            {/* TopK Slider */}
+            <SliderRow
+              label="TopK (5-100)"
+              value={draft.topK}
+              min={5}
+              max={100}
+              step={1}
+              formatValue={(v) => String(Math.round(v))}
+              onValueChange={(v) =>
+                setDraft((prev) => ({ ...prev, topK: Math.round(v) }))
+              }
+              theme={theme}
             />
-          </View>
+
+            {/* TopP Slider */}
+            <SliderRow
+              label="TopP (0.00-1.00)"
+              value={draft.topP}
+              min={0}
+              max={1}
+              step={0.01}
+              formatValue={(v) => v.toFixed(2)}
+              onValueChange={(v) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  topP: Math.round(v * 100) / 100,
+                }))
+              }
+              theme={theme}
+            />
+
+            {/* Temperature Slider */}
+            <SliderRow
+              label="Temperature (0.00-2.00)"
+              value={draft.temperature}
+              min={0}
+              max={2}
+              step={0.01}
+              formatValue={(v) => v.toFixed(2)}
+              onValueChange={(v) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  temperature: Math.round(v * 100) / 100,
+                }))
+              }
+              theme={theme}
+            />
+
+            {/* Speculative decoding toggle — LiteRT only. llama.cpp uses the
+              richer spec config in the advanced section below. */}
+            {!isLlamaCpp && (
+              <View style={styles.speculativeToggleRow}>
+                <View style={{ flex: 1 }}>
+                  <Text variant="bodyMedium">Enable speculative decoding</Text>
+                </View>
+                <Switch
+                  value={enableSpeculativeDecoding}
+                  onValueChange={setEnableSpeculativeDecoding}
+                />
+              </View>
+            )}
+
+            {/* Advanced llama.cpp options. Only shown for the llama.cpp backend.
+              Each field maps 1:1 to a llama-server / llama.rn context param. */}
+            {isLlamaCpp && (
+              <View style={advancedStyles.advancedBody}>
+                <Pressable
+                  style={advancedStyles.sectionHeader}
+                  onPress={() => setShowAdvanced((v) => !v)}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="tune-variant"
+                      size={18}
+                      color={theme.colors.primary}
+                    />
+                    <Text variant="titleSmall" style={{ fontWeight: "700" }}>
+                      Advanced
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons
+                    name={showAdvanced ? "chevron-up" : "chevron-down"}
+                    size={22}
+                    color={theme.colors.onSurfaceVariant}
+                  />
+                </Pressable>
+
+                {showAdvanced && (
+                  <>
+                    <ChipSelect<LlamaCppFlashAttn>
+                      label="Flash attention (-fa)"
+                      value={llamaCppDraft.flashAttn}
+                      options={FLASH_ATTN_OPTIONS}
+                      onValueChange={(flashAttn) =>
+                        setLlamaCppDraft((prev) => ({ ...prev, flashAttn }))
+                      }
+                    />
+
+                    <IntInputRow
+                      label="Context size (-c)"
+                      hint="size of the prompt context (default 4096)"
+                      value={llamaCppDraft.nCtx}
+                      min={0}
+                      onValueChange={(nCtx) =>
+                        setLlamaCppDraft((prev) => ({ ...prev, nCtx }))
+                      }
+                    />
+                    <IntInputRow
+                      label="Threads (-t)"
+                      hint="number of CPU threads during generation. -1 = auto"
+                      value={llamaCppDraft.nThreads}
+                      min={-1}
+                      onValueChange={(nThreads) =>
+                        setLlamaCppDraft((prev) => ({ ...prev, nThreads }))
+                      }
+                    />
+                    <IntInputRow
+                      label="Batch size (-b)"
+                      hint="logical maximum batch size"
+                      value={llamaCppDraft.nBatch}
+                      min={1}
+                      onValueChange={(nBatch) =>
+                        setLlamaCppDraft((prev) => ({ ...prev, nBatch }))
+                      }
+                    />
+                    <IntInputRow
+                      label="Ubatch size (-ub)"
+                      hint="physical maximum batch size"
+                      value={llamaCppDraft.nUbatch}
+                      min={1}
+                      onValueChange={(nUbatch) =>
+                        setLlamaCppDraft((prev) => ({ ...prev, nUbatch }))
+                      }
+                    />
+
+                    <ChipSelect<LlamaCppCacheType>
+                      label="KV cache data type for K (-ctk)"
+                      value={llamaCppDraft.cacheTypeK}
+                      options={CACHE_TYPE_OPTIONS}
+                      onValueChange={(cacheTypeK) =>
+                        setLlamaCppDraft((prev) => ({ ...prev, cacheTypeK }))
+                      }
+                    />
+                    <ChipSelect<LlamaCppCacheType>
+                      label="KV cache data type for V (-ctv)"
+                      value={llamaCppDraft.cacheTypeV}
+                      options={CACHE_TYPE_OPTIONS}
+                      onValueChange={(cacheTypeV) =>
+                        setLlamaCppDraft((prev) => ({ ...prev, cacheTypeV }))
+                      }
+                    />
+
+                    <View style={styles.speculativeToggleRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text variant="bodyMedium">mlock (--mlock)</Text>
+                        <Text variant="labelSmall" style={{ opacity: 0.6 }}>
+                          keep model in RAM rather than swapping or compressing
+                        </Text>
+                      </View>
+                      <Switch
+                        value={llamaCppDraft.useMlock}
+                        onValueChange={(useMlock) =>
+                          setLlamaCppDraft((prev) => ({ ...prev, useMlock }))
+                        }
+                      />
+                    </View>
+                    <View style={styles.speculativeToggleRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text variant="bodyMedium">mmap (--mmap)</Text>
+                        <Text variant="labelSmall" style={{ opacity: 0.6 }}>
+                          memory-map model. if disabled, slower load but may
+                          reduce pageouts if not using mlock
+                        </Text>
+                      </View>
+                      <Switch
+                        value={llamaCppDraft.useMmap}
+                        onValueChange={(useMmap) =>
+                          setLlamaCppDraft((prev) => ({ ...prev, useMmap }))
+                        }
+                      />
+                    </View>
+                    <ChipSelect<LlamaCppReasoning>
+                      label="Reasoning (-rea, --reasoning)"
+                      value={llamaCppDraft.reasoning}
+                      options={REASONING_OPTIONS}
+                      onValueChange={(reasoning) =>
+                        setLlamaCppDraft((prev) => ({ ...prev, reasoning }))
+                      }
+                    />
+                  </>
+                )}
+              </View>
+            )}
+          </ScrollView>
 
           <View style={modalRowEnd}>
             <Button
               mode="text"
               onPress={() => {
                 setDraft(DEFAULT_MODEL_CONFIG);
-                setAccelerator("cpu");
                 setEnableSpeculativeDecoding(false);
+                setLlamaCppDraft({ ...DEFAULT_LLAMA_CPP_CONFIG });
               }}
             >
               Reset
@@ -473,18 +843,25 @@ const ModelConfigModal = memo(function ModelConfigModal({
                 );
                 validated.maxTokens = Math.max(validated.maxTokens, 1);
                 setDraft(validated);
+                console.log("[ModelConfigModal] Saving config", {
+                  backend: "cpu",
+                  llamaCppDraft,
+                });
                 onSave({
                   ...validated,
-                  backend: accelerator,
+                  backend: "cpu",
                   enableSpeculativeDecoding,
+                  // Only persist llama.cpp advanced config for the llama.cpp
+                  // backend; drop it for LiteRT so storage stays clean.
+                  llamaCpp: isLlamaCpp ? llamaCppDraft : undefined,
                 });
               }}
             >
               Save
             </Button>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 });
@@ -934,16 +1311,29 @@ export default function SettingsScreen() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeModelConfig = activeModelConfigUri
-    ? (data.perModelConfig?.[activeModelConfigUri] ?? DEFAULT_MODEL_CONFIG)
+    ? (data.perModelConfig?.[
+        activeModelConfigUri.startsWith("file:///")
+          ? activeModelConfigUri.replace("file:///", "/")
+          : activeModelConfigUri
+      ] ?? DEFAULT_MODEL_CONFIG)
     : null;
 
   const handleSaveModelConfig = (config: ModelConfig) => {
     if (!activeModelConfigUri) return;
+    // Normalize the key the same way log.tsx does when looking up perModelConfig,
+    // so the saved entry is always found at runtime.
+    const configKey = activeModelConfigUri.startsWith("file:///")
+      ? activeModelConfigUri.replace("file:///", "/")
+      : activeModelConfigUri;
+    console.log("[handleSaveModelConfig] Saving to perModelConfig", {
+      modelUri: configKey,
+      config,
+    });
     setData((prev) => ({
       ...prev,
       perModelConfig: {
         ...prev.perModelConfig,
-        [activeModelConfigUri]: config,
+        [configKey]: config,
       },
     }));
     setActiveModelConfigUri(null);
@@ -2420,7 +2810,12 @@ export default function SettingsScreen() {
                           (data.estimateModelPath ?? data.modelPath) ===
                           model.uri;
                         const inMemory = isInMemory(model.uri);
-                        const savedConfig = data.perModelConfig?.[model.uri];
+                        const savedConfig =
+                          data.perModelConfig?.[
+                            model.uri.startsWith("file:///")
+                              ? model.uri.replace("file:///", "/")
+                              : model.uri
+                          ];
                         const hasCustomConfig =
                           !!savedConfig &&
                           !isModelConfigEqual(
@@ -2832,6 +3227,7 @@ export default function SettingsScreen() {
           "Model"
         }
         config={activeModelConfig ?? DEFAULT_MODEL_CONFIG}
+        inferenceBackend={data.inferenceBackend ?? BACKEND_LITERT}
         theme={theme}
         onSave={handleSaveModelConfig}
         onClose={() => setActiveModelConfigUri(null)}
