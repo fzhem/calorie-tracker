@@ -1167,9 +1167,12 @@ export default function SettingsScreen() {
   const [activeModelConfigUri, setActiveModelConfigUri] = useState<
     string | null
   >(null);
-  const [activeModelTab, setActiveModelTab] = useState<"download" | "offline">(
-    "offline",
-  );
+  // Per-backend model tab selection so switching backends doesn't carry the
+  // Offline/Download choice over. Defaults are computed lazily per backend
+  // (Offline if that backend has compatible models installed, else Download).
+  const [modelTabsByBackend, setModelTabsByBackend] = useState<
+    Partial<Record<InferenceBackend, "download" | "offline">>
+  >({});
   const [showLlamaCppModal, setShowLlamaCppModal] = useState(false);
 
   // Clear download error when switching from custom URL to built-in models
@@ -1888,6 +1891,37 @@ export default function SettingsScreen() {
       return backend === BACKEND_LLAMA_CPP ? isGguf : isLitertlm;
     });
   }, [data.inferenceBackend, downloadedModels]);
+
+  const activeBackend: InferenceBackend =
+    data.inferenceBackend ?? BACKEND_LITERT;
+  const activeModelTab: "download" | "offline" =
+    modelTabsByBackend[activeBackend] ?? "download";
+
+  const setActiveModelTab = useCallback(
+    (value: "download" | "offline") => {
+      setModelTabsByBackend((prev) =>
+        prev[activeBackend] === value
+          ? prev
+          : { ...prev, [activeBackend]: value },
+      );
+    },
+    [activeBackend],
+  );
+
+  // Lazily pick the default tab for whichever backend is active: Offline when
+  // compatible models exist for it, otherwise Download so users with nothing
+  // installed for that backend are guided straight there.
+  useEffect(() => {
+    if (!isReady) return;
+    setModelTabsByBackend((prev) => {
+      if (prev[activeBackend] !== undefined) return prev;
+      return {
+        ...prev,
+        [activeBackend]:
+          backendFilteredModels.length > 0 ? "offline" : "download",
+      };
+    });
+  }, [isReady, activeBackend, backendFilteredModels.length]);
 
   const isArchitectureBlocked = useMemo(() => {
     return (
