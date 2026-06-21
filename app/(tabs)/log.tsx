@@ -172,6 +172,12 @@ function parseNumberInput(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** Round to 1 decimal place to avoid floating-point display artifacts
+ *  (e.g. summed recipe carbs showing as 43.50000000000001). */
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
 function quickAddKey(item: QuickAddItem) {
   return `${item.title.toLowerCase()}-${item.calories}-${item.proteinGrams ?? ""}-${item.fatGrams ?? ""}-${item.carbsGrams ?? ""}-${item.fibreGrams ?? ""}`;
 }
@@ -2191,13 +2197,13 @@ export default function LogScreen() {
                         >
                           {itemCount} items
                           {recipe.totalProteinGrams
-                            ? `  •  P ${recipe.totalProteinGrams}g`
+                            ? `  •  P ${round1(recipe.totalProteinGrams)}g`
                             : ""}
                           {recipe.totalCarbsGrams
-                            ? `  C ${recipe.totalCarbsGrams}g`
+                            ? `  C ${round1(recipe.totalCarbsGrams)}g`
                             : ""}
                           {recipe.totalFatGrams
-                            ? `  F ${recipe.totalFatGrams}g`
+                            ? `  F ${round1(recipe.totalFatGrams)}g`
                             : ""}
                         </Text>
                       </View>
@@ -2846,9 +2852,9 @@ export default function LogScreen() {
                               variant="bodySmall"
                               style={{ color: theme.colors.onSurfaceVariant }}
                             >
-                              P {recipe.totalProteinGrams}g C{" "}
-                              {recipe.totalCarbsGrams ?? 0}g F{" "}
-                              {recipe.totalFatGrams ?? 0}g
+                              P {round1(recipe.totalProteinGrams)}g C{" "}
+                              {round1(recipe.totalCarbsGrams ?? 0)}g F{" "}
+                              {round1(recipe.totalFatGrams ?? 0)}g
                             </Text>
                           ) : null}
                         </View>

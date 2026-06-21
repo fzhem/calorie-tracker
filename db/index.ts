@@ -261,6 +261,12 @@ export async function deleteWeightBySource(
 
 // ── Recipes ────────────────────────────────────────────────────────────────
 export type Recipe = typeof schema.recipes.$inferInsert;
+
+/** Round to 1 decimal place to avoid floating-point display artifacts
+ *  (e.g. 14.5 + 29 = 43.50000000000001) when summing macro grams. */
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
 export type RecipeItem = {
   title: string;
   calories: number;
@@ -287,11 +293,11 @@ export async function insertRecipe(recipe: {
     id: makeRecipeId(recipe.name),
     name: recipe.name,
     itemsJson: JSON.stringify(recipe.items),
-    totalCalories: totalCalories,
-    totalProteinGrams: totalProtein > 0 ? totalProtein : null,
-    totalFatGrams: totalFat > 0 ? totalFat : null,
-    totalCarbsGrams: totalCarbs > 0 ? totalCarbs : null,
-    totalFibreGrams: totalFibre > 0 ? totalFibre : null,
+    totalCalories: Math.round(totalCalories),
+    totalProteinGrams: totalProtein > 0 ? round1(totalProtein) : null,
+    totalFatGrams: totalFat > 0 ? round1(totalFat) : null,
+    totalCarbsGrams: totalCarbs > 0 ? round1(totalCarbs) : null,
+    totalFibreGrams: totalFibre > 0 ? round1(totalFibre) : null,
     createdAt: new Date().toISOString(),
   });
 }
@@ -343,11 +349,12 @@ export async function updateRecipe(
     const totalFat = data.items.reduce((s, i) => s + (i.fatGrams ?? 0), 0);
     const totalCarbs = data.items.reduce((s, i) => s + (i.carbsGrams ?? 0), 0);
     const totalFibre = data.items.reduce((s, i) => s + (i.fibreGrams ?? 0), 0);
-    updateData.totalCalories = totalCalories;
-    updateData.totalProteinGrams = totalProtein > 0 ? totalProtein : null;
-    updateData.totalFatGrams = totalFat > 0 ? totalFat : null;
-    updateData.totalCarbsGrams = totalCarbs > 0 ? totalCarbs : null;
-    updateData.totalFibreGrams = totalFibre > 0 ? totalFibre : null;
+    updateData.totalCalories = Math.round(totalCalories);
+    updateData.totalProteinGrams =
+      totalProtein > 0 ? round1(totalProtein) : null;
+    updateData.totalFatGrams = totalFat > 0 ? round1(totalFat) : null;
+    updateData.totalCarbsGrams = totalCarbs > 0 ? round1(totalCarbs) : null;
+    updateData.totalFibreGrams = totalFibre > 0 ? round1(totalFibre) : null;
   }
   await db
     .update(schema.recipes)
