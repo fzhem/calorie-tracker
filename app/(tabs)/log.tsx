@@ -2997,17 +2997,19 @@ export default function LogScreen() {
             setEditRecipeShowMacros(new Set());
           }}
         >
-          <Pressable
-            style={styles.modalBackdrop}
-            onPress={() => {
-              setEditRecipeId(null);
-              setEditRecipeName("");
-              setEditRecipeItems([]);
-              setEditRecipeShowMacros(new Set());
-            }}
-          >
+          <View style={styles.modalBackdrop}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => {
+                setEditRecipeId(null);
+                setEditRecipeName("");
+                setEditRecipeUrl("");
+                setEditRecipeServings("1");
+                setEditRecipeItems([]);
+                setEditRecipeShowMacros(new Set());
+              }}
+            />
             <View
-              onStartShouldSetResponder={() => true}
               style={[
                 styles.modalCard,
                 { backgroundColor: theme.colors.surface, maxHeight: 560 },
@@ -3278,6 +3280,8 @@ export default function LogScreen() {
                   onPress={() => {
                     setEditRecipeId(null);
                     setEditRecipeName("");
+                    setEditRecipeUrl("");
+                    setEditRecipeServings("1");
                     setEditRecipeItems([]);
                     setEditRecipeShowMacros(new Set());
                   }}
@@ -3293,7 +3297,7 @@ export default function LogScreen() {
                 </Button>
               </View>
             </View>
-          </Pressable>
+          </View>
         </Modal>
 
         {/* ── Create Recipe Modal ────────────────────────────────── */}
@@ -3453,8 +3457,8 @@ export default function LogScreen() {
               setApplyPortions("1");
             }}
           >
-            <View
-              onStartShouldSetResponder={() => true}
+            <Pressable
+              onPress={() => {}}
               style={[
                 styles.modalCard,
                 { backgroundColor: theme.colors.surface },
@@ -3614,7 +3618,7 @@ export default function LogScreen() {
                     );
                   })()
                 : null}
-            </View>
+            </Pressable>
           </Pressable>
         </Modal>
       </View>
