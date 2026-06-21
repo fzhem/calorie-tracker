@@ -15,6 +15,8 @@ export const GB = 2 ** 30;
 export const MODEL_MEMORY_REQUIREMENTS: Record<string, number> = {
   GEMMA_4_E2B_IT: 2 * GB, // 2 GB
   GEMMA_4_E4B_IT: 4 * GB, // 4 GB
+  // IBM Granite 4.0 H Micro (Q4_0 GGUF): ~1.73 GB on disk, rounded up to 2 GB RAM.
+  GRANITE_4_0_H_MICRO: 2 * GB, // 2 GB
 };
 
 export type MemoryStatus = "ok" | "warning" | "blocked";

@@ -112,8 +112,14 @@ type NotificationPermissionStatus =
   | "granted"
   | "denied";
 
+/** Keys for every built-in model across both backends. */
+export type BuiltInModelKey =
+  | "GEMMA_4_E2B_IT"
+  | "GEMMA_4_E4B_IT"
+  | "GRANITE_4_0_H_MICRO";
+
 type ModelCatalogItem = {
-  key: "GEMMA_4_E2B_IT" | "GEMMA_4_E4B_IT";
+  key: BuiltInModelKey;
   label: string;
   sizeLabel: string;
   url: string;
@@ -129,19 +135,27 @@ type DownloadedModel = {
 };
 
 /**
- * Download URL for the Gemma 4 E2B IT model (2.58 GB).
+ * Download URL for the Gemma 4 E2B IT model (2.41 GB).
  * Public - no HuggingFace account required.
  */
 export const GEMMA_4_E2B_IT =
   "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm";
 
 /**
- * Download URL for the Gemma 4 E4B IT model (3.65 GB).
+ * Download URL for the Gemma 4 E4B IT model (3.41 GB).
  * Higher quality than E2B but requires more device memory.
  * Public - no HuggingFace account required.
  */
 export const GEMMA_4_E4B_IT =
   "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm";
+
+/**
+ * Download URL for the IBM Granite 4.0 H Micro model (Q4_0 GGUF, 1.73 GB).
+ * Built-in GGUF model for the llama.cpp backend.
+ * Public - no HuggingFace account required.
+ */
+export const GRANITE_4_0_H_MICRO =
+  "https://huggingface.co/ibm-granite/granite-4.0-h-micro-GGUF/resolve/main/granite-4.0-h-micro-Q4_0.gguf";
 
 /** Magic number for .litertlm model files: "LITERTLM" */
 const LITERTLM_MAGIC = [0x4c, 0x49, 0x54, 0x45, 0x52, 0x54, 0x4c, 0x4d];
@@ -149,11 +163,12 @@ const LITERTLM_MAGIC = [0x4c, 0x49, 0x54, 0x45, 0x52, 0x54, 0x4c, 0x4d];
 /** Magic number for GGUF model files: "GGUF" */
 const GGUF_MAGIC = [0x47, 0x47, 0x55, 0x46];
 
+/** Built-in LiteRT (.litertlm) models for the LiteRT backend. */
 const BUILT_IN_MODELS: ModelCatalogItem[] = [
   {
     key: "GEMMA_4_E2B_IT",
     label: "Gemma-4-E2B-it",
-    sizeLabel: "2.58 GB",
+    sizeLabel: "2.41 GB",
     url: GEMMA_4_E2B_IT,
     fileName: "gemma-4-E2B-it.litertlm",
     recommended: true,
@@ -161,11 +176,32 @@ const BUILT_IN_MODELS: ModelCatalogItem[] = [
   {
     key: "GEMMA_4_E4B_IT",
     label: "Gemma-4-E4B-it",
-    sizeLabel: "3.65 GB",
+    sizeLabel: "3.41 GB",
     url: GEMMA_4_E4B_IT,
     fileName: "gemma-4-E4B-it.litertlm",
   },
 ];
+
+/** Built-in GGUF models for the llama.cpp backend. */
+const BUILT_IN_GGUF_MODELS: ModelCatalogItem[] = [
+  {
+    key: "GRANITE_4_0_H_MICRO",
+    label: "Granite-4.0-H-Micro",
+    sizeLabel: "1.73 GB",
+    url: GRANITE_4_0_H_MICRO,
+    fileName: "granite-4.0-h-micro-Q4_0.gguf",
+  },
+];
+
+/** All built-in models across both backends (used for key lookups). */
+const ALL_BUILT_IN_MODELS: ModelCatalogItem[] = [
+  ...BUILT_IN_MODELS,
+  ...BUILT_IN_GGUF_MODELS,
+];
+
+/** Built-in model keys grouped by backend (used to validate selection state). */
+const LITERT_BUILT_IN_KEYS = BUILT_IN_MODELS.map((m) => m.key);
+const GGUF_BUILT_IN_KEYS = BUILT_IN_GGUF_MODELS.map((m) => m.key);
 
 const MODEL_DIRECTORY = new Directory(Paths.document, "models");
 const MODAL_CONFIG_MODAL_THEME = { animation: { scale: 0 } };
@@ -1135,7 +1171,7 @@ export default function SettingsScreen() {
   const [isSyncingWeight, setIsSyncingWeight] = useState(false);
 
   const [selectedModelKey, setSelectedModelKey] = useState<
-    "GEMMA_4_E2B_IT" | "GEMMA_4_E4B_IT" | "custom"
+    BuiltInModelKey | "custom"
   >("GEMMA_4_E2B_IT");
   const [notificationPermissionStatus, setNotificationPermissionStatus] =
     useState<NotificationPermissionStatus>("unknown");
@@ -1181,6 +1217,27 @@ export default function SettingsScreen() {
       setDownloadError(null);
     }
   }, [selectedModelKey]);
+
+  // Keep the download selection coherent with the active backend. When the
+  // backend changes (or on first load with a persisted backend), fall back to
+  // the first built-in model for that backend if the current selection belongs
+  // to the other backend — otherwise the catalog/highlighting and the download
+  // source would be mismatched. A manually-selected "custom" URL is preserved.
+  useEffect(() => {
+    if (selectedModelKey === "custom") return;
+    const backend = data.inferenceBackend ?? BACKEND_LITERT;
+    if (
+      backend === BACKEND_LLAMA_CPP &&
+      !GGUF_BUILT_IN_KEYS.includes(selectedModelKey)
+    ) {
+      setSelectedModelKey(BUILT_IN_GGUF_MODELS[0]?.key ?? "custom");
+    } else if (
+      backend === BACKEND_LITERT &&
+      !LITERT_BUILT_IN_KEYS.includes(selectedModelKey)
+    ) {
+      setSelectedModelKey(BUILT_IN_MODELS[0]?.key ?? "custom");
+    }
+  }, [data.inferenceBackend, selectedModelKey]);
 
   // Detect device architecture on mount
   useEffect(() => {
@@ -1560,7 +1617,7 @@ export default function SettingsScreen() {
       return { label: tail.split(".")[0], url: trimmed, fileName: tail };
     }
 
-    const selected = BUILT_IN_MODELS.find(
+    const selected = ALL_BUILT_IN_MODELS.find(
       (item) => item.key === selectedModelKey,
     );
     if (!selected) return null;
@@ -1584,7 +1641,7 @@ export default function SettingsScreen() {
     }
 
     // For built-in models, check by filename
-    const builtIn = BUILT_IN_MODELS.find((m) => m.key === selectedModelKey);
+    const builtIn = ALL_BUILT_IN_MODELS.find((m) => m.key === selectedModelKey);
     if (!builtIn) return false;
     return downloadedModels.some((m) => m.name === builtIn.fileName);
   }, [selectedModelKey, customModelUrl, downloadedModels]);
@@ -1942,6 +1999,156 @@ export default function SettingsScreen() {
       theme.colors.primaryContainer,
     ],
   );
+
+  /**
+   * Render a single built-in model button (shared by the LiteRT and llama.cpp
+   * catalogs). Handles selection highlight, architecture/RAM blocking, and the
+   * recommended / memory warning badges.
+   */
+  const renderBuiltInModelButton = (model: ModelCatalogItem) => {
+    const memoryCheck = checkModelMemory(model.key);
+    const isBlocked = isArchitectureBlocked || memoryCheck.status === "blocked";
+    const isWarning = memoryCheck.status === "warning";
+    const memoryGB = memoryCheck.modelMemoryBytes / (1024 * 1024 * 1024);
+    const memoryLabel = `${memoryGB} GB`;
+    return (
+      <View key={model.key}>
+        <View style={[isBlocked && styles.modelBlockedContainer]}>
+          <Button
+            mode={selectedModelKey === model.key ? "contained" : "outlined"}
+            onPress={() => {
+              if (!isBlocked) setSelectedModelKey(model.key);
+            }}
+            disabled={isBlocked}
+            icon={isBlocked ? "lock" : isWarning ? "alert" : undefined}
+            style={
+              isBlocked
+                ? [
+                    styles.modelBlockedButton,
+                    {
+                      backgroundColor: theme.colors.surfaceVariant,
+                    },
+                  ]
+                : undefined
+            }
+            textColor={isBlocked ? theme.colors.onSurfaceVariant : undefined}
+          >
+            {model.label} ({model.sizeLabel})
+          </Button>
+          {model.recommended && !isBlocked && (
+            <View
+              style={[
+                styles.recommendedTag,
+                {
+                  backgroundColor: theme.colors.primaryContainer,
+                },
+              ]}
+            >
+              <Text
+                variant="labelSmall"
+                style={{
+                  color: theme.colors.onPrimaryContainer,
+                  fontWeight: "700",
+                }}
+              >
+                Recommended for most devices
+              </Text>
+            </View>
+          )}
+          {(isBlocked || isWarning) && (
+            <View
+              style={[
+                styles.memoryWarningBadge,
+                {
+                  backgroundColor: isBlocked
+                    ? theme.colors.errorContainer
+                    : theme.colors.tertiaryContainer,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  borderRadius: 6,
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name={isBlocked ? "alert-circle-outline" : "alert"}
+                size={12}
+                color={isBlocked ? theme.colors.error : theme.colors.tertiary}
+              />
+              <Text
+                variant="labelSmall"
+                style={{
+                  fontSize: 10,
+                  fontWeight: "700",
+                  color: isBlocked ? theme.colors.error : theme.colors.tertiary,
+                  textShadowRadius: 1,
+                }}
+              >
+                {isArchitectureBlocked
+                  ? "Blocked"
+                  : isBlocked
+                    ? "Low RAM"
+                    : "Warning"}
+              </Text>
+            </View>
+          )}
+          {isBlocked && !isArchitectureBlocked && (
+            <Text
+              variant="labelSmall"
+              style={[
+                styles.memoryWarningSubtext,
+                {
+                  color: theme.colors.error,
+                  fontWeight: "700",
+                  textShadowColor: "rgba(255, 82, 82, 0.4)",
+                  textShadowOffset: { width: 0, height: 0 },
+                  textShadowRadius: 4,
+                },
+              ]}
+            >
+              Requires {memoryLabel} ({memoryCheck.usagePercent}% of RAM)
+            </Text>
+          )}
+          {isArchitectureBlocked && (
+            <View
+              style={[
+                styles.recommendedTag,
+                {
+                  backgroundColor: theme.colors.errorContainer,
+                },
+              ]}
+            >
+              <Text
+                variant="labelSmall"
+                style={[
+                  styles.memoryWarningSubtext,
+                  {
+                    color: theme.colors.error,
+                    fontWeight: "700",
+                  },
+                ]}
+              >
+                Architecture not supported
+              </Text>
+            </View>
+          )}
+          {isWarning && !isBlocked && (
+            <Text
+              variant="labelSmall"
+              style={[
+                styles.memoryWarningSubtext,
+                {
+                  color: theme.colors.tertiary,
+                  fontWeight: "700",
+                },
+              ]}
+            >
+              Uses {memoryCheck.usagePercent}% of RAM
+            </Text>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   return (
     <View
@@ -2534,186 +2741,7 @@ export default function SettingsScreen() {
                   {(data.inferenceBackend ?? BACKEND_LITERT) ===
                     BACKEND_LITERT && (
                     <View style={styles.modelSelector}>
-                      {BUILT_IN_MODELS.map((model) => {
-                        const memoryCheck = checkModelMemory(model.key);
-                        const isBlocked =
-                          isArchitectureBlocked ||
-                          memoryCheck.status === "blocked";
-                        const isWarning = memoryCheck.status === "warning";
-                        const memoryGB =
-                          memoryCheck.modelMemoryBytes / (1024 * 1024 * 1024);
-                        const memoryLabel = `${memoryGB} GB`;
-                        return (
-                          <View key={model.key}>
-                            <View
-                              style={[
-                                isBlocked && styles.modelBlockedContainer,
-                              ]}
-                            >
-                              <Button
-                                mode={
-                                  selectedModelKey === model.key
-                                    ? "contained"
-                                    : "outlined"
-                                }
-                                onPress={() => {
-                                  if (!isBlocked)
-                                    setSelectedModelKey(model.key);
-                                }}
-                                disabled={isBlocked}
-                                icon={
-                                  isBlocked
-                                    ? "lock"
-                                    : isWarning
-                                      ? "alert"
-                                      : undefined
-                                }
-                                style={
-                                  isBlocked
-                                    ? [
-                                        styles.modelBlockedButton,
-                                        {
-                                          backgroundColor:
-                                            theme.colors.surfaceVariant,
-                                        },
-                                      ]
-                                    : undefined
-                                }
-                                textColor={
-                                  isBlocked
-                                    ? theme.colors.onSurfaceVariant
-                                    : undefined
-                                }
-                              >
-                                {model.label} ({model.sizeLabel})
-                              </Button>
-                              {model.recommended && !isBlocked && (
-                                <View
-                                  style={[
-                                    styles.recommendedTag,
-                                    {
-                                      backgroundColor:
-                                        theme.colors.primaryContainer,
-                                    },
-                                  ]}
-                                >
-                                  <Text
-                                    variant="labelSmall"
-                                    style={{
-                                      color: theme.colors.onPrimaryContainer,
-                                      fontWeight: "700",
-                                    }}
-                                  >
-                                    Recommended for most devices
-                                  </Text>
-                                </View>
-                              )}
-                              {(isBlocked || isWarning) && (
-                                <View
-                                  style={[
-                                    styles.memoryWarningBadge,
-                                    {
-                                      backgroundColor: isBlocked
-                                        ? theme.colors.errorContainer
-                                        : theme.colors.tertiaryContainer,
-                                      paddingHorizontal: 6,
-                                      paddingVertical: 2,
-                                      borderRadius: 6,
-                                    },
-                                  ]}
-                                >
-                                  <MaterialCommunityIcons
-                                    name={
-                                      isBlocked
-                                        ? "alert-circle-outline"
-                                        : "alert"
-                                    }
-                                    size={12}
-                                    color={
-                                      isBlocked
-                                        ? theme.colors.error
-                                        : theme.colors.tertiary
-                                    }
-                                  />
-                                  <Text
-                                    variant="labelSmall"
-                                    style={{
-                                      fontSize: 10,
-                                      fontWeight: "700",
-                                      color: isBlocked
-                                        ? theme.colors.error
-                                        : theme.colors.tertiary,
-                                      textShadowRadius: 1,
-                                    }}
-                                  >
-                                    {isArchitectureBlocked
-                                      ? "Blocked"
-                                      : isBlocked
-                                        ? "Low RAM"
-                                        : "Warning"}
-                                  </Text>
-                                </View>
-                              )}
-                              {isBlocked && !isArchitectureBlocked && (
-                                <Text
-                                  variant="labelSmall"
-                                  style={[
-                                    styles.memoryWarningSubtext,
-                                    {
-                                      color: theme.colors.error,
-                                      fontWeight: "700",
-                                      textShadowColor: "rgba(255, 82, 82, 0.4)",
-                                      textShadowOffset: { width: 0, height: 0 },
-                                      textShadowRadius: 4,
-                                    },
-                                  ]}
-                                >
-                                  Requires {memoryLabel} (
-                                  {memoryCheck.usagePercent}% of RAM)
-                                </Text>
-                              )}
-                              {isArchitectureBlocked && (
-                                <View
-                                  style={[
-                                    styles.recommendedTag,
-                                    {
-                                      backgroundColor:
-                                        theme.colors.errorContainer,
-                                    },
-                                  ]}
-                                >
-                                  <Text
-                                    variant="labelSmall"
-                                    style={[
-                                      styles.memoryWarningSubtext,
-                                      {
-                                        color: theme.colors.error,
-                                        fontWeight: "700",
-                                      },
-                                    ]}
-                                  >
-                                    Architecture not supported
-                                  </Text>
-                                </View>
-                              )}
-                              {isWarning && !isBlocked && (
-                                <Text
-                                  variant="labelSmall"
-                                  style={[
-                                    styles.memoryWarningSubtext,
-                                    {
-                                      color: theme.colors.tertiary,
-                                      fontWeight: "700",
-                                    },
-                                  ]}
-                                >
-                                  Uses {memoryCheck.usagePercent}% of RAM
-                                </Text>
-                              )}
-                            </View>
-                          </View>
-                        );
-                      })}
+                      {BUILT_IN_MODELS.map(renderBuiltInModelButton)}
                       <Button
                         mode={
                           selectedModelKey === "custom"
@@ -2732,19 +2760,25 @@ export default function SettingsScreen() {
                     </View>
                   )}
 
-                  {/* Custom URL button for llama.cpp — always visible */}
+                  {/* llama.cpp built-in GGUF model buttons — only shown when the
+                      llama.cpp backend is active. Mirrors the LiteRT selector
+                      via the shared renderBuiltInModelButton helper. */}
                   {(data.inferenceBackend ?? BACKEND_LITERT) ===
                     BACKEND_LLAMA_CPP && (
-                    <Button
-                      mode={
-                        selectedModelKey === "custom" ? "contained" : "outlined"
-                      }
-                      onPress={() => setSelectedModelKey("custom")}
-                      icon="download"
-                      style={{ marginTop: 8 }}
-                    >
-                      Custom URL
-                    </Button>
+                    <View style={styles.modelSelector}>
+                      {BUILT_IN_GGUF_MODELS.map(renderBuiltInModelButton)}
+                      <Button
+                        mode={
+                          selectedModelKey === "custom"
+                            ? "contained"
+                            : "outlined"
+                        }
+                        onPress={() => setSelectedModelKey("custom")}
+                        icon="download"
+                      >
+                        Custom URL
+                      </Button>
+                    </View>
                   )}
 
                   {selectedModelKey === "custom" ? (
@@ -2862,7 +2896,9 @@ export default function SettingsScreen() {
                           ? "GEMMA_4_E2B_IT"
                           : model.name.includes("gemma-4-E4B")
                             ? "GEMMA_4_E4B_IT"
-                            : null;
+                            : model.name.includes("granite-4.0-h-micro")
+                              ? "GRANITE_4_0_H_MICRO"
+                              : null;
                         const memoryCheck = modelKey
                           ? checkModelMemory(modelKey)
                           : null;
