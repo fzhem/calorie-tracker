@@ -2426,14 +2426,43 @@ export default function SettingsScreen() {
               theme={segmentedButtonsTheme}
               value={data.inferenceBackend ?? BACKEND_LITERT}
               onValueChange={(value) => {
-                // Switching backend is just a preference — don't unload the
-                // current model or clear its path. The model stays in memory
-                // until the user explicitly selects a different one or triggers
-                // a new estimation (which will load with the new backend).
-                setData((prev) => ({
-                  ...prev,
-                  inferenceBackend: value as InferenceBackend,
-                }));
+                const newBackend = value as InferenceBackend;
+
+                // A model file only runs on its matching backend
+                // (.litertlm -> LiteRT, .gguf -> llama.cpp). When switching,
+                // keep the active model only if it's compatible with the new
+                // backend; otherwise clear it so we never feed a .gguf to
+                // LiteRT (or a .litertlm to llama.cpp), which throws
+                // "Unsupported or unknown file format".
+                //
+                // We deliberately do NOT auto-pick a replacement: with
+                // multiple models downloaded the choice would be arbitrary
+                // (array order), which is surprising. The user explicitly
+                // taps the model they want for the new backend. The Offline
+                // tab already shows "No model selected" until they do.
+                //
+                // clearModelCache() is called OUTSIDE the setData updater —
+                // it notifies useSyncExternalStore listeners synchronously,
+                // which is a side effect React forbids inside an updater.
+                const isCompatible = (path: string | null): boolean => {
+                  if (!path) return false;
+                  const lower = path.toLowerCase();
+                  return newBackend === BACKEND_LLAMA_CPP
+                    ? lower.endsWith(".gguf")
+                    : lower.endsWith(".litertlm");
+                };
+                const keepActive = isCompatible(data.modelPath);
+                if (!keepActive) clearModelCache();
+
+                setData((prev) =>
+                  keepActive
+                    ? { ...prev, inferenceBackend: newBackend }
+                    : {
+                        ...prev,
+                        inferenceBackend: newBackend,
+                        modelPath: null,
+                      },
+                );
               }}
               buttons={[
                 {
