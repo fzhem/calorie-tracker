@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Calorie Tracker",
-    "version": "0.7.6",
+    "version": "0.7.7",
     "icon": "./assets/ic_launcher-playstore.png",
     "scheme": "calorietracker",
     "ios": {
