@@ -1661,6 +1661,7 @@ export default function LogScreen() {
   );
 
   const handleEditRecipe = useCallback((recipe: Recipe) => {
+    Vibration.vibrate(10);
     setEditRecipeId(recipe.id);
     setEditRecipeName(recipe.name);
     setEditRecipeUrl(recipe.url ?? "");
@@ -1895,6 +1896,7 @@ export default function LogScreen() {
   const [applyPortions, setApplyPortions] = useState("1");
 
   const handleOpenApplyRecipe = useCallback((recipe: Recipe) => {
+    Vibration.vibrate(10);
     setApplyRecipe(recipe);
     setApplyPortions("1");
   }, []);
@@ -1930,6 +1932,7 @@ export default function LogScreen() {
   );
 
   const handleOpenRecipeModal = useCallback(() => {
+    Vibration.vibrate(10);
     getAllRecipes()
       .then(setRecipes)
       .catch(() => {});
