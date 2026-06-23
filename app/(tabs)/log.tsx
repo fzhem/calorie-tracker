@@ -10,6 +10,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { getLocalDateKey, parseAppDate, toLocalISOString } from "@/lib/dateKey";
+import { haptic } from "@/lib/haptics";
 import {
   AppState,
   Linking,
@@ -20,7 +21,6 @@ import {
   StyleSheet,
   ToastAndroid,
   View,
-  Vibration,
 } from "react-native";
 import {
   Button,
@@ -360,7 +360,7 @@ const QuickLogCard = memo(function QuickLogCard({
     setMealCarbs("");
     setMealFibre("");
     setMealMultiplier("1"); // Reset multiplier
-    Vibration.vibrate(12);
+    haptic("tap");
   }, [
     mealCalories,
     mealCarbs,
@@ -1230,7 +1230,7 @@ export default function LogScreen() {
     insertMeal(meal).catch(() => {});
     invalidateMealCaches();
     setEntries((prev) => [meal, ...prev]);
-    Vibration.vibrate(10);
+    haptic("tap");
   }, []);
 
   const toggleEntrySelection = useCallback((id: string) => {
@@ -1246,7 +1246,7 @@ export default function LogScreen() {
   }, []);
 
   const toggleFavouriteQuickAdd = useCallback((item: QuickAddItem) => {
-    Vibration.vibrate(10);
+    haptic("tap");
     const key = quickAddKey(item);
     setData((prev) => {
       const current = prev.favouriteQuickAdds ?? [];
@@ -1265,7 +1265,7 @@ export default function LogScreen() {
   }, []);
 
   const openEditEntry = useCallback((entry: Meal) => {
-    Vibration.vibrate(10);
+    haptic("tap");
     setShowEditMacros(false);
     setEditDraft({
       id: entry.id,
@@ -1638,7 +1638,7 @@ export default function LogScreen() {
       setCreateRecipeUrl("");
       setCreateRecipeServings("1");
       setSelectedRecipeItems([]);
-      Vibration.vibrate(10);
+      haptic("tap");
     } catch {
       m3Alert.alert("Error", "Could not save recipe.");
     }
@@ -1661,7 +1661,7 @@ export default function LogScreen() {
   );
 
   const handleEditRecipe = useCallback((recipe: Recipe) => {
-    Vibration.vibrate(10);
+    haptic("tap");
     setEditRecipeId(recipe.id);
     setEditRecipeName(recipe.name);
     setEditRecipeUrl(recipe.url ?? "");
@@ -1865,7 +1865,7 @@ export default function LogScreen() {
       setEditRecipeServings("1");
       setEditRecipeItems([]);
       setEditRecipeShowMacros(new Set());
-      Vibration.vibrate(10);
+      haptic("tap");
     } catch {
       setEditRecipeId(null);
       setTimeout(() => m3Alert.alert("Error", "Could not update recipe."), 100);
@@ -1896,7 +1896,7 @@ export default function LogScreen() {
   const [applyPortions, setApplyPortions] = useState("1");
 
   const handleOpenApplyRecipe = useCallback((recipe: Recipe) => {
-    Vibration.vibrate(10);
+    haptic("tap");
     setApplyRecipe(recipe);
     setApplyPortions("1");
   }, []);
@@ -1926,13 +1926,13 @@ export default function LogScreen() {
             scaled.fibreGrams != null ? round1(scaled.fibreGrams) : null,
         });
       }
-      Vibration.vibrate(10);
+      haptic("tap");
     },
     [addMeal],
   );
 
   const handleOpenRecipeModal = useCallback(() => {
-    Vibration.vibrate(10);
+    haptic("tap");
     getAllRecipes()
       .then(setRecipes)
       .catch(() => {});
@@ -2073,7 +2073,7 @@ export default function LogScreen() {
               {hasMacroGoals ? (
                 <Pressable
                   onPress={() => {
-                    Vibration.vibrate(10);
+                    haptic("tap");
                     setMacroModalVisible(true);
                   }}
                   style={({ pressed }) => [

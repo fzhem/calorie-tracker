@@ -146,7 +146,6 @@ export const TREND_RECENT_POINTS = 5;
 export const TAB_RIPPLE_DURATION_MS = 320;
 export const DEBOUNCE_DELAY_MS = 500;
 export const AUTO_SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-export const VIBRATION_DURATION_MS = 20;
 
 // ── Tab Bar UI ───────────────────────────────────────────────
 export const TAB_BAR_HEIGHT_BASE = 66;

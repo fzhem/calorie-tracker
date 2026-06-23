@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   View,
-  Vibration,
 } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -54,6 +53,7 @@ import {
   invalidateBodyFatCaches,
 } from "@/lib/queryCache";
 import { toLocalISOString } from "@/lib/dateKey";
+import { haptic } from "@/lib/haptics";
 
 const KG_PER_LB = 0.45359237;
 const CM_PER_IN = 2.54;
@@ -420,7 +420,7 @@ export default function GoalsScreen() {
   };
 
   const onGoalPhaseLongPress = (phase: EditableGoalPhase) => {
-    Vibration.vibrate(12);
+    haptic("select");
     setData((prev) => {
       if (prev.goalPhase === phase) return prev;
       const next = { ...prev, goalPhase: phase };
@@ -615,7 +615,7 @@ export default function GoalsScreen() {
       setHeightInchesInput("");
     }
     setSavedSnackbarVisible(true);
-    Vibration.vibrate(18);
+    haptic("tap");
   };
 
   const resetOverrides = () => {
@@ -637,7 +637,7 @@ export default function GoalsScreen() {
   };
 
   const clearManualWeight = () => {
-    Vibration.vibrate(40); // Vibrate for 40ms
+    haptic("warn");
     setManualWeightInput("");
     deleteWeightBySource("manual").catch(() =>
       m3Alert.alert(
@@ -653,7 +653,7 @@ export default function GoalsScreen() {
     }));
   };
   const clearManualBodyFat = () => {
-    Vibration.vibrate(40);
+    haptic("warn");
     setManualBodyFatInput("");
     deleteBodyFatBySource("manual").catch(() =>
       m3Alert.alert(
@@ -882,7 +882,7 @@ export default function GoalsScreen() {
                 <View style={styles.sexRow}>
                   <Pressable
                     onPress={() => {
-                      Vibration.vibrate(20);
+                      haptic("select");
                       setData((prev) => ({ ...prev, metabolismSex: "male" }));
                     }}
                     style={[
@@ -923,7 +923,7 @@ export default function GoalsScreen() {
                   </Pressable>
                   <Pressable
                     onPress={() => {
-                      Vibration.vibrate(20);
+                      haptic("select");
                       setData((prev) => ({ ...prev, metabolismSex: "female" }));
                     }}
                     style={[
@@ -985,7 +985,7 @@ export default function GoalsScreen() {
                       <Pressable
                         key={level}
                         onPress={() => {
-                          Vibration.vibrate(20);
+                          haptic("select");
                           setData((prev) => ({
                             ...prev,
                             activityLevel: level,
@@ -1157,7 +1157,7 @@ export default function GoalsScreen() {
                         <TextInput.Icon
                           icon={weightUnlocked ? "lock-open-variant" : "lock"}
                           onPress={() => {
-                            Vibration.vibrate(40);
+                            haptic("warn");
                             setWeightUnlocked(!weightUnlocked);
                           }}
                         />
@@ -1236,7 +1236,7 @@ export default function GoalsScreen() {
                       <TextInput.Icon
                         icon={bodyFatUnlocked ? "lock-open-variant" : "lock"}
                         onPress={() => {
-                          Vibration.vibrate(40);
+                          haptic("warn");
                           setBodyFatUnlocked(!bodyFatUnlocked);
                         }}
                       />
