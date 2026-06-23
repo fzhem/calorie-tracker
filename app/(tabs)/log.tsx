@@ -94,6 +94,7 @@ import {
   scaleRecipeItem,
   sumScaledRecipe,
   portionFactor,
+  rescaleByGrams,
 } from "@/lib/recipeScale";
 import {
   ensureModelLoaded,
@@ -163,6 +164,7 @@ type EditRecipeItemDraft = {
   fat: string;
   carbs: string;
   fibre: string;
+  grams: string;
 };
 
 function formatDisplayDate(value: string) {
@@ -1674,6 +1676,7 @@ export default function LogScreen() {
         fat: typeof i.fatGrams === "number" ? `${i.fatGrams}` : "",
         carbs: typeof i.carbsGrams === "number" ? `${i.carbsGrams}` : "",
         fibre: typeof i.fibreGrams === "number" ? `${i.fibreGrams}` : "",
+        grams: typeof i.grams === "number" && i.grams > 0 ? `${i.grams}` : "",
       })),
     );
     setEditRecipeShowMacros(new Set());
@@ -1706,9 +1709,73 @@ export default function LogScreen() {
   const handleEditRecipeAddItem = useCallback(() => {
     setEditRecipeItems((prev) => [
       ...prev,
-      { title: "", calories: "", protein: "", fat: "", carbs: "", fibre: "" },
+      {
+        title: "",
+        calories: "",
+        protein: "",
+        fat: "",
+        carbs: "",
+        fibre: "",
+        grams: "",
+      },
     ]);
   }, []);
+
+  // Snapshot of grams-at-focus per item index, used to compute the rescale
+  // ratio when the grams field loses focus. Rescaling on blur (rather than on
+  // every keystroke) avoids jarring intermediate values while typing.
+  const gramsAtFocusRef = useRef<Map<number, number>>(new Map());
+
+  const handleEditRecipeGramsFocus = useCallback(
+    (idx: number) => {
+      const draft = editRecipeItems[idx];
+      const g = draft ? parseNumberInput(draft.grams) : null;
+      gramsAtFocusRef.current.set(idx, g && g > 0 ? g : 0);
+    },
+    [editRecipeItems],
+  );
+
+  const handleEditRecipeGramsBlur = useCallback(
+    (idx: number) => {
+      const draft = editRecipeItems[idx];
+      if (!draft) return;
+      const fromGrams = gramsAtFocusRef.current.get(idx) ?? 0;
+      gramsAtFocusRef.current.delete(idx);
+      const toGrams = parseNumberInput(draft.grams);
+      if (!toGrams || toGrams <= 0) return;
+      if (fromGrams <= 0 || toGrams === fromGrams) return;
+      // Build a transient RecipeItem from the draft, rescale by the gram ratio,
+      // then write the scaled values back as strings.
+      const base: RecipeItem = {
+        title: draft.title,
+        calories: parseNumberInput(draft.calories) ?? 0,
+        proteinGrams: draft.protein.trim()
+          ? parseNumberInput(draft.protein)
+          : null,
+        fatGrams: draft.fat.trim() ? parseNumberInput(draft.fat) : null,
+        carbsGrams: draft.carbs.trim() ? parseNumberInput(draft.carbs) : null,
+        fibreGrams: draft.fibre.trim() ? parseNumberInput(draft.fibre) : null,
+      };
+      const scaled = rescaleByGrams(base, fromGrams, toGrams);
+      setEditRecipeItems((prev) =>
+        prev.map((item, i) =>
+          i === idx
+            ? {
+                ...item,
+                grams: `${scaled.grams ?? toGrams}`,
+                calories: `${scaled.calories}`,
+                protein:
+                  scaled.proteinGrams != null ? `${scaled.proteinGrams}` : "",
+                fat: scaled.fatGrams != null ? `${scaled.fatGrams}` : "",
+                carbs: scaled.carbsGrams != null ? `${scaled.carbsGrams}` : "",
+                fibre: scaled.fibreGrams != null ? `${scaled.fibreGrams}` : "",
+              }
+            : item,
+        ),
+      );
+    },
+    [editRecipeItems],
+  );
 
   const toggleEditRecipeMacros = useCallback((idx: number) => {
     setEditRecipeShowMacros((prev) => {
@@ -1758,6 +1825,9 @@ export default function LogScreen() {
       const fat = draft.fat.trim() ? parseNumberInput(draft.fat) : null;
       const carbs = draft.carbs.trim() ? parseNumberInput(draft.carbs) : null;
       const fibre = draft.fibre.trim() ? parseNumberInput(draft.fibre) : null;
+      const gramsRaw = draft.grams.trim()
+        ? parseNumberInput(draft.grams)
+        : null;
       items.push({
         title: draft.title.trim(),
         calories: Math.round(calories),
@@ -1765,6 +1835,7 @@ export default function LogScreen() {
         fatGrams: fat !== null ? Math.round(fat * 10) / 10 : null,
         carbsGrams: carbs !== null ? Math.round(carbs * 10) / 10 : null,
         fibreGrams: fibre !== null ? Math.round(fibre * 10) / 10 : null,
+        grams: gramsRaw && gramsRaw > 0 ? Math.round(gramsRaw * 10) / 10 : null,
       });
     }
     if (items.length === 0) {
@@ -3148,6 +3219,54 @@ export default function LogScreen() {
                             onPress={() => handleEditRecipeRemoveItem(idx)}
                             accessibilityLabel="Remove item"
                           />
+                        </View>
+                      </View>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <TextInput
+                          label="Grams"
+                          value={draft.grams}
+                          onChangeText={(v) =>
+                            handleEditRecipeItemChange(idx, "grams", v)
+                          }
+                          onFocus={() => handleEditRecipeGramsFocus(idx)}
+                          onBlur={() => handleEditRecipeGramsBlur(idx)}
+                          placeholder="0"
+                          keyboardType="numeric"
+                          mode="outlined"
+                          theme={QUICK_LOG_INPUT_THEME}
+                          style={{ width: 100 }}
+                        />
+                        <View
+                          style={{
+                            flex: 1,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 4,
+                          }}
+                        >
+                          <MaterialCommunityIcons
+                            name="scale"
+                            size={14}
+                            color={theme.colors.onSurfaceVariant}
+                          />
+                          <Text
+                            variant="labelSmall"
+                            style={{
+                              color: theme.colors.onSurfaceVariant,
+                              flex: 1,
+                            }}
+                          >
+                            {!draft.grams.trim() ||
+                            (parseNumberInput(draft.grams) ?? 0) <= 0
+                              ? "First entry sets the weight — no rescale"
+                              : "Adjust to rescale calories & macros"}
+                          </Text>
                         </View>
                       </View>
                       <Pressable

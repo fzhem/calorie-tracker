@@ -55,3 +55,22 @@ export function portionFactor(servings: number, portionsEaten: number): number {
   const safeServings = servings > 0 ? servings : 1;
   return portionsEaten / safeServings;
 }
+
+/** Rescale a recipe item's calories and macros from one gram weight to
+ *  another, preserving the item's kcal/g density. Macros that were null stay
+ *  null (so an item with no macros doesn't suddenly gain zeros).
+ *
+ *  If `fromGrams` is missing/<=0 there is no reference density, so the item is
+ *  returned unchanged except for the new `grams` value — this lets the first
+ *  grams entry establish "these calories are for this many grams". */
+export function rescaleByGrams(
+  item: RecipeItem,
+  fromGrams: number | null | undefined,
+  toGrams: number,
+): RecipeItem {
+  const from = typeof fromGrams === "number" && fromGrams > 0 ? fromGrams : 0;
+  if (from > 0 && toGrams > 0 && toGrams !== from) {
+    return { ...scaleRecipeItem(item, toGrams / from), grams: toGrams };
+  }
+  return { ...item, grams: toGrams };
+}

@@ -274,6 +274,9 @@ export type RecipeItem = {
   fatGrams?: number | null;
   carbsGrams?: number | null;
   fibreGrams?: number | null;
+  /** Optional ingredient weight. Editing grams in the recipe editor rescales
+   *  calories + macros to preserve the item's kcal/g density. */
+  grams?: number | null;
 };
 
 export async function insertRecipe(recipe: {
