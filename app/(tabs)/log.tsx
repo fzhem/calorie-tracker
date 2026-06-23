@@ -880,6 +880,12 @@ export default function LogScreen() {
   // ── Recipe state ──────────────────────────────────────────────
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [recipeModalVisible, setRecipeModalVisible] = useState(false);
+  // Recipe pending a delete confirmation, rendered as an overlay inside the
+  // My Recipes modal. Kept here (not via m3Alert/Portal) because Paper's Portal
+  // mounts at the app root and would appear *behind* this React Native Modal.
+  const [deleteRecipeTarget, setDeleteRecipeTarget] = useState<Recipe | null>(
+    null,
+  );
   const [createRecipeModalVisible, setCreateRecipeModalVisible] =
     useState(false);
   const [createRecipeName, setCreateRecipeName] = useState("");
@@ -1886,13 +1892,19 @@ export default function LogScreen() {
     editRecipeItems,
   ]);
 
-  const handleDeleteRecipe = useCallback(
-    async (id: string) => {
+  const handleDeleteRecipe = useCallback((recipe: Recipe) => {
+    haptic("warn");
+    setDeleteRecipeTarget(recipe);
+  }, []);
+
+  const confirmDeleteRecipe = useCallback(
+    async (recipe: Recipe) => {
       // Optimistic removal: remove immediately, restore on failure
       const snapshot = recipes;
-      setRecipes((prev) => prev.filter((r) => r.id !== id));
+      setRecipes((prev) => prev.filter((r) => r.id !== recipe.id));
+      setDeleteRecipeTarget(null);
       try {
-        await deleteRecipe(id);
+        await deleteRecipe(recipe.id);
       } catch {
         setRecipes(snapshot);
       }
@@ -3060,7 +3072,7 @@ export default function LogScreen() {
                             icon="delete-outline"
                             size={18}
                             iconColor={theme.colors.error}
-                            onPress={() => handleDeleteRecipe(recipe.id)}
+                            onPress={() => handleDeleteRecipe(recipe)}
                             accessibilityLabel="Delete recipe"
                           />
                         </View>
@@ -3073,6 +3085,62 @@ export default function LogScreen() {
                 Close
               </Button>
             </Pressable>
+            {/* Delete confirmation — rendered inside the modal so it layers
+                above the card. */}
+            {deleteRecipeTarget ? (
+              <Pressable
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    backgroundColor: "rgba(0, 0, 0, 0.5)",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    padding: 16,
+                  },
+                ]}
+                onPress={() => setDeleteRecipeTarget(null)}
+              >
+                <Pressable
+                  style={{
+                    backgroundColor: theme.colors.surface,
+                    borderRadius: 28,
+                    padding: 24,
+                    gap: 10,
+                    width: "100%",
+                    maxWidth: 320,
+                  }}
+                  onPress={() => {}}
+                >
+                  <Text variant="titleMedium" style={{ fontWeight: "700" }}>
+                    Delete recipe?
+                  </Text>
+                  <Text
+                    variant="bodyMedium"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    {`"${deleteRecipeTarget.name}" will be removed permanently.`}
+                  </Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "flex-end",
+                      gap: 8,
+                      marginTop: 4,
+                    }}
+                  >
+                    <Button onPress={() => setDeleteRecipeTarget(null)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      textColor={theme.colors.error}
+                      onPress={() => confirmDeleteRecipe(deleteRecipeTarget)}
+                    >
+                      Delete
+                    </Button>
+                  </View>
+                </Pressable>
+              </Pressable>
+            ) : null}
           </Pressable>
         </Modal>
 
