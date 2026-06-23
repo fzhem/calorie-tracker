@@ -95,6 +95,8 @@ import {
   sumScaledRecipe,
   portionFactor,
   rescaleByGrams,
+  roundTo,
+  SCALE_DECIMALS,
 } from "@/lib/recipeScale";
 import {
   ensureModelLoaded,
@@ -1830,11 +1832,12 @@ export default function LogScreen() {
         : null;
       items.push({
         title: draft.title.trim(),
-        calories: Math.round(calories),
-        proteinGrams: protein !== null ? Math.round(protein * 10) / 10 : null,
-        fatGrams: fat !== null ? Math.round(fat * 10) / 10 : null,
-        carbsGrams: carbs !== null ? Math.round(carbs * 10) / 10 : null,
-        fibreGrams: fibre !== null ? Math.round(fibre * 10) / 10 : null,
+        calories: roundTo(calories, SCALE_DECIMALS),
+        proteinGrams:
+          protein !== null ? roundTo(protein, SCALE_DECIMALS) : null,
+        fatGrams: fat !== null ? roundTo(fat, SCALE_DECIMALS) : null,
+        carbsGrams: carbs !== null ? roundTo(carbs, SCALE_DECIMALS) : null,
+        fibreGrams: fibre !== null ? roundTo(fibre, SCALE_DECIMALS) : null,
         grams: gramsRaw && gramsRaw > 0 ? Math.round(gramsRaw * 10) / 10 : null,
       });
     }
@@ -1906,13 +1909,19 @@ export default function LogScreen() {
       const factor = portions / servings;
       for (const item of items) {
         const scaled = scaleRecipeItem(item, factor);
+        // Meals store integer calories (meals.calories is an integer column)
+        // and follow the manual-entry macro convention (1 decimal place), so
+        // round down from the full-precision scaled values here.
         addMeal({
           title: scaled.title,
-          calories: scaled.calories,
-          proteinGrams: scaled.proteinGrams,
-          fatGrams: scaled.fatGrams,
-          carbsGrams: scaled.carbsGrams,
-          fibreGrams: scaled.fibreGrams,
+          calories: Math.round(scaled.calories),
+          proteinGrams:
+            scaled.proteinGrams != null ? round1(scaled.proteinGrams) : null,
+          fatGrams: scaled.fatGrams != null ? round1(scaled.fatGrams) : null,
+          carbsGrams:
+            scaled.carbsGrams != null ? round1(scaled.carbsGrams) : null,
+          fibreGrams:
+            scaled.fibreGrams != null ? round1(scaled.fibreGrams) : null,
         });
       }
       Vibration.vibrate(10);

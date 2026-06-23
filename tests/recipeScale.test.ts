@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  roundTo,
   scaleRecipeItem,
   sumScaledRecipe,
   portionFactor,
@@ -27,13 +28,20 @@ test("scaleRecipeItem scales calories and macros by the factor", () => {
   assert.equal(half.title, "Oatmeal");
 });
 
-test("scaleRecipeItem rounds to 1 decimal place to avoid float artifacts", () => {
-  // 14.5 * 0.5 + 29 * 0.5 would otherwise produce 21.750000000000004
+test("roundTo keeps the requested precision and removes float noise", () => {
+  assert.equal(roundTo(21.750000000000004, 2), 21.75);
+  assert.equal(roundTo(0.30000000000000004, 2), 0.3);
+  assert.equal(roundTo(7.25, 2), 7.25);
+});
+
+test("scaleRecipeItem strips float artifacts without discarding precision", () => {
+  // 14.5 * 0.5 is exactly 7.25; the old code rounded to 1 decimal (7.3) which
+  // eroded values across repeated scaling. We now keep two decimals.
   const scaled = scaleRecipeItem(
     { title: "Mix", calories: 100, carbsGrams: 14.5 },
     0.5,
   );
-  assert.equal(scaled.carbsGrams, 7.3);
+  assert.equal(scaled.carbsGrams, 7.25);
 });
 
 test("scaleRecipeItem keeps null macros as null", () => {
@@ -144,4 +152,23 @@ test("rescaleByGrams ignores a non-positive target weight", () => {
   const item: RecipeItem = { title: "X", calories: 300, grams: 100 };
   const rescaled = rescaleByGrams(item, 100, 0);
   assert.equal(rescaled.calories, 300); // no rescale to zero
+});
+
+test("rescaleByGrams round-trips back to the original values", () => {
+  // Editing an item's grams back and forth must not erode calories/macros —
+  // this is the precision loss the recipe editor used to suffer from
+  // (165 kcal would drift to 164 after a 100g -> 73g -> 100g round-trip).
+  const item: RecipeItem = {
+    title: "Chicken",
+    calories: 165,
+    proteinGrams: 31,
+    fatGrams: 3.6,
+    carbsGrams: 0,
+    grams: 100,
+  };
+  const rescaled = rescaleByGrams(rescaleByGrams(item, 100, 73), 73, 100);
+  assert.equal(rescaled.calories, 165);
+  assert.equal(rescaled.proteinGrams, 31);
+  assert.equal(rescaled.fatGrams, 3.6);
+  assert.equal(rescaled.grams, 100);
 });
