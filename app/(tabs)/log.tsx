@@ -1662,6 +1662,11 @@ export default function LogScreen() {
 
   const handleEditRecipe = useCallback((recipe: Recipe) => {
     haptic("tap");
+    const items: RecipeItem[] = JSON.parse(recipe.itemsJson);
+    // Open the modal with the cheap header fields first so the fade-in can
+    // begin immediately. The per-item rows (a ScrollView of TextInputs) are
+    // mounted on the next frame — building them in the same tick as the tap
+    // is what made the modal feel sluggish to appear.
     setEditRecipeId(recipe.id);
     setEditRecipeName(recipe.name);
     setEditRecipeUrl(recipe.url ?? "");
@@ -1670,19 +1675,22 @@ export default function LogScreen() {
         ? `${recipe.servings}`
         : "1",
     );
-    const items: RecipeItem[] = JSON.parse(recipe.itemsJson);
-    setEditRecipeItems(
-      items.map((i) => ({
-        title: i.title,
-        calories: `${i.calories}`,
-        protein: typeof i.proteinGrams === "number" ? `${i.proteinGrams}` : "",
-        fat: typeof i.fatGrams === "number" ? `${i.fatGrams}` : "",
-        carbs: typeof i.carbsGrams === "number" ? `${i.carbsGrams}` : "",
-        fibre: typeof i.fibreGrams === "number" ? `${i.fibreGrams}` : "",
-        grams: typeof i.grams === "number" && i.grams > 0 ? `${i.grams}` : "",
-      })),
-    );
+    setEditRecipeItems([]);
     setEditRecipeShowMacros(new Set());
+    requestAnimationFrame(() => {
+      setEditRecipeItems(
+        items.map((i) => ({
+          title: i.title,
+          calories: `${i.calories}`,
+          protein:
+            typeof i.proteinGrams === "number" ? `${i.proteinGrams}` : "",
+          fat: typeof i.fatGrams === "number" ? `${i.fatGrams}` : "",
+          carbs: typeof i.carbsGrams === "number" ? `${i.carbsGrams}` : "",
+          fibre: typeof i.fibreGrams === "number" ? `${i.fibreGrams}` : "",
+          grams: typeof i.grams === "number" && i.grams > 0 ? `${i.grams}` : "",
+        })),
+      );
+    });
   }, []);
 
   const handleEditRecipeItemChange = useCallback(
