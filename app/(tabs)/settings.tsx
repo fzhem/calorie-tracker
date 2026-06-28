@@ -72,6 +72,7 @@ import {
   DEFAULT_MODEL_CONFIG,
   getCachedData,
   loadStoredData as readStoredData,
+  primeStoredDataCache,
   saveStoredData,
 } from "@/data/storage";
 import type {
@@ -1644,6 +1645,13 @@ export default function SettingsScreen() {
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!isReady) return;
+
+    // Prime the in-memory cache synchronously so other tabs observe this
+    // change immediately on focus. The actual disk write below is debounced,
+    // so without this a quick Settings -> Log round trip (e.g. selecting a
+    // model) would let Log read a stale cached model path and fail to clear a
+    // stale "No model file selected" error.
+    primeStoredDataCache(data);
 
     // Clear any pending save
     if (saveTimeoutRef.current) {

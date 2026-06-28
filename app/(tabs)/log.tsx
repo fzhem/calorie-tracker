@@ -63,6 +63,7 @@ import {
   DEFAULT_MODEL_CONFIG,
   getCachedData,
   loadStoredData,
+  primeStoredDataCache,
   saveStoredData,
 } from "@/data/storage";
 import type { StoredData } from "@/data/storage";
@@ -974,6 +975,10 @@ export default function LogScreen() {
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!isReady) return;
+
+    // Prime the in-memory cache synchronously so other tabs observe this
+    // change immediately on focus, before the debounced disk write below.
+    primeStoredDataCache(data);
 
     // Clear any pending save
     if (saveTimeoutRef.current) {

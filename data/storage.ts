@@ -248,6 +248,24 @@ export function getCachedData() {
   return cachedData;
 }
 
+/**
+ * Synchronously update the in-memory cache of stored data WITHOUT writing to
+ * disk.
+ *
+ * Other screens read this cache on focus via `loadStoredData()` (which returns
+ * `cachedData` when present). The actual persisted write is still debounced via
+ * `saveStoredData()`, so there is a window — up to ~500ms in Settings — during
+ * which `cachedData` lags behind the editing screen's local React state.
+ *
+ * Priming the cache here ensures other tabs observe edits immediately on
+ * focus. This fixes stale reads when the user makes a change in one tab (e.g.
+ * selecting a model in Settings) and quickly navigates to another tab (e.g.
+ * Log) before the debounced save fires.
+ */
+export function primeStoredDataCache(next: StoredData) {
+  cachedData = next;
+}
+
 function commitStoredData(next: StoredData) {
   kvStore.set(STORAGE_KEY, JSON.stringify(next));
 }
