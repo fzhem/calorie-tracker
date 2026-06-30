@@ -22,6 +22,7 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  useColorScheme,
 } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -1243,6 +1244,13 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const { mode, setMode } = useThemeMode();
+  const systemColorScheme = useColorScheme();
+  // AMOLED is dark-derived, so the segmented control collapses it onto
+  // "dark" and exposes it as a separate toggle below.
+  const isDarkResolved =
+    mode === "dark" ||
+    mode === "amoled" ||
+    (mode === "system" && systemColorScheme === "dark");
 
   const loadedModelKey = useSyncExternalStore(
     subscribeModelCache,
@@ -2321,7 +2329,7 @@ export default function SettingsScreen() {
                 { backgroundColor: theme.colors.elevation.level2 },
               ]}
               theme={segmentedButtonsTheme}
-              value={mode}
+              value={mode === "amoled" ? "dark" : mode}
               onValueChange={(value) => setMode(value as ThemeMode)}
               buttons={[
                 {
@@ -2339,13 +2347,25 @@ export default function SettingsScreen() {
                   label: "Dark",
                   icon: "weather-night",
                 },
-                {
-                  value: "amoled",
-                  label: "AMOLED",
-                  icon: "circle-opacity",
-                },
               ]}
             />
+            <View style={styles.amoledRow}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text variant="bodyMedium">Pure black (AMOLED)</Text>
+                <Text
+                  variant="labelSmall"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  Use a pure black background in dark mode. Saves battery on
+                  OLED screens.
+                </Text>
+              </View>
+              <Switch
+                value={mode === "amoled"}
+                disabled={!isDarkResolved}
+                onValueChange={(value) => setMode(value ? "amoled" : "dark")}
+              />
+            </View>
           </Card.Content>
         </Card>
 
@@ -3599,6 +3619,12 @@ const styles = StyleSheet.create({
   segmentedControl: {
     borderRadius: 14,
     overflow: "hidden",
+  },
+  amoledRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 4,
   },
   tabContentContainer: {
     borderWidth: 1.5,
