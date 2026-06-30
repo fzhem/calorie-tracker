@@ -127,7 +127,7 @@ export async function ensureModelLoaded(
   await model.loadModel(params.modelPath, {
     systemPrompt: params.systemPrompt,
     backend: config.backend,
-    multimodal: true,
+    multimodal: false,
     maxTokens: config.maxTokens,
     temperature: config.temperature,
     topK: config.topK,
