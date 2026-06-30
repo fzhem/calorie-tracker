@@ -13,8 +13,6 @@ import {
   TAB_ICON_SETTINGS,
   TAB_RIPPLE_DURATION_MS,
   TAB_BAR_HEIGHT_BASE,
-  TAB_BAR_PADDING_TOP,
-  TAB_BAR_PADDING_BOTTOM_MIN,
   TAB_ICON_SIZE_FOCUSED,
   TAB_ICON_SIZE_UNFOCUSED,
   TAB_LABEL_FONT_SIZE,
@@ -106,7 +104,7 @@ export default function TabLayout() {
         freezeOnBlur: true,
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: theme.colors.elevation.level2,
+          backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.outlineVariant,
           borderTopWidth: 1,
           height: TAB_BAR_HEIGHT_BASE + insets.bottom,
