@@ -18,21 +18,17 @@ Simple Expo Android app for logging calories, visualizing weekly trends, and adj
 - 🔒 No cloud inference is done for model execution after download
 - 🛠️ The Settings screen includes controls to download models and run local inference
 
-## Showcase
+## Screenshots
+<img src="docs/assets/log.png"
+	alt="Log screen" width="250"/>
+<img src="docs/assets/graphs.png"
+	alt="Graphs screen" width="250"/>
+<img src="docs/assets/settings.png"
+	alt="Settings screen" width="250"/>
 
-### Video demo
-<video src="https://github.com/user-attachments/assets/038dbaa2-e470-43b2-8386-a0bc49a0e681" controls></video>
+## Download
 
-### Screenshots
-<p align="center">
-	<img src="docs/assets/log.png" alt="Log screen" width="300" />
-	<img src="docs/assets/graphs.png" alt="Graphs screen" width="300" />
-	<img src="docs/assets/settings.png" alt="Settings screen" width="300" />
-</p>
-
-## Installation
-
-Download the latest APK from the [Releases](../../releases) page and sideload it on your Android device. Requires Android 8+ (API 26).
+<a href="https://play.google.com/store/apps/details?id=com.zane.calorietracker"><img alt="Get it on Google Play" src="https://play.google.com/intl/en_us/badges/images/generic/en_badge_web_generic.png" height="80"/></a>
 
 ## Development
 
