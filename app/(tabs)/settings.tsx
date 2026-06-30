@@ -1316,6 +1316,9 @@ export default function SettingsScreen() {
   const [downloadedBytes, setDownloadedBytes] = useState(0);
   const [totalBytes, setTotalBytes] = useState<number | null>(null);
   const [downloadSpeed, setDownloadSpeed] = useState<number | null>(null);
+  const [downloadStatusLabel, setDownloadStatusLabel] = useState<string | null>(
+    null,
+  );
   const [activeDownloadLabel, setActiveDownloadLabel] = useState<string | null>(
     null,
   );
@@ -1793,19 +1796,6 @@ export default function SettingsScreen() {
       return;
     }
 
-    // Validate magic number for LiteRT custom URLs to detect invalid links.
-    // Skip for llama.cpp since GGUF files have a different magic.
-    if (
-      selectedModelKey === "custom" &&
-      (data.inferenceBackend ?? BACKEND_LITERT) === BACKEND_LITERT
-    ) {
-      const magicValidation = await validateModelMagicNumber(source.url);
-      if (!magicValidation.valid) {
-        setDownloadError(magicValidation.message!);
-        return;
-      }
-    }
-
     try {
       downloadCancelRequestedRef.current = false;
       setIsDownloading(true);
@@ -1814,9 +1804,25 @@ export default function SettingsScreen() {
       setDownloadedBytes(0);
       setTotalBytes(null);
       setDownloadSpeed(null);
+      setDownloadStatusLabel("Preparing");
       setActiveDownloadLabel(source.label);
 
+      // Validate magic number for LiteRT custom URLs to detect invalid links.
+      // Skip for llama.cpp since GGUF files have a different magic.
+      if (
+        selectedModelKey === "custom" &&
+        (data.inferenceBackend ?? BACKEND_LITERT) === BACKEND_LITERT
+      ) {
+        setDownloadStatusLabel("Checking model file");
+        const magicValidation = await validateModelMagicNumber(source.url);
+        if (!magicValidation.valid) {
+          setDownloadError(magicValidation.message!);
+          return;
+        }
+      }
+
       let shouldShowDownloadNotifications = true;
+      setDownloadStatusLabel("Checking notifications");
       const notificationStatus = await refreshNotificationPermissionStatus();
       if (notificationStatus === "denied") {
         const granted = await requestNotificationPermission();
@@ -1854,6 +1860,7 @@ export default function SettingsScreen() {
       let wasCancelled = false;
 
       // Try to get file size with a short timeout first
+      setDownloadStatusLabel("Checking file size");
       knownTotalBytes = await resolveRemoteFileSize(source.url);
       if (knownTotalBytes && knownTotalBytes > 0) {
         setTotalBytes(knownTotalBytes);
@@ -1863,6 +1870,7 @@ export default function SettingsScreen() {
       const destPath = destFile.uri.replace(/^file:\/\//, "");
 
       // Use native background downloader — continues even when app is backgrounded/killed
+      setDownloadStatusLabel("Starting download");
       await new Promise<void>((resolve, reject) => {
         downloadResolveRef.current = resolve;
         let lastBytes = 0;
@@ -1875,12 +1883,14 @@ export default function SettingsScreen() {
           metadata: { label: source.label },
         })
           .begin(({ expectedBytes }) => {
+            setDownloadStatusLabel("Downloading");
             if (expectedBytes && expectedBytes > 0) {
               knownTotalBytes = expectedBytes;
               setTotalBytes(expectedBytes);
             }
           })
           .progress(({ bytesDownloaded, bytesTotal }) => {
+            setDownloadStatusLabel("Downloading");
             const currentBytes = bytesDownloaded;
             const now = Date.now();
             const elapsed = (now - lastTime) / 1000;
@@ -1958,6 +1968,7 @@ export default function SettingsScreen() {
       downloadCancelRequestedRef.current = false;
       setIsDownloading(false);
       setIsCancellingDownload(false);
+      setDownloadStatusLabel(null);
       setActiveDownloadLabel(null);
     }
   };
@@ -2810,15 +2821,18 @@ export default function SettingsScreen() {
                   <View style={styles.downloadStatusHeader}>
                     <View style={flex1Style}>
                       <Text variant="labelLarge" style={{ fontWeight: "700" }}>
-                        Downloading {activeDownloadLabel ?? "model"}
+                        {downloadStatusLabel ?? "Downloading"}{" "}
+                        {activeDownloadLabel ?? "model"}
                       </Text>
                       <Text
                         variant="labelSmall"
                         style={{ color: theme.colors.onSurfaceVariant }}
                       >
-                        {totalBytes
-                          ? `${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)} (${Math.round(downloadProgress * 100)}%)`
-                          : formatBytes(downloadedBytes)}
+                        {downloadedBytes > 0 || totalBytes
+                          ? totalBytes
+                            ? `${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)} (${Math.round(downloadProgress * 100)}%)`
+                            : formatBytes(downloadedBytes)
+                          : "Preparing connection"}
                         {downloadSpeed !== null
                           ? ` • ${formatBytes(Math.round(downloadSpeed))}/s`
                           : ""}
@@ -2829,7 +2843,10 @@ export default function SettingsScreen() {
                       icon="close"
                       compact
                       loading={isCancellingDownload}
-                      disabled={isCancellingDownload}
+                      disabled={
+                        isCancellingDownload ||
+                        downloadStatusLabel !== "Downloading"
+                      }
                       onPress={handleCancelDownload}
                       textColor={theme.colors.error}
                     >
