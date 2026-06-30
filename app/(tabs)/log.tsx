@@ -2477,27 +2477,50 @@ export default function LogScreen() {
                   </Text>
                 </View>
               )}
-              <TextInput
-                label="Describe your meal"
-                value={llmPrompt}
-                onChangeText={setLlmPrompt}
-                placeholder="e.g. 2 eggs, 1 slice toast, 1 tbsp butter"
-                multiline
-                mode="outlined"
-                theme={QUICK_LOG_INPUT_THEME}
-                right={
-                  <TextInput.Icon
+              {/* Wrap so the status icon can be vertically centered as an
+                 overlay. Paper's `right` adornment positions icons using a
+                 static height, which leaves them un-centered on a multiline
+                 input. Decoupling the icon from Paper and centering it with
+                 top:0/bottom:0 keeps it centered for empty, single-line, and
+                 multi-line content alike. */}
+              <View style={{ position: "relative" }}>
+                <TextInput
+                  label="Describe your meal"
+                  value={llmPrompt}
+                  onChangeText={setLlmPrompt}
+                  placeholder="e.g. 2 eggs, 1 slice toast, 1 tbsp butter"
+                  multiline
+                  mode="outlined"
+                  theme={QUICK_LOG_INPUT_THEME}
+                  // Reserve room on the right so the text never runs under
+                  // the overlaid status icon. contentStyle is applied to the
+                  // native input (after Paper's adornment padding), so this
+                  // cleanly insets just the text.
+                  contentStyle={{ paddingRight: 48 }}
+                />
+                <View
+                  pointerEvents="box-none"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    width: 48,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <IconButton
                     icon={isModelInMemory ? "memory" : "circle-outline"}
-                    color={
+                    iconColor={
                       isModelInMemory
                         ? theme.colors.primary
                         : theme.colors.error
                     }
                     onPress={showModelStatusHint}
-                    style={{ alignSelf: "center" }}
                   />
-                }
-              />
+                </View>
+              </View>
               <Button
                 mode="contained"
                 icon="robot"
