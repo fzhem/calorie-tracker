@@ -35,7 +35,10 @@ import {
   useTheme,
 } from "react-native-paper";
 import { useM3Alert } from "@/ui/m3Alert";
-import { getAppSegmentedButtonsTheme } from "@/ui/segmentedButtons";
+import {
+  getAppSegmentedButtonsTheme,
+  SEGMENTED_CONTROL_RADIUS,
+} from "@/ui/segmentedButtons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -3912,7 +3915,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { padding: 16, gap: 16 },
   segmentedControl: {
-    borderRadius: 14,
+    borderRadius: SEGMENTED_CONTROL_RADIUS,
     overflow: "hidden",
   },
   heroCard: { borderRadius: 24, padding: 16, gap: 4 },

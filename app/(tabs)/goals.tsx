@@ -1,13 +1,7 @@
 import { useFocusEffect } from "expo-router/react-navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated } from "react-native";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -21,7 +15,10 @@ import {
   useTheme,
 } from "react-native-paper";
 import { useM3Alert } from "@/ui/m3Alert";
-import { getAppSegmentedButtonsTheme } from "@/ui/segmentedButtons";
+import {
+  getAppSegmentedButtonsTheme,
+  SEGMENTED_CONTROL_RADIUS,
+} from "@/ui/segmentedButtons";
 
 import {
   DEFAULT_DATA,
@@ -1632,7 +1629,7 @@ const styles = StyleSheet.create({
   card: { borderRadius: 24 },
   formArea: { gap: 4, paddingBottom: 8 },
   segmentedControl: {
-    borderRadius: 14,
+    borderRadius: SEGMENTED_CONTROL_RADIUS,
     overflow: "hidden",
   },
   supportingText: {},

@@ -24,7 +24,10 @@ import {
   useTheme,
 } from "react-native-paper";
 import Svg, { Line, Rect, Text as SvgText, Circle } from "react-native-svg";
-import { getAppSegmentedButtonsTheme } from "@/ui/segmentedButtons";
+import {
+  getAppSegmentedButtonsTheme,
+  SEGMENTED_CONTROL_RADIUS,
+} from "@/ui/segmentedButtons";
 
 import { getAdjustedCalorieTarget } from "@/domain/metabolism";
 import {
@@ -1218,7 +1221,7 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, gap: 16 },
   card: { borderRadius: 24 },
   segmentedControl: {
-    borderRadius: 14,
+    borderRadius: SEGMENTED_CONTROL_RADIUS,
     overflow: "hidden",
   },
   supportingText: { marginBottom: 10 },

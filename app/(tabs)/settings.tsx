@@ -87,7 +87,10 @@ import type {
 import { DEFAULT_LLAMA_CPP_CONFIG } from "@/data/storage";
 import { useThemeMode, type ThemeMode } from "@/ui/themeMode";
 import { useM3Alert } from "@/ui/m3Alert";
-import { getAppSegmentedButtonsTheme } from "@/ui/segmentedButtons";
+import {
+  getAppSegmentedButtonsTheme,
+  SEGMENTED_CONTROL_RADIUS,
+} from "@/ui/segmentedButtons";
 
 import { BACKEND_LITERT, BACKEND_LLAMA_CPP } from "@/constants";
 import type { InferenceBackend } from "@/constants";
@@ -3617,7 +3620,7 @@ const styles = StyleSheet.create({
   card: { borderRadius: 24 },
   formArea: { gap: 10, paddingBottom: 10 },
   segmentedControl: {
-    borderRadius: 14,
+    borderRadius: SEGMENTED_CONTROL_RADIUS,
     overflow: "hidden",
   },
   amoledRow: {
