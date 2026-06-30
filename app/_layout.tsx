@@ -17,12 +17,16 @@ import {
   loadStoredData,
 } from "@/data/storage";
 import { ThemeModeProvider, useThemeMode } from "@/ui/themeMode";
-import { AUTO_SYNC_INTERVAL_MS } from "@/constants";
+import { AUTO_SYNC_INTERVAL_MS, THEME_MODE_AMOLED } from "@/constants";
 import { syncHealthConnectData } from "@/lib/healthConnectSync";
 import { useMigrations } from "drizzle-orm/op-sqlite/migrator";
 import migrations from "@/drizzle/migrations";
 import { database } from "@/db";
-import { APP_DARK_THEME, APP_LIGHT_THEME } from "@/constants/Colors";
+import {
+  APP_AMOLED_THEME,
+  APP_DARK_THEME,
+  APP_LIGHT_THEME,
+} from "@/constants/Colors";
 
 export default function RootLayout() {
   const [assetsReady, setAssetsReady] = useState(false);
@@ -122,13 +126,18 @@ function RootWithTheme() {
   const resolvedMode =
     mode === "system" ? (systemScheme === "dark" ? "dark" : "light") : mode;
   const paperTheme = useMemo(
-    () => (resolvedMode === "dark" ? APP_DARK_THEME : APP_LIGHT_THEME),
+    () => {
+      if (resolvedMode === THEME_MODE_AMOLED) return APP_AMOLED_THEME;
+      return resolvedMode === "dark" ? APP_DARK_THEME : APP_LIGHT_THEME;
+    },
     [resolvedMode],
   );
 
   const navTheme = useMemo(() => {
     const baseNav =
-      resolvedMode === "dark" ? NavigationDarkTheme : NavigationDefaultTheme;
+      resolvedMode === "dark" || resolvedMode === THEME_MODE_AMOLED
+        ? NavigationDarkTheme
+        : NavigationDefaultTheme;
     return {
       ...baseNav,
       colors: {
@@ -146,7 +155,11 @@ function RootWithTheme() {
     <PaperProvider theme={paperTheme}>
       <ThemeProvider value={navTheme}>
         <StatusBar
-          barStyle={resolvedMode === "dark" ? "light-content" : "dark-content"}
+          barStyle={
+            resolvedMode === "dark" || resolvedMode === THEME_MODE_AMOLED
+              ? "light-content"
+              : "dark-content"
+          }
           backgroundColor={paperTheme.colors.background}
         />
         <Stack>

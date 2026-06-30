@@ -13,9 +13,10 @@ import {
   THEME_MODE_SYSTEM,
   THEME_MODE_LIGHT,
   THEME_MODE_DARK,
+  THEME_MODE_AMOLED,
 } from "@/constants";
 
-export type ThemeMode = "system" | "light" | "dark";
+export type ThemeMode = "system" | "light" | "dark" | "amoled";
 
 type ThemeModeContextValue = {
   mode: ThemeMode;
@@ -33,6 +34,7 @@ export function ThemeModeProvider({ children }: { children: ReactNode }) {
       if (
         stored === THEME_MODE_LIGHT ||
         stored === THEME_MODE_DARK ||
+        stored === THEME_MODE_AMOLED ||
         stored === THEME_MODE_SYSTEM
       ) {
         setModeState(stored);

@@ -2339,6 +2339,11 @@ export default function SettingsScreen() {
                   label: "Dark",
                   icon: "weather-night",
                 },
+                {
+                  value: "amoled",
+                  label: "AMOLED",
+                  icon: "circle-opacity",
+                },
               ]}
             />
           </Card.Content>

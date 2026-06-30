@@ -628,13 +628,7 @@ export default function GraphsScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         {!showCalorieChart ? (
           <Pressable onPress={() => setShowCalorieChart(true)}>
-            <Card
-              style={[
-                styles.weightTile,
-                { backgroundColor: theme.colors.surfaceVariant },
-              ]}
-              mode="elevated"
-            >
+            <Card style={styles.weightTile} mode="elevated">
               <Card.Content>
                 <View style={styles.weightTileContent}>
                   <View style={styles.weightTileLeft}>
@@ -767,13 +761,7 @@ export default function GraphsScreen() {
 
         {!showWeightChart ? (
           <Pressable onPress={() => setShowWeightChart(true)}>
-            <Card
-              style={[
-                styles.weightTile,
-                { backgroundColor: theme.colors.surfaceVariant },
-              ]}
-              mode="elevated"
-            >
+            <Card style={styles.weightTile} mode="elevated">
               <Card.Content>
                 <View style={styles.weightTileContent}>
                   <View style={styles.weightTileLeft}>
@@ -997,13 +985,7 @@ export default function GraphsScreen() {
 
         {!showBodyFatChart ? (
           <Pressable onPress={() => setShowBodyFatChart(true)}>
-            <Card
-              style={[
-                styles.weightTile,
-                { backgroundColor: theme.colors.surfaceVariant },
-              ]}
-              mode="elevated"
-            >
+            <Card style={styles.weightTile} mode="elevated">
               <Card.Content>
                 <View style={styles.weightTileContent}>
                   <View style={styles.weightTileLeft}>
@@ -1246,7 +1228,7 @@ const styles = StyleSheet.create({
   emptyText: {},
   filterButtons: { marginBottom: 14 },
   weightTile: {
-    borderRadius: 12,
+    borderRadius: 24,
     overflow: "hidden",
   },
   weightTileContent: {

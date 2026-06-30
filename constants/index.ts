@@ -50,6 +50,7 @@ export const ADJUSTMENT_TYPE_PERCENT = "percent";
 export const THEME_MODE_SYSTEM = "system";
 export const THEME_MODE_LIGHT = "light";
 export const THEME_MODE_DARK = "dark";
+export const THEME_MODE_AMOLED = "amoled";
 
 // ── Metabolism Constants ─────────────────────────────────────
 /** kcal required to gain or lose 1 kg of body weight */

@@ -106,7 +106,7 @@ export default function TabLayout() {
         freezeOnBlur: true,
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: theme.colors.surface,
+          backgroundColor: theme.colors.elevation.level2,
           borderTopColor: theme.colors.outlineVariant,
           borderTopWidth: 1,
           height: TAB_BAR_HEIGHT_BASE + insets.bottom,
