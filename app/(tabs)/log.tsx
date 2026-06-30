@@ -783,8 +783,7 @@ export default function LogScreen() {
     beginLlmStage("estimating");
     setLlmError("");
     setLlmResult(null);
-    const resolveModelPath =
-      data.estimateModelPath ?? data.modelPath ?? modelPath;
+    const resolveModelPath = effectiveLlmModelPath;
     if (!resolveModelPath) {
       setLlmError("No model file selected in settings.");
       setLlmLoading(false);
@@ -863,6 +862,19 @@ export default function LogScreen() {
   const [data, setData] = useState<StoredData>(
     () => getCachedData() ?? DEFAULT_DATA,
   );
+  const effectiveLlmModelPath = useMemo(
+    () => data.estimateModelPath ?? data.modelPath ?? modelPath,
+    [data.estimateModelPath, data.modelPath, modelPath],
+  );
+  const effectiveLlmModelName = useMemo(() => {
+    if (!effectiveLlmModelPath) return "No model selected";
+    const fileName = effectiveLlmModelPath.split("/").pop();
+    return fileName ? decodeURIComponent(fileName) : "Selected model";
+  }, [effectiveLlmModelPath]);
+  const effectiveLlmBackendLabel =
+    (data.inferenceBackend ?? "litert") === "llama-cpp"
+      ? "llama.cpp"
+      : "LiteRT";
 
   const todayKey = getLocalDateKey(new Date());
   const [entries, setEntries] = useState<Meal[]>([]);
@@ -1538,10 +1550,10 @@ export default function LogScreen() {
   }, [llmResult]);
 
   const isModelInMemory = useMemo(() => {
-    if (!modelPath || !loadedModelKey) return false;
-    const cleanedModelPath = modelPath.startsWith("file:///")
-      ? modelPath.replace("file:///", "/")
-      : modelPath;
+    if (!effectiveLlmModelPath || !loadedModelKey) return false;
+    const cleanedModelPath = effectiveLlmModelPath.startsWith("file:///")
+      ? effectiveLlmModelPath.replace("file:///", "/")
+      : effectiveLlmModelPath;
     const modelConfig =
       data.perModelConfig?.[cleanedModelPath] ?? DEFAULT_MODEL_CONFIG;
     // Reuse the exact key builder from modelLoader so this comparison stays in
@@ -1556,7 +1568,7 @@ export default function LogScreen() {
     return loadedModelKey === activeModelKey;
   }, [
     loadedModelKey,
-    modelPath,
+    effectiveLlmModelPath,
     systemPrompt,
     data.perModelConfig,
     data.inferenceBackend,
@@ -1575,12 +1587,12 @@ export default function LogScreen() {
 
   // Determine which model key is currently selected and check if it's blocked
   const selectedModelKey = useMemo(() => {
-    if (!modelPath) return null;
-    const fileName = modelPath.split("/").pop() ?? "";
+    if (!effectiveLlmModelPath) return null;
+    const fileName = effectiveLlmModelPath.split("/").pop() ?? "";
     if (fileName.includes("gemma-4-E2B")) return "GEMMA_4_E2B_IT";
     if (fileName.includes("gemma-4-E4B")) return "GEMMA_4_E4B_IT";
     return null;
-  }, [modelPath]);
+  }, [effectiveLlmModelPath]);
 
   const memoryCheck = useMemo(() => {
     if (!selectedModelKey) return null;
@@ -2410,6 +2422,41 @@ export default function LogScreen() {
               <Text variant="titleMedium" style={{ fontWeight: "700" }}>
                 Meal Estimator
               </Text>
+              <View
+                style={[
+                  styles.llmModelBadge,
+                  {
+                    backgroundColor: theme.colors.elevation.level1,
+                    borderColor: theme.colors.outlineVariant,
+                  },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name={effectiveLlmModelPath ? "chip" : "alert-circle-outline"}
+                  size={16}
+                  color={
+                    effectiveLlmModelPath
+                      ? theme.colors.primary
+                      : theme.colors.error
+                  }
+                />
+                <View style={{ flex: 1 }}>
+                  <Text
+                    variant="labelSmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    Selected model
+                  </Text>
+                  <Text variant="bodySmall" numberOfLines={1}>
+                    {effectiveLlmModelName}
+                  </Text>
+                </View>
+                {effectiveLlmModelPath ? (
+                  <Chip compact mode="outlined">
+                    {effectiveLlmBackendLabel}
+                  </Chip>
+                ) : null}
+              </View>
               {isModelWarning && !isModelBlocked && memoryCheck && (
                 <View
                   style={[
@@ -3978,6 +4025,15 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 8,
     borderRadius: 8,
+  },
+  llmModelBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
   },
   macroSectionHeader: {
     flexDirection: "row",
