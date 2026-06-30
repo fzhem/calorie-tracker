@@ -3726,7 +3726,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderRadius: 12,
     padding: 12,
-    gap: 8,
+    gap: 4,
   },
   downloadedItemTopRow: {
     flexDirection: "row",
@@ -3751,7 +3751,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 12,
+    marginTop: 2,
   },
   modalBackdrop: {
     flex: 1,
