@@ -74,7 +74,10 @@ function RippleTabBarButton({
       onPress={(event) => {
         onPress?.(event);
       }}
-      style={style}
+      // Center icon+label vertically. React Navigation's UIKit tab layout
+      // top-aligns the content (justifyContent: 'flex-start'), which leaves a
+      // gap at the bottom of the bar; this overrides it for a balanced look.
+      style={[style, { justifyContent: "center" as const }]}
     >
       <View pointerEvents="none" style={styles.tabRippleContainer}>
         <Animated.View

@@ -149,7 +149,7 @@ export const DEBOUNCE_DELAY_MS = 500;
 export const AUTO_SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 // ── Tab Bar UI ───────────────────────────────────────────────
-export const TAB_BAR_HEIGHT_BASE = 66;
+export const TAB_BAR_HEIGHT_BASE = 60;
 export const TAB_BAR_PADDING_TOP = 8;
 export const TAB_BAR_PADDING_BOTTOM_MIN = 10;
 export const TAB_ICON_SIZE_FOCUSED = 24;
